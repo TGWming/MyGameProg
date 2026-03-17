@@ -1,0 +1,88 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Engine/DataTable.h"
+#include "CameraModuleData.generated.h"
+
+/**
+ * 鐩告満妯″潡鏁版嵁琛ㄨ缁撴瀯浣?
+ * 鐢ㄤ簬浠嶤SV瀵煎叆鐩告満妯″潡閰嶇疆鏁版嵁
+ */
+USTRUCT(BlueprintType)
+struct FCameraModuleRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+public:
+	/** 妯″潡鍞竴鏍囪瘑绗︼紙娉ㄦ剰锛氬鍏SV鍚庢瀛楁浼氫负绌猴紝鍥犱负瀹冧細鎴愪负RowName锛?*/
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basic Info")
+	FString ModuleID;
+
+	/** 妯″潡鍚嶇О锛屼綔涓虹▼搴忓紩鐢ㄦ爣璇嗙 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basic Info")
+	FName ModuleName;
+
+	/** 涓枃鏄剧ず鍚嶇О */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basic Info")
+	FString ChineseName;
+
+	/** 涓诲垎绫伙紙Position, Rotation, Distance, FOV, Offset, Constraint锛?*/
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Classification")
+	FString Category;
+
+	/** 瀛愬垎绫伙紙Follow, Orbit, Cinematic, Special, Input, LookAt, AutoOrient, Base, Dynamic, Constraint, Screen, World, Effect, Visibility锛?*/
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Classification")
+	FString SubCategory;
+
+	/** 妯″潡鍔熻兘鎻忚堪 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basic Info")
+	FString Description;
+
+	/** 娣峰悎绛栫暐锛圤verride, Additive, Multiplicative, Minimum, Blend锛?*/
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Blend Settings")
+	FString BlendPolicy;
+
+	/** 浼樺厛绾э紙鏁板€艰秺澶т紭鍏堢骇瓒婇珮锛岃寖鍥?0-300锛?*/
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Blend Settings")
+	int32 Priority;
+
+	/** 婵€娲荤姸鎬佸垪琛紝鐢ㄦ枩鏉犲垎闅旓紙濡?"Explore/Sprint/Combat" 鎴?"All"锛?*/
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Activation")
+	FString ActiveStates;
+
+	/** 杈撳叆鍙傛暟鍒楄〃锛岀敤鏂滄潬鍒嗛殧锛堝 "CharacterLocation/FocusOffset/SocketName"锛?*/
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Parameters")
+	FString InputParams;
+
+	/** 杈撳嚭鍙傛暟鍚嶇О锛堝 PositionOverride, RotationOffset, DistanceMultiplier锛?*/
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Parameters")
+	FString OutputParams;
+
+	/** 鎯€ч€熷害绯绘暟锛?琛ㄧず鏃犳儻鎬э紝鑼冨洿0-12锛?*/
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Behavior")
+	float LagSpeed;
+
+	/** 鏄惁涓烘牳蹇冩ā鍧?*/
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basic Info")
+	bool bIsCore;
+
+	// 鏋勯€犲嚱鏁?
+	FCameraModuleRow()
+		: ModuleID(TEXT(""))
+		, ModuleName(NAME_None)
+		, ChineseName(TEXT(""))
+		, Category(TEXT("Position"))
+		, SubCategory(TEXT(""))
+		, Description(TEXT(""))
+		, BlendPolicy(TEXT("Override"))
+		, Priority(100)
+		, ActiveStates(TEXT("All"))
+		, InputParams(TEXT(""))
+		, OutputParams(TEXT(""))
+		, LagSpeed(0.0f)
+		, bIsCore(false)
+	{
+	}
+};

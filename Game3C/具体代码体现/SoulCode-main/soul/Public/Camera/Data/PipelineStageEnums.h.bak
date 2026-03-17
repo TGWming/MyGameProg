@@ -1,0 +1,32 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "PipelineStageEnums.generated.h"
+
+/**
+ * 鐩告満绠＄嚎灞傜骇鏋氫妇
+ * 瀹氫箟鐩告満娓叉煋绠＄嚎鐨勪簲涓富瑕佹墽琛屽眰绾?
+ */
+UENUM(BlueprintType)
+enum class EPipelineLayer : uint8
+{
+	// 鏃犳晥灞傜骇
+	None UMETA(DisplayName = "鏃?),
+
+	// 杈撳叆灞?- 鏀堕泦鐜╁杈撳叆銆佽鑹茬姸鎬佺瓑鍘熷鏁版嵁
+	InputLayer UMETA(DisplayName = "杈撳叆灞?),
+
+	// 鍐崇瓥灞?- 鍩轰簬杈撳叆鎵ц鐘舵€佹満鍐崇瓥锛岄€夋嫨鐩告満琛屼负妯″紡
+	DecisionLayer UMETA(DisplayName = "鍐崇瓥灞?),
+
+	// 璁＄畻灞?- 鎵ц鏍稿績璁＄畻閫昏緫锛堜綅缃€佹棆杞€丗OV绛夛級
+	ComputeLayer UMETA(DisplayName = "璁＄畻灞?),
+
+	// 瀹夊叏灞?- 澶勭悊纰版挒妫€娴嬨€侀伄鎸￠伩鍏嶇瓑瀹夊叏鏍￠獙
+	SafetyLayer UMETA(DisplayName = "瀹夊叏灞?),
+
+	// 杈撳嚭灞?- 搴旂敤鏈€缁堢粨鏋滃埌鐩告満缁勪欢
+	OutputLayer UMETA(DisplayName = "杈撳嚭灞?)
+};
