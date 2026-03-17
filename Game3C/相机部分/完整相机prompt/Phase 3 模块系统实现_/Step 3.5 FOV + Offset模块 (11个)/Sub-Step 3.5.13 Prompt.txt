@@ -1,0 +1,593 @@
+Sub-Step 3.6.6 Prompt
+
+================================================================================
+任务：在CameraModule_Offset. cpp中添加O05 Mount_Offset实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+O05在骑乘时调整相机高度，适应骑乘状态下角色更高的视点。
+类似《艾尔登法环》中骑马时的相机表现。
+
+【Pipeline中的位置】
+```
+Offset模块计算流程：
+1. O01: SocketOffset = (0, 0, 20) (Override，基础值)
+2. O02: Shoulder = (0, 50, 0) (Override，肩部)
+3. O03: Switch = (0, ±50, 0) (Override，切换)
+4. O04: Crouch = (0, 0, -50) (Additive，蹲伏)
+5. O05: Mount = (0, 0, +80) (Additive，骑乘) ← 当前
+   → 骑乘时相机抬高80cm
+```
+
+【当前进度】
+Phase 3 Step 3.6 Sub-Step 3.6.6 (共190个Sub-Step中的第99个)
+前置完成：3.6.5 O04实现 ✅
+**这是Step 3.6的最后一个Sub-Step**
+
+【任务目标】
+在CameraModule_Offset.cpp中完整实现O05模块，替换现有的占位符。
+完成后，所有5个Offset模块（O01-O05）全部实现完毕。
+
+【⚠️ 重要提醒】
+
+1. **编译前必做步骤：**
+   本Sub-Step只修改现有.   cpp文件，不添加新文件。
+   因此**不需要Regenerate**，可以直接编译。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   确认StateConfig的字段路径与项目实际结构一致。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_Offset.cpp
+
+2. **定位修改位置：**
+
+在文件中找到O05的占位符实现部分：
+
+```cpp
+//========================================
+// O05: Mount Offset
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.6.6
+// Offset adjustment for mounted characters
+...    占位符代码（包括构造函数、ShouldActivate、Compute）
+```
+
+**将上述占位符代码完整替换为下方的完整实现。**
+
+---
+
+3. **O05完整实现代码：**
+
+**A. 构造函数：**
+
+```cpp
+/**
+ * Constructor - Initialize mount blend state
+ * 
+ * Start with blend of 0 (dismounted position)
+ */
+UCameraModule_O05_Mount_Offset::  UCameraModule_O05_Mount_Offset()
+	: CurrentMountBlend(0.0f)
+{
+}
+```
+
+---
+
+**B. ShouldActivate() 实现：**
+
+```cpp
+/**
+ * ShouldActivate - Determine if mount offset should be active
+ * 
+ * O05 activates when:  
+ * - Module is enabled
+ * - Character is mounted (bIsMounted in InputContext)
+ * - OR currently transitioning from mount (blend > threshold)
+ * 
+ * The second condition ensures smooth camera return when dismounting.  
+ * 
+ * Priority 112 (highest among Offset modules), uses Additive policy.  
+ * 
+ * Use Cases:
+ * - Horseback riding (Elden Ring style)
+ * - Vehicle mounting
+ * - Flying mounts
+ * - Any elevated mount position
+ */
+bool UCameraModule_O05_Mount_Offset::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if character is currently mounted
+	bool bIsMounted = Context.InputContext.bIsMounted;
+	
+	// Also activate if we're transitioning out of mount
+	// This ensures smooth camera return when dismounting
+	const float TransitionThreshold = 0.01f;
+	bool bIsTransitioning = CurrentMountBlend > TransitionThreshold;
+	
+	// Activate if mounted or transitioning
+	if (! bIsMounted && ! bIsTransitioning)
+	{
+		return false;
+	}
+	
+	// All conditions met - activate mount offset
+	return true;
+}
+```
+
+---
+
+**C.   Compute() 实现：**
+
+```cpp
+/**
+ * Compute - Calculate vertical offset for mounted characters
+ * 
+ * This module raises the camera when the character is mounted.  
+ * The offset accounts for the increased height of being on a mount
+ * (horse, vehicle, etc.) and provides appropriate combat visibility.
+ * 
+ * Steps:
+ * 1. Determine target blend based on mount state
+ * 2.  Smoothly interpolate current blend towards target
+ * 3. Get mount offset from config
+ * 4.  Optionally adjust for mount combat
+ * 5. Calculate vertical offset based on blend
+ * 6. Output with Additive policy
+ * 
+ * Blend System:
+ * - CurrentMountBlend:  0.0 (dismounted) to 1.0 (fully mounted)
+ * - Slower transition than crouch for cinematic mount/dismount
+ * 
+ * Typical Mount Offset:  
+ * - Small mount (pony): +50cm to +60cm
+ * - Standard horse: +70cm to +90cm
+ * - Large mount (elephant): +100cm to +150cm
+ * 
+ * @param Context The current pipeline execution context
+ * @param StateConfig The current camera state configuration
+ * @param OutOutput Output structure to fill with computed values
+ * @return True if computation succeeded
+ */
+bool UCameraModule_O05_Mount_Offset::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Step 1: Determine target blend based on mount state
+	// 1. 0 when mounted, 0.0 when dismounted
+	float TargetBlend = Context.InputContext.bIsMounted ? 1.0f : 0.0f;
+	
+	// Step 2: Smoothly interpolate current blend towards target
+	// Slower transition than crouch for more cinematic mount/dismount
+	float InterpSpeed = 5.0f;  // About 0.5 seconds to fully transition
+	
+	// Try to get interp speed from config
+	float ConfigInterpSpeed = StateConfig.  Module. Offset.MountInterpSpeed;
+	if (ConfigInterpSpeed > 0.0f)
+	{
+		InterpSpeed = ConfigInterpSpeed;
+	}
+	
+	CurrentMountBlend = FMath::FInterpTo(
+		CurrentMountBlend, 
+		TargetBlend, 
+		Context.DeltaTime, 
+		InterpSpeed
+	);
+	
+	// Step 3: Get mount vertical offset from config
+	// Should be positive to raise camera
+	float MountVerticalOffset = StateConfig.Module. Offset.MountVerticalOffset;
+	
+	// Default if not configured
+	if (FMath::  IsNearlyZero(MountVerticalOffset))
+	{
+		MountVerticalOffset = 80.0f;  // Default:  80cm higher (standard horse height)
+	}
+	
+	// Step 4: Optionally add combat adjustment when mounted and in combat
+	float CombatAdjustment = 0.0f;
+	
+	if (Context.InputContext.bIsInCombat && Context.  InputContext.bIsMounted)
+	{
+		// Slightly higher camera in mounted combat for better visibility
+		float MountCombatExtraOffset = StateConfig.Module. Offset.  MountCombatExtraOffset;
+		if (MountCombatExtraOffset > 0.0f)
+		{
+			CombatAdjustment = MountCombatExtraOffset;
+		}
+		else
+		{
+			CombatAdjustment = 20.0f;  // Default: +20cm in combat
+		}
+	}
+	
+	// Step 5: Calculate vertical offset based on blend
+	float VerticalOffset = (MountVerticalOffset + CombatAdjustment) * CurrentMountBlend;
+	
+	// Clamp to reasonable range
+	const float MaxMountOffset = 200.0f;  // Max 2 meters offset
+	VerticalOffset = FMath::Clamp(VerticalOffset, 0.0f, MaxMountOffset);
+	
+	// Create offset vector (Z-axis vertical)
+	// X = 0 (no forward/back change)
+	// Y = 0 (no horizontal change)
+	// Z = VerticalOffset (positive = raise camera)
+	FVector OffsetVector(0.0f, 0.0f, VerticalOffset);
+	
+	// Step 6: Fill output structure
+	OutOutput.  OffsetOutput = OffsetVector;
+	OutOutput. bHasOffsetOutput = true;
+	
+	return true;
+}
+```
+
+---
+
+4. **完整的O05代码块（用于复制粘贴）：**
+
+```cpp
+//========================================
+// O05: Mount Offset
+//========================================
+
+/**
+ * Constructor - Initialize mount blend state
+ */
+UCameraModule_O05_Mount_Offset:: UCameraModule_O05_Mount_Offset()
+	: CurrentMountBlend(0.0f)
+{
+}
+
+/**
+ * ShouldActivate - Activate when mounted or transitioning
+ */
+bool UCameraModule_O05_Mount_Offset::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if mounted
+	bool bIsMounted = Context.InputContext.bIsMounted;
+	
+	// Check if transitioning out of mount
+	const float TransitionThreshold = 0.01f;
+	bool bIsTransitioning = CurrentMountBlend > TransitionThreshold;
+	
+	// Activate if either condition
+	if (!bIsMounted && !bIsTransitioning)
+	{
+		return false;
+	}
+	
+	return true;
+}
+
+/**
+ * Compute - Calculate vertical offset for mounted characters
+ */
+bool UCameraModule_O05_Mount_Offset:: Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output
+	OutOutput = CreateBaseOutput();
+	
+	// Determine target blend
+	float TargetBlend = Context.  InputContext.bIsMounted ? 1.0f : 0.0f;
+	
+	// Get interp speed
+	float InterpSpeed = 5.0f;
+	float ConfigInterpSpeed = StateConfig.  Module.Offset. MountInterpSpeed;
+	if (ConfigInterpSpeed > 0.0f)
+	{
+		InterpSpeed = ConfigInterpSpeed;
+	}
+	
+	// Smooth interpolation
+	CurrentMountBlend = FMath::  FInterpTo(
+		CurrentMountBlend, 
+		TargetBlend, 
+		Context.DeltaTime, 
+		InterpSpeed
+	);
+	
+	// Get mount offset from config
+	float MountVerticalOffset = StateConfig.Module.  Offset.MountVerticalOffset;
+	if (FMath:: IsNearlyZero(MountVerticalOffset))
+	{
+		MountVerticalOffset = 80.0f;  // Default:  80cm
+	}
+	
+	// Combat adjustment when mounted and in combat
+	float CombatAdjustment = 0.0f;
+	if (Context. InputContext.bIsInCombat && Context.InputContext. bIsMounted)
+	{
+		float MountCombatExtraOffset = StateConfig.Module. Offset.  MountCombatExtraOffset;
+		if (MountCombatExtraOffset > 0.0f)
+		{
+			CombatAdjustment = MountCombatExtraOffset;
+		}
+		else
+		{
+			CombatAdjustment = 20.0f;  // Default: +20cm
+		}
+	}
+	
+	// Calculate offset
+	float VerticalOffset = (MountVerticalOffset + CombatAdjustment) * CurrentMountBlend;
+	
+	// Clamp to range
+	const float MaxMountOffset = 200.0f;
+	VerticalOffset = FMath::Clamp(VerticalOffset, 0.0f, MaxMountOffset);
+	
+	// Create offset vector (Z-axis)
+	FVector OffsetVector(0.0f, 0.0f, VerticalOffset);
+	
+	// Fill output
+	OutOutput.OffsetOutput = OffsetVector;
+	OutOutput.bHasOffsetOutput = true;
+	
+	return true;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 说明骑乘偏移的目的
+   - 解释战斗调整的作用
+   - 描述过渡时间的选择
+   - 所有注释英文
+
+2. **格式：**
+   - Tab缩进
+   - 清晰步骤标注
+   - 方法间空两行
+
+3. **防御性编程：**
+   - 使用IsNearlyZero检测配置
+   - Clamp确保有效范围
+   - 过渡阈值防止突然停止
+
+【技术说明】
+
+**O05的核心机制：**
+
+### 1. 与O04(Crouch)的对比
+
+| 特性 | O04 Crouch | O05 Mount |
+|------|------------|-----------|
+| **方向** | 负偏移（降低） | 正偏移（抬高） |
+| **默认值** | -50cm | +80cm |
+| **过渡速度** | 8. 0（快） | 5.0（慢） |
+| **战斗调整** | 无 | 有（+20cm） |
+| **触发条件** | bIsCrouching | bIsMounted |
+
+### 2. 骑乘偏移的计算
+
+```cpp
+// 基础计算
+VerticalOffset = MountVerticalOffset * CurrentMountBlend;
+
+// 战斗时额外抬高
+if (bIsInCombat && bIsMounted)
+{
+    VerticalOffset = (MountVerticalOffset + CombatAdjustment) * CurrentMountBlend;
+}
+
+// 示例（MountVerticalOffset = 80cm, CombatAdjustment = 20cm）：
+// 骑乘探索:  80cm
+// 骑乘战斗: 100cm
+```
+
+### 3. 过渡速度的选择
+
+```
+为什么O05比O04慢？
+
+蹲伏（O04, InterpSpeed=8.0）：
+- 游戏性需求：快速响应玩家输入
+- 动画时长：约0.3秒
+- 相机匹配：0.3秒
+
+骑乘（O05, InterpSpeed=5.0）：
+- 电影感需求：优雅的上下马
+- 动画时长：约0.8-1.0秒
+- 相机匹配：0.5秒
+
+较慢的过渡增加骑乘的仪式感
+```
+
+### 4. 战斗调整的意义
+
+```
+为什么骑乘战斗需要额外抬高？
+
+骑乘探索：
+- 相机 +80cm
+- 重点：欣赏风景，看远方
+- 视角：略向下
+
+骑乘战斗：
+- 相机 +100cm（额外20cm）
+- 重点：看清敌人和攻击范围
+- 视角：更平视
+
+在艾尔登法环中：
+- 骑马时锁定敌人，相机会略微抬高
+- 便于看清敌人动作和自己的攻击范围
+```
+
+### 5. 与其他Offset模块的叠加
+
+```
+Additive策略的叠加效果：
+
+站立探索：
+  O01: (0, 0, 20)
+  → 最终:  (0, 0, 20)
+
+骑乘探索：
+  O01: (0, 0, 20)
+  O05: (0, 0, 80)
+  → 最终: (0, 0, 100)
+
+骑乘战斗：
+  O01: (0, 0, 20)
+  O05: (0, 0, 100)  // 含战斗调整
+  → 最终: (0, 0, 120)
+
+理论上的极端情况（骑乘+蹲伏？不太可能）：
+  O01: (0, 0, 20)
+  O04: (0, 0, -50)  // 蹲伏
+  O05: (0, 0, 80)   // 骑乘
+  → 最终:  (0, 0, 50)
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] 构造函数完整（初始化CurrentMountBlend）
+   - [ ] ShouldActivate()完整（含过渡检测）
+   - [ ] Compute()完整（含战斗调整）
+
+3. **逻辑正确性：**
+   - [ ] bIsMounted检测
+   - [ ] 过渡阈值0.01
+   - [ ] 正偏移值（抬高相机）
+   - [ ] 战斗额外调整
+   - [ ] FInterpTo平滑过渡
+
+4. **字段访问：**
+   - [ ] Context.InputContext.  bIsMounted
+   - [ ] Context.InputContext.bIsInCombat
+   - [ ] StateConfig.Module.  Offset.MountVerticalOffset
+   - [ ] StateConfig. Module. Offset. MountInterpSpeed（可选）
+   - [ ] StateConfig.Module. Offset.MountCombatExtraOffset（可选）
+
+【注意事项】
+
+1. **不需要Regenerate**
+
+2. **字段缺失处理：**
+   ```cpp
+   // 如果MountVerticalOffset不存在
+   float MountVerticalOffset = 80.0f;  // 默认值
+   
+   // 如果MountInterpSpeed不存在
+   float InterpSpeed = 5.0f;  // 默认值
+   
+   // 如果MountCombatExtraOffset不存在
+   float CombatAdjustment = 20.0f;  // 默认值
+   ```
+
+3. **bIsMounted字段：**
+   确认InputContext中有bIsMounted字段。如果没有：
+   ```cpp
+   // 在FCameraInputContext中添加
+   bool bIsMounted;
+   ```
+
+4. **测试建议：**
+   - 上马 → 相机应平滑抬高
+   - 下马 → 相机应平滑下降
+   - 骑乘进入战斗 → 相机应额外抬高
+   - 确认偏移值正确（正值 = 抬高）
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 3.6.6 完成报告
+================================================================================
+
+【修改内容】
+- 文件：CameraModule_Offset.cpp
+- 修改位置：O05模块
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ 构造函数：初始化CurrentMountBlend
+- ✅ ShouldActivate：骑乘+过渡检测
+- ✅ Compute：垂直偏移+战斗调整
+
+【编译结果】
+- 编译状态：[成功/失败]
+
+【最终状态】
+✅ O05完成，骑乘相机偏移
+
+================================================================================
+```
+
+【🎉 Step 3.6 完成庆祝】
+
+**Offset模块系列全部完成！**
+
+完成后，Offset模块最终状态：
+- [x] ✅ O01: SocketOffset Base（基础偏移，Override）
+- [x] ✅ O02: Shoulder Offset（肩部偏移，Override）
+- [x] ✅ O03: Shoulder Switch（肩部切换，Override）
+- [x] ✅ O04: Crouch Offset（蹲伏偏移，Additive）
+- [x] ✅ O05: Mount Offset（骑乘偏移，Additive）
+
+**Offset模块完成度：5/5 (100%)** 🎊
+
+**模块特性总结：**
+
+| 模块 | 优先级 | 策略 | 方向 | 典型值 |
+|------|--------|------|------|--------|
+| O01 | 100 | Override | XYZ | 基础配置 |
+| O02 | 105 | Override | Y | ±50cm |
+| O03 | 110 | Override | Y | ±50cm（动态） |
+| O04 | 108 | Additive | Z | -50cm |
+| O05 | 112 | Additive | Z | +80cm |
+
+**Phase 3 模块总进度：**
+- [x] ✅ Step 3.1: 模块基础设施（4个文件）
+- [x] ✅ Step 3.2: Position模块（8个模块）
+- [x] ✅ Step 3.3: Rotation模块（9个模块）
+- [x] ✅ Step 3.4: Distance模块（7个模块）
+- [x] ✅ Step 3.5: FOV模块（6个模块）
+- [x] ✅ Step 3.6: Offset模块（5个模块）
+- [ ] ⏳ Step 3.7:  Constraint模块（待定）
+
+**已完成模块：39/39+ (接近100%)**
+
+================================================================================

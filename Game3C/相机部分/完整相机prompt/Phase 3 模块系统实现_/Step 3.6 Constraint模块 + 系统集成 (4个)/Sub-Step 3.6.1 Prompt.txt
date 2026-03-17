@@ -1,0 +1,568 @@
+Sub-Step 3.7.1 Prompt
+
+================================================================================
+任务：创建CameraModule_Constraint.h - Constraint模块头文件
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Constraint模块负责应用各种约束和限制，确保相机行为在合理范围内。
+这是Pipeline的最后一道防线，在所有其他模块计算完成后进行最终校验。
+
+【Pipeline中的位置】
+```
+Stage 3 - Module Compute: 
+├─ Position模块 → FVector (焦点位置) ✅ 已完成
+├─ Rotation模块 → FRotator (相机朝向) ✅ 已完成
+├─ Distance模块 → float (臂长距离) ✅ 已完成
+├─ FOV模块 → float (视野角度) ✅ 已完成
+├─ Offset模块 → FVector (各种偏移) ✅ 已完成
+└─ Constraint模块 → 各类约束校验 ← 当前Step（最后执行）
+
+Constraint模块特点：
+- 优先级最高（200+），确保在其他模块之后执行
+- 主要职责是"限制"和"校验"，而非"计算"
+- 保证最终输出在合理范围内
+```
+
+【当前进度】
+Phase 3 Step 3.7 Sub-Step 3.7.1 (共190个Sub-Step中的第100个)
+前置完成：Step 3.6 Offset模块 (O01-O05) ✅
+
+**这是Phase 3模块系统的最后一个模块类型！**
+
+【任务目标】
+创建文件：Source/[ProjectName]/Public/Camera/Modules/CameraModule_Constraint.h
+定义所有4个Constraint模块类（C01-C04）的声明。
+
+【⚠️ 重要提醒】
+
+1. **必须Regenerate：**
+   本Sub-Step创建新的. h文件。
+   创建文件后：
+   - 保存所有文件
+   - 右键. uproject → Generate Visual Studio project files
+   - 重新加载解决方案
+   - 然后编译
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   - 将 `MYPROJECT_API` 替换为实际项目的API宏
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Public/Camera/Modules/CameraModule_Constraint.h
+
+2. **文件结构：**
+
+```
+文件结构：
+├─ 版权声明
+├─ #pragma once
+├─ Include头文件
+├─ 文件整体说明注释
+├─ C01: Pitch Clamp（俯仰角限制）
+├─ C02: Distance Clamp（距离限制）
+├─ C03: FOV Clamp（视野限制）
+└─ C04: Visibility Ensure（目标可见性保证）
+```
+
+3. **完整文件内容：**
+
+```cpp
+// Copyright Epic Games, Inc. All Rights Reserved. 
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "CameraModuleBase. h"
+#include "CameraModule_Constraint.generated.h"
+
+/**
+ * Constraint Module Declarations (C01-C04)
+ * 
+ * This file contains the 4 Constraint modules for the camera system. 
+ * Constraint modules are responsible for enforcing limits and ensuring
+ * the final camera values stay within acceptable ranges.
+ * 
+ * These modules execute LAST in Stage 3 (Module Compute) of the camera pipeline,
+ * with priority 200+ to ensure they run after all other module types.
+ * 
+ * Purpose of Constraint Modules:
+ * - Enforce hard limits on camera values (pitch, distance, FOV)
+ * - Prevent invalid or extreme camera configurations
+ * - Ensure critical targets remain visible
+ * - Act as the final safety net before output
+ * 
+ * Key Characteristics:
+ * - High priority (200+) - execute after Position/Rotation/Distance/FOV/Offset
+ * - Primarily use Override policy to enforce limits
+ * - Read from accumulated values, output clamped/adjusted values
+ * - Should be lightweight and fast
+ * 
+ * Constraint vs Other Modules:
+ * - Other modules:  "Calculate what the camera SHOULD do"
+ * - Constraint modules: "Ensure camera values ARE valid"
+ * 
+ * Module List:
+ * - C01: Pitch Clamp - Enforces pitch angle limits
+ * - C02: Distance Clamp - Enforces arm length limits
+ * - C03: FOV Clamp - Enforces field of view limits
+ * - C04: Visibility Ensure - Ensures target remains visible
+ */
+
+
+//========================================
+// C01: Pitch Clamp
+//========================================
+
+/**
+ * UCameraModule_C01_Pitch_Clamp
+ * 
+ * C01: Pitch Clamp - Enforces camera pitch angle limits
+ * 
+ * This module clamps the camera's pitch rotation to configured
+ * min/max values.  Prevents the camera from looking too far up
+ * or too far down. 
+ * 
+ * Always active as a safety constraint.
+ * Uses Override policy with priority 200 (constraint level).
+ * 
+ * Typical pitch limits:
+ * - Minimum: -80 to -60 degrees (looking up)
+ * - Maximum: +60 to +80 degrees (looking down)
+ * - Default: -80 to +80 degrees
+ * 
+ * Note: In UE4, negative pitch = looking up, positive = looking down
+ * 
+ * Use Cases:
+ * - Prevent camera from flipping over character's head
+ * - Maintain comfortable viewing angles
+ * - Avoid ground clipping when looking down
+ */
+UCLASS(BlueprintType, Blueprintable)
+class MYPROJECT_API UCameraModule_C01_Pitch_Clamp : public UCameraModuleBase
+{
+	GENERATED_BODY()
+
+public:
+	//========================================
+	// Module Identity
+	//========================================
+
+	virtual ECameraModuleType GetModuleType() const override { return ECameraModuleType::Module_C01_Pitch_Clamp; }
+	virtual EModuleCategory GetModuleCategory() const override { return EModuleCategory:: Constraint; }
+	virtual FString GetModuleDescription() const override { return TEXT("Clamps camera pitch angle to configured limits"); }
+
+	//========================================
+	// Priority & Blending
+	//========================================
+
+	/** High priority - runs after all calculation modules */
+	virtual int32 GetDefaultPriority() const override { return 200; }
+	virtual EBlendPolicy GetDefaultBlendPolicy() const override { return EBlendPolicy::Override; }
+
+	//========================================
+	// Activation & Computation
+	//========================================
+
+	virtual bool ShouldActivate(const FStageExecutionContext& Context, const FCameraStateConfig& StateConfig) const override;
+	virtual bool Compute(const FStageExecutionContext& Context, const FCameraStateConfig& StateConfig, FModuleOutput& OutOutput) override;
+};
+
+
+//========================================
+// C02: Distance Clamp
+//========================================
+
+/**
+ * UCameraModule_C02_Distance_Clamp
+ * 
+ * C02: Distance Clamp - Enforces camera arm length limits
+ * 
+ * This module clamps the camera's distance (arm length) to configured
+ * min/max values. Ensures the camera doesn't get too close to or
+ * too far from the character.
+ * 
+ * Always active as a safety constraint. 
+ * Uses Override policy with priority 200 (constraint level).
+ * 
+ * Typical distance limits:
+ * - Minimum: 100-200cm (prevent clipping into character)
+ * - Maximum: 800-1500cm (prevent losing sight of character)
+ * - Default: 100 to 1000cm
+ * 
+ * Use Cases:
+ * - Prevent camera from entering character mesh
+ * - Keep character visible at all times
+ * - Maintain playable camera distance
+ */
+UCLASS(BlueprintType, Blueprintable)
+class MYPROJECT_API UCameraModule_C02_Distance_Clamp :  public UCameraModuleBase
+{
+	GENERATED_BODY()
+
+public:
+	//========================================
+	// Module Identity
+	//========================================
+
+	virtual ECameraModuleType GetModuleType() const override { return ECameraModuleType::Module_C02_Distance_Clamp; }
+	virtual EModuleCategory GetModuleCategory() const override { return EModuleCategory::Constraint; }
+	virtual FString GetModuleDescription() const override { return TEXT("Clamps camera distance to configured limits"); }
+
+	//========================================
+	// Priority & Blending
+	//========================================
+
+	/** High priority - runs after all calculation modules */
+	virtual int32 GetDefaultPriority() const override { return 200; }
+	virtual EBlendPolicy GetDefaultBlendPolicy() const override { return EBlendPolicy:: Override; }
+
+	//========================================
+	// Activation & Computation
+	//========================================
+
+	virtual bool ShouldActivate(const FStageExecutionContext& Context, const FCameraStateConfig& StateConfig) const override;
+	virtual bool Compute(const FStageExecutionContext& Context, const FCameraStateConfig& StateConfig, FModuleOutput& OutOutput) override;
+};
+
+
+//========================================
+// C03: FOV Clamp
+//========================================
+
+/**
+ * UCameraModule_C03_FOV_Clamp
+ * 
+ * C03: FOV Clamp - Enforces field of view limits
+ * 
+ * This module clamps the camera's FOV to configured min/max values. 
+ * Ensures the field of view stays within reasonable bounds after
+ * all FOV modules have applied their adjustments.
+ * 
+ * Always active as a safety constraint. 
+ * Uses Override policy with priority 200 (constraint level).
+ * 
+ * Typical FOV limits:
+ * - Minimum: 50-60 degrees (prevent tunnel vision)
+ * - Maximum: 120-130 degrees (prevent fisheye distortion)
+ * - Default: 60 to 120 degrees
+ * 
+ * Use Cases:
+ * - Prevent extreme FOV from multiple additive modules
+ * - Maintain comfortable viewing experience
+ * - Avoid motion sickness from extreme FOV
+ */
+UCLASS(BlueprintType, Blueprintable)
+class MYPROJECT_API UCameraModule_C03_FOV_Clamp : public UCameraModuleBase
+{
+	GENERATED_BODY()
+
+public:
+	//========================================
+	// Module Identity
+	//========================================
+
+	virtual ECameraModuleType GetModuleType() const override { return ECameraModuleType::Module_C03_FOV_Clamp; }
+	virtual EModuleCategory GetModuleCategory() const override { return EModuleCategory:: Constraint; }
+	virtual FString GetModuleDescription() const override { return TEXT("Clamps camera FOV to configured limits"); }
+
+	//========================================
+	// Priority & Blending
+	//========================================
+
+	/** High priority - runs after all calculation modules */
+	virtual int32 GetDefaultPriority() const override { return 200; }
+	virtual EBlendPolicy GetDefaultBlendPolicy() const override { return EBlendPolicy::Override; }
+
+	//========================================
+	// Activation & Computation
+	//========================================
+
+	virtual bool ShouldActivate(const FStageExecutionContext& Context, const FCameraStateConfig& StateConfig) const override;
+	virtual bool Compute(const FStageExecutionContext& Context, const FCameraStateConfig& StateConfig, FModuleOutput& OutOutput) override;
+};
+
+
+//========================================
+// C04: Visibility Ensure
+//========================================
+
+/**
+ * UCameraModule_C04_Visibility_Ensure
+ * 
+ * C04: Visibility Ensure - Ensures locked target remains visible
+ * 
+ * This module checks if the locked target is within the camera's
+ * view frustum and makes adjustments if necessary to keep it visible.
+ * This is especially important during lock-on combat. 
+ * 
+ * Only active when there is a locked target. 
+ * Uses Blend policy with priority 210 (highest - final adjustment).
+ * 
+ * Key Features:
+ * - Detects when target is about to leave screen
+ * - Calculates rotation adjustment to keep target visible
+ * - Tracks time since target was last visible
+ * - Stores last known visible position for recovery
+ * 
+ * Screen Margin: 
+ * - Uses configurable margin from screen edge
+ * - Default: 10% margin (target within 10-90% of screen)
+ * 
+ * Use Cases: 
+ * - Lock-on combat (keep enemy visible)
+ * - Boss fights (keep boss in frame)
+ * - Cinematic moments (ensure important targets visible)
+ */
+UCLASS(BlueprintType, Blueprintable)
+class MYPROJECT_API UCameraModule_C04_Visibility_Ensure : public UCameraModuleBase
+{
+	GENERATED_BODY()
+
+public:
+	/** Constructor - initializes visibility tracking state */
+	UCameraModule_C04_Visibility_Ensure();
+
+	//========================================
+	// Module Identity
+	//========================================
+
+	virtual ECameraModuleType GetModuleType() const override { return ECameraModuleType::Module_C04_Visibility_Ensure; }
+	virtual EModuleCategory GetModuleCategory() const override { return EModuleCategory:: Constraint; }
+	virtual FString GetModuleDescription() const override { return TEXT("Ensures locked target remains visible on screen"); }
+
+	//========================================
+	// Priority & Blending
+	//========================================
+
+	/** Highest priority - final adjustment after all constraints */
+	virtual int32 GetDefaultPriority() const override { return 210; }
+	virtual EBlendPolicy GetDefaultBlendPolicy() const override { return EBlendPolicy:: Blend; }
+
+	//========================================
+	// Activation & Computation
+	//========================================
+
+	/** Only activates when there is a locked target */
+	virtual bool ShouldActivate(const FStageExecutionContext& Context, const FCameraStateConfig& StateConfig) const override;
+	virtual bool Compute(const FStageExecutionContext& Context, const FCameraStateConfig& StateConfig, FModuleOutput& OutOutput) override;
+
+protected:
+	//========================================
+	// Visibility Helper Functions
+	//========================================
+
+	/**
+	 * Check if a world point would be visible on screen
+	 * 
+	 * @param Context Current execution context
+	 * @param WorldPoint Point to check in world space
+	 * @param ScreenMargin Margin from screen edge (0. 0 to 0.5, default 0.1 = 10%)
+	 * @return True if point is within screen bounds (accounting for margin)
+	 */
+	bool IsPointVisible(const FStageExecutionContext& Context, const FVector& WorldPoint, float ScreenMargin = 0.1f) const;
+
+	/**
+	 * Calculate rotation adjustment needed to bring target into view
+	 * 
+	 * @param Context Current execution context
+	 * @param TargetPoint Target location in world space
+	 * @return Rotation offset to apply to bring target into view
+	 */
+	FRotator CalculateVisibilityAdjustment(const FStageExecutionContext& Context, const FVector& TargetPoint) const;
+
+	//========================================
+	// Visibility Tracking State
+	//========================================
+
+	/** Time since target was last confirmed visible (seconds) */
+	UPROPERTY()
+	float TimeSinceTargetVisible;
+
+	/** Last known position where target was visible */
+	UPROPERTY()
+	FVector LastVisibleTargetPosition;
+};
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 每个模块类前添加详细的文档注释
+   - 说明模块作用和典型限制值
+   - 解释与其他模块的区别
+   - 提供使用场景
+   - 所有注释使用英文
+
+2. **格式：**
+   - 使用Tab缩进（与现有代码一致）
+   - 每个模块用分隔注释分开
+   - Get方法内联实现
+
+3. **命名：**
+   - 类名：UCameraModule_C0X_[Name]
+   - 枚举值：Module_C0X_[Name]
+   - 遵循UE4命名约定
+
+【技术说明】
+
+**Constraint模块的设计特点：**
+
+### 1. 优先级设计
+
+```
+普通模块优先级：100-150
+Constraint模块优先级：200-210
+
+执行顺序：
+1. Position (100-120)
+2. Rotation (100-120)
+3. Distance (100-120)
+4. FOV (100-125)
+5. Offset (100-112)
+6. Constraint (200-210) ← 最后执行
+```
+
+### 2. 各模块职责
+
+| 模块 | 输入 | 输出 | 职责 |
+|------|------|------|------|
+| C01 | 当前Pitch | 限制后的Pitch | 防止仰角过极端 |
+| C02 | 当前Distance | 限制后的Distance | 防止距离过近/过远 |
+| C03 | 当前FOV | 限制后的FOV | 防止视野过窄/过宽 |
+| C04 | 当前Rotation | 调整后的Rotation | 保证目标可见 |
+
+### 3. C04的特殊设计
+
+**为什么C04需要成员变量？**
+```cpp
+// 跟踪目标可见性状态
+float TimeSinceTargetVisible;      // 目标丢失多久了
+FVector LastVisibleTargetPosition; // 最后可见位置
+
+用途：
+- 目标短暂出屏时不立即调整（容错）
+- 目标长时间不可见时回到最后已知位置
+- 平滑过渡而非突然跳变
+```
+
+### 4. 混合策略选择
+
+| 模块 | 策略 | 原因 |
+|------|------|------|
+| C01-C03 | Override | 强制执行限制，不允许妥协 |
+| C04 | Blend | 需要平滑调整，避免突然转向 |
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] Regenerate执行
+   - [ ] 编译通过（0 errors, 0 warnings）
+   - [ ] 文件编码为UTF-8 Without BOM
+   - [ ] 所有注释为英文
+
+2. **代码完整性：**
+   - [ ] 4个模块类都声明完整
+   - [ ] 每个模块都有GetModuleType()
+   - [ ] 每个模块都有GetModuleCategory() = Constraint
+   - [ ] 每个模块都有ShouldActivate()和Compute()声明
+   - [ ] C04有构造函数和成员变量
+   - [ ] C04有2个protected辅助函数
+
+3. **枚举值：**
+   确认ECameraModuleType中已定义：
+   - [ ] Module_C01_Pitch_Clamp
+   - [ ] Module_C02_Distance_Clamp
+   - [ ] Module_C03_FOV_Clamp
+   - [ ] Module_C04_Visibility_Ensure
+
+**⚠️ 枚举值检查：**
+如果ECameraModuleType中没有C01-C04的枚举值，需要先在CameraStateEnums.h中添加。
+
+4. **EModuleCategory检查：**
+   确认EModuleCategory枚举中包含`Constraint`。
+
+【注意事项】
+
+1. **必须Regenerate：**
+   创建新. h文件后必须Regenerate。
+
+2. **API宏替换：**
+   ```cpp
+   // 替换MYPROJECT_API为实际项目的API宏
+   class YOURPROJECT_API UCameraModule_C01_Pitch_Clamp ... 
+   ```
+
+3. **枚举值添加：**
+   如果ECameraModuleType中缺少C01-C04枚举，需要在CameraStateEnums.h中添加：
+   ```cpp
+   // Constraint模块枚举值
+   Module_C01_Pitch_Clamp,
+   Module_C02_Distance_Clamp,
+   Module_C03_FOV_Clamp,
+   Module_C04_Visibility_Ensure,
+   ```
+
+4. **EModuleCategory添加：**
+   如果EModuleCategory中缺少Constraint，需要添加：
+   ```cpp
+   Constraint,  // 约束模块
+   ```
+
+【输出要求】
+
+完成修改后，请报告：
+
+```
+================================================================================
+Sub-Step 3. 7. 1 完成报告
+================================================================================
+
+【创建的文件】
+- 文件：CameraModule_Constraint.h
+- 路径：Source/[ProjectName]/Public/Camera/Modules/
+- 代码行数：约XX行
+
+【定义的模块】
+- ✅ C01: Pitch Clamp (Override, 200)
+- ✅ C02: Distance Clamp (Override, 200)
+- ✅ C03: FOV Clamp (Override, 200)
+- ✅ C04: Visibility Ensure (Blend, 210) + 构造函数 + 2个辅助函数
+
+【编译结果】
+- Regenerate：[已执行/未执行]
+- 编译状态：[成功/失败]
+- 错误数：[数量]
+- 警告数：[数量]
+
+【遇到的问题】
+[如有枚举值缺失或API宏问题，详细描述]
+
+【最终状态】
+✅ Constraint模块头文件创建完成，4个模块声明完整
+
+================================================================================
+```
+
+【后续步骤】
+
+C01-C04声明完成后，Constraint模块进度：
+- [x] ✅ 3.7.1: CameraModule_Constraint.h（声明）
+- [ ] ⏳ 3.7.2: C01 - Pitch Clamp（下一步）
+- [ ] ⏳ 3.7.3: C02 - Distance Clamp
+- [ ] ⏳ 3.7.4: C03 - FOV Clamp
+- [ ] ⏳ 3.7.5: C04 - Visibility Ensure
+- [ ] ⏳ 3.7.6: 系统集成与验证
+
+**Constraint模块完成度：0/4 (0%) → 声明完成，待实现**
+
+**Phase 3进度：39/43模块 = 90.7%**
+
+================================================================================

@@ -1,0 +1,5 @@
+ModuleID,ModuleName,ChineseName,Category,Description,BlendPolicy,Priority,ActiveStates,InputParams,OutputParams
+C01,Pitch_Clamp,俯仰角限制,Constraint,限制相机俯仰角在配置范围内,Override,300,All,CurrentPitch/MinPitch/MaxPitch,PitchOverride
+C02,Distance_Clamp,距离限制,Constraint,限制相机距离在全局最小最大值内,Override,300,All,CurrentDistance/GlobalMinDistance/GlobalMaxDistance,DistanceOverride
+C03,FOV_Clamp,FOV限制,Constraint,限制FOV在全局最小最大值内,Override,300,All,CurrentFOV/GlobalMinFOV/GlobalMaxFOV,FOVOverride
+C04,Visibility_Ensure,可见性保证,Constraint,确保玩家和目标在屏幕中可见,Additive,250,LockOn/Boss_All,PlayerScreenPos/TargetScreenPos,RotationOffset/DistanceOffset

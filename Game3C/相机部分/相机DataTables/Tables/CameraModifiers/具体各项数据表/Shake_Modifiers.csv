@@ -1,0 +1,6 @@
+ModifierID,ModifierName,ChineseName,Category,TriggerEvent,Duration,BlendInTime,BlendOutTime,Priority,AffectsPosition,AffectsRotation,AffectsFOV,Description
+S01,Shake_Hit_Light,轻击震动,Shake,玩家受到轻攻击,0.15,0.02,0.08,100,true,true,false,轻微受击时的短促震动
+S02,Shake_Hit_Heavy,重击震动,Shake,玩家受到重攻击,0.3,0.02,0.15,110,true,true,true,重击时的强烈震动带FOV冲击
+S03,Shake_Attack_Hit,攻击命中震动,Shake,玩家攻击命中敌人,0.1,0.01,0.05,90,true,true,false,攻击命中时的轻微反馈震动
+S04,Shake_Environment,环境震动,Shake,Boss脚步/地震/爆炸,0.5,0.05,0.2,80,true,true,false,环境事件引起的持续震动
+S05,Shake_Landing,落地震动,Shake,高处落地,0.2,0.02,0.1,85,true,false,false,高处落地时的冲击震动

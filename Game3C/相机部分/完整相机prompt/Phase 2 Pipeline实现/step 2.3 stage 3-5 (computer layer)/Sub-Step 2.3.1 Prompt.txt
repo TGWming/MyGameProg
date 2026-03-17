@@ -1,0 +1,334 @@
+================================================================================
+任务：创建CameraStage_ModuleCompute.h - Stage 3类声明
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Stage 3负责执行所有激活的相机计算模块。
+
+【当前进度】
+Phase 2 Step 2.3 Sub-Step 2.3.1 (共190个Sub-Step中的第43个)
+**实现8个Stage中的第三个**
+
+前置完成：
+- Phase 1 全部完成 ✅
+- Sub-Step 2.1. 1-2.1.3:  Pipeline骨架 ✅
+- Sub-Step 2.2.1-2.2.2: Stage 1 (InputGather) ✅
+- Sub-Step 2.2.3-2.2.4: Stage 2 (StateMachine) ✅
+
+【任务目标】
+创建文件：Source/[ProjectName]/Camera/Pipeline/CameraStage_ModuleCompute.h
+定义Stage 3类（**骨架实现，模块系统在Phase 3完成**）。
+
+【Stage 3概述】
+- **名称**：Module Compute（模块计算）
+- **层级**：COMPUTE LAYER（计算层）
+- **索引**：3
+- **必需**：是
+- **可跳过**：否
+- **职责**：执行39个相机模块，收集FModuleOutput供Stage 5混合
+
+【39个模块分类】
+- Position Modules (P01-P08): 计算焦点位置
+- Rotation Modules (R01-R09): 计算相机旋转
+- Distance Modules (D01-D07): 计算臂长距离
+- FOV Modules (F01-F06): 计算视野角度
+- Offset Modules (O01-O05): 计算偏移量
+- Constraint Modules (C01-C04): 应用限制约束
+
+【具体要求】
+
+1. 文件路径：Source/[ProjectName]/Camera/Pipeline/CameraStage_ModuleCompute. h
+
+2. 完整文件内容：
+
+```cpp
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#pragma once
+
+#include "CoreMinimal. h"
+#include "UObject/NoExportTypes.h"
+#include "ICameraStage. h"
+#include "Camera/Data/CameraStateEnums.h"
+#include "CameraStage_ModuleCompute.generated. h"
+
+// Forward declarations
+class UCameraModuleRegistry;
+class UCameraModuleBase;
+
+/**
+ * UCameraStage_ModuleCompute - Stage 3: Module Compute
+ * 阶段3：模块计算
+ * 
+ * Third stage in the pipeline.  Executes active camera modules:
+ * Pipeline第三阶段，执行激活的相机模块：
+ * 
+ * - Position modules (P01-P08): Calculate focus point 计算焦点位置
+ * - Rotation modules (R01-R09): Calculate camera rotation 计算相机旋转
+ * - Distance modules (D01-D07): Calculate arm length 计算臂长距离
+ * - FOV modules (F01-F06): Calculate field of view 计算视野角度
+ * - Offset modules (O01-O05): Calculate socket/target offsets 计算偏移量
+ * - Constraint modules (C01-C04): Apply limits and constraints 应用限制约束
+ * 
+ * Each module produces FModuleOutput which is collected for blending in Stage 5.
+ * 每个模块产生FModuleOutput，收集后在Stage 5中混合。
+ * 
+ * Layer:  COMPUTE (计算层)
+ * Required: Yes (必需)
+ * Skippable: No (不可跳过)
+ * 
+ * Note: This is a skeleton implementation. Full module system will be implemented in Phase 3.
+ * 注意：这是骨架实现，完整模块系统将在Phase 3实现。
+ */
+UCLASS(BlueprintType)
+class MYPROJECT_API UCameraStage_ModuleCompute : public UObject, public ICameraStage
+{
+    GENERATED_BODY()
+
+public:
+    /** Constructor */
+    UCameraStage_ModuleCompute();
+
+    //========================================
+    // ICameraStage Interface 接口实现
+    //========================================
+
+    /** Get stage index (3 for ModuleCompute) */
+    virtual int32 GetStageIndex() const override { return 3; }
+    
+    /** Get stage name for debugging */
+    virtual FName GetStageName() const override { return FName(TEXT("ModuleCompute")); }
+    
+    /** This stage cannot be skipped */
+    virtual bool CanBeSkipped() const override { return false; }
+    
+    /** Execute the module compute stage */
+    virtual EStageResult Execute(FStageExecutionContext& Context) override;
+
+    /** Pre-execute hook for debugging */
+    virtual void OnPreExecute(const FStageExecutionContext& Context) override;
+
+    /** Post-execute hook for debugging */
+    virtual void OnPostExecute(const FStageExecutionContext& Context, EStageResult Result) override;
+
+    //========================================
+    // Module Registry Reference 模块注册表引用
+    //========================================
+
+    /** 
+     * Set reference to module registry
+     * @param InRegistry Module registry instance
+     */
+    void SetModuleRegistry(UCameraModuleRegistry* InRegistry);
+
+    /**
+     * Get the module registry reference
+     * @return Module registry instance, or nullptr if not set
+     */
+    FORCEINLINE UCameraModuleRegistry* GetModuleRegistry() const { return ModuleRegistry; }
+
+protected:
+    //========================================
+    // Module Execution 模块执行
+    //========================================
+
+    /** 
+     * Execute all active modules and collect outputs
+     * 执行所有激活的模块并收集输出
+     */
+    void ExecuteModules(FStageExecutionContext& Context);
+
+    /** 
+     * Execute modules of a specific category
+     * 执行特定分类的模块
+     * @param Context Execution context
+     * @param Category Module category to execute
+     */
+    void ExecuteModuleCategory(FStageExecutionContext& Context, ECameraModuleCategory Category);
+
+    /**
+     * Execute a single module
+     * 执行单个模块
+     * @param Context Execution context
+     * @param Module Module to execute
+     * @return True if module executed successfully
+     */
+    bool ExecuteSingleModule(FStageExecutionContext& Context, UCameraModuleBase* Module);
+
+    //========================================
+    // Placeholder Methods (Phase 3) 占位方法
+    //========================================
+
+    /**
+     * Placeholder:  Execute position modules
+     * 占位：执行位置模块
+     */
+    void ExecutePositionModules(FStageExecutionContext& Context);
+
+    /**
+     * Placeholder:  Execute rotation modules
+     * 占位：执行旋转模块
+     */
+    void ExecuteRotationModules(FStageExecutionContext& Context);
+
+    /**
+     * Placeholder: Execute distance modules
+     * 占位：执行距离模块
+     */
+    void ExecuteDistanceModules(FStageExecutionContext& Context);
+
+    /**
+     * Placeholder:  Execute FOV modules
+     * 占位：执行FOV模块
+     */
+    void ExecuteFOVModules(FStageExecutionContext& Context);
+
+    /**
+     * Placeholder: Execute offset modules
+     * 占位：执行偏移模块
+     */
+    void ExecuteOffsetModules(FStageExecutionContext& Context);
+
+    /**
+     * Placeholder: Execute constraint modules
+     * 占位：执行约束模块
+     */
+    void ExecuteConstraintModules(FStageExecutionContext& Context);
+
+private:
+    //========================================
+    // Module Registry 模块注册表
+    //========================================
+
+    /** Reference to module registry (will be set in Phase 3) */
+    UPROPERTY()
+    UCameraModuleRegistry* ModuleRegistry;
+
+    //========================================
+    // Execution Statistics 执行统计
+    //========================================
+
+    /** Number of modules executed this frame */
+    int32 ModulesExecutedCount;
+
+    /** Number of modules skipped this frame */
+    int32 ModulesSkippedCount;
+
+    /** Total module execution time (ms) for profiling */
+    float TotalModuleTimeMs;
+};
+```
+
+3. 代码风格：
+   - 继承UObject和ICameraStage
+   - 骨架实现，ModuleRegistry将在Phase 3创建
+   - 预留6个分类模块执行方法（占位）
+   - 添加执行统计变量
+   - 中英文双语注释
+   - MYPROJECT_API宏
+
+【验证标准】
+- 编译通过（需要配合. cpp）
+- 类可在蓝图中看到
+
+【注意事项】
+- 依赖ICameraStage. h和CameraStateEnums.h
+- 前向声明UCameraModuleRegistry和UCameraModuleBase
+- **这是骨架实现，完整模块系统在Phase 3实现**
+- 下一个Sub-Step创建. cpp实现
+- 确保MYPROJECT_API替换为你的项目名称（大写）
+- **添加新文件后可能需要重新Generate Visual Studio project files**
+
+【输出要求】
+输出完整的CameraStage_ModuleCompute. h文件代码。
+
+================================================================================
+                        上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+```
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：Sub-Step 2.3.1 创建CameraStage_ModuleCompute.h - Stage 3类声明
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断]
+
+【已完成内容】
+- [列出已完成的部分]
+
+【未完成内容】
+- [列出剩余部分]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存到CameraStage_ModuleCompute.h，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Phase 2 Step 2.3 Sub-Step 2.3.1 续接任务。
+完成CameraStage_ModuleCompute.h声明。
+**这是8个Stage中的第三个（骨架实现）。**
+
+【前置完成】
+- Phase 1 全部完成 ✅
+- Sub-Step 2.1.1-2.1.3: Pipeline骨架 ✅
+- Sub-Step 2.2.1-2.2.4: Stage 1-2 ✅
+- Sub-Step 2.3.1 部分完成 ✅
+
+【续接任务】
+继续完成CameraStage_ModuleCompute.h
+
+【目标文件】
+Source/[ProjectName]/Camera/Pipeline/CameraStage_ModuleCompute.h
+
+【Stage 3概述】
+- 名称：Module Compute
+- 层级：COMPUTE LAYER
+- 索引：3
+- 必需：是
+- 职责：执行39个相机模块，收集FModuleOutput
+
+【重要说明】
+这是骨架实现，完整模块系统在Phase 3实现。
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================
+```
+
+【交接信息要求】
+1. 交接PROMPT必须是**完全自包含**的
+2. 明确标注这是8个Stage中的第三个
+3. 标明这是骨架实现
+4. 包含Stage概述信息
+
+================================================================================

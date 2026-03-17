@@ -1,0 +1,176 @@
+================================================================================
+任务：创建SoulsCameraParams_StateBase. h - 头文件框架与Identity子组
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+开始创建A组参数结构体，定义状态基础参数（共34个参数）。
+
+【当前进度】
+Phase 1 Step 1.2 Sub-Step 1.2.1 (共190个Sub-Step中的第8个)
+前置完成：Step 1.1 SoulsCameraTypes.h（所有枚举定义）
+
+【任务目标】
+创建文件：Source/[ProjectName]/Camera/Core/SoulsCameraParams_StateBase.h
+本Sub-Step创建文件框架和Identity子组（3个参数）。
+
+【具体要求】
+
+1. 文件路径：Source/[ProjectName]/Camera/Core/SoulsCameraParams_StateBase.h
+
+2. 文件头部：
+   - 版权声明注释块
+   - #pragma once
+   - #include "CoreMinimal.h"
+   - #include "SoulsCameraTypes. h"
+   - #include "SoulsCameraParams_StateBase.generated.h"
+
+3. Identity子组结构体（3个参数）：
+
+```cpp
+/**
+ * State identity parameters
+ * Basic identification and priority settings for camera states
+ */
+USTRUCT(BlueprintType)
+struct FStateIdentityParams
+{
+    GENERATED_BODY()
+
+    /** Unique name identifier for this state */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Identity")
+    FName StateName;
+
+    /** Priority level (higher = more important, 0-255) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Identity", meta = (ClampMin = "0", ClampMax = "255"))
+    int32 Priority;
+
+    /** Category this state belongs to */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Identity")
+    ECameraStateCategory Category;
+
+    FStateIdentityParams()
+        : StateName(NAME_None)
+        , Priority(100)
+        , Category(ECameraStateCategory:: Explore)
+    {}
+};
+```
+
+4. 预留后续子组的注释占位符：
+
+```cpp
+//========================================
+// Distance Parameters - Sub-Step 1.2.2
+//========================================
+
+//========================================
+// FOV Parameters - Sub-Step 1.2.3
+//========================================
+
+// ...  其他子组占位符
+```
+
+5. 代码风格：
+   - USTRUCT(BlueprintType)使结构体可在蓝图使用
+   - UPROPERTY使用EditAnywhere, BlueprintReadWrite
+   - 每个属性添加Category分类
+   - 提供默认构造函数初始化所有值
+
+【验证标准】
+- 编译通过
+- 可创建FStateIdentityParams实例
+- 结构体可在蓝图中使用
+
+【注意事项】
+- 依赖SoulsCameraTypes. h（ECameraStateCategory枚举）
+- 这是Layer 1文件
+
+【输出要求】
+输出SoulsCameraParams_StateBase. h的完整初始代码。
+
+================================================================================
+                        上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+```
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：[任务名称]
+- 完成进度：[X/Y] 或 [百分比]
+- 中断位置：[具体说明在哪里中断]
+
+【已完成内容】
+- [列出已生成的代码/文件/结构体]
+- [列出已完成的具体项目]
+
+【未完成内容】
+- [列出剩余需要生成的代码/文件/结构体]
+- [列出剩余的具体项目]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存到对应文件，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Phase 1 Step 1.2 Sub-Step 1.2.1 续接任务。
+
+【前置完成】
+- Step 1.1 SoulsCameraTypes.h（所有枚举定义）✅
+- [列出本次对话已完成的内容] ✅
+
+【续接任务】
+从 [具体中断位置] 继续，完成以下内容：
+- [列出剩余任务1]
+- [列出剩余任务2]
+- [...]
+
+【已有代码上下文】
+```cpp
+[粘贴关键的已有代码片段，供参考]
+```
+
+【输出要求】
+继续生成剩余代码，完成Sub-Step 1.2.1。
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。如再次达到限制，请再次生成交接信息。
+
+---结束复制---
+
+================================================================================
+```
+
+【交接信息要求】
+1. 交接PROMPT必须是**完全自包含**的，新对话无需任何额外信息即可继续
+2. 包含所有必要的**代码上下文**（关键结构体定义、依赖关系等）
+3. 明确标注**中断位置**和**剩余任务**
+4. 如果任务涉及多个文件，标明每个文件的完成状态
+
+================================================================================

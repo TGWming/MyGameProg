@@ -1,0 +1,791 @@
+Sub-Step 3.3.6 Prompt
+
+================================================================================
+任务：在CameraModule_Rotation.cpp中添加R05 LookAt_Boss实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+R05为Boss战提供特殊的看向逻辑，根据Boss尺寸动态调整注视点。
+针对大型Boss敌人优化相机朝向，确保Boss主体和玩家都能良好展现。
+
+【当前进度】
+Phase 3 Step 3.3 Sub-Step 3.3.6 (共190个Sub-Step中的第74个)
+前置完成：3.3.5 R04实现 ✅
+
+【任务目标】
+在CameraModule_Rotation.cpp中完整实现R05模块，替换现有的占位符。
+
+【⚠️ 重要提醒】
+
+1. **编译前必做步骤：**
+   本Sub-Step只修改现有.  cpp文件，不添加新文件。
+   因此**不需要Regenerate**，可以直接编译。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   确认StateConfig和InputContext的字段路径与项目实际结构一致。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_Rotation.  cpp
+
+2. **定位修改位置：**
+
+在文件中找到R05的占位符实现部分：
+
+```cpp
+//========================================
+// R05: LookAt Boss - Boss-specific look-at
+//========================================
+
+// TODO: Will be implemented in Sub-Step 3.3.6
+// ...   占位符代码
+```
+
+**将上述占位符代码完整替换为下方的完整实现。**
+
+---
+
+3. **R05完整实现代码：**
+
+**A. ShouldActivate() 实现：**
+
+**当前占位符代码：**
+```cpp
+bool UCameraModule_R05_LookAt_Boss::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Placeholder:   Will be properly implemented in Sub-Step 3.3.6
+	// Should activate when locked onto boss target
+	return false;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * ShouldActivate - Determine if boss look-at rotation should be active
+ * 
+ * R05 activates when:
+ * - Module is enabled
+ * - Player has a locked-on target
+ * - Target IS a boss (this is the key condition)
+ * 
+ * R05 has the highest priority (160) among lock-on rotation modules. 
+ * This ensures boss encounters get special camera treatment.
+ * 
+ * Differences from R03:
+ * - R03 (150): Standard enemies, standard height offset
+ * - R05 (160): Boss enemies, dynamic height adjustment based on size
+ * 
+ * Use Cases:
+ * - Large boss fights (dragons, giants, etc.)
+ * - Bosses with unusual proportions
+ * - Epic encounters requiring cinematic framing
+ */
+bool UCameraModule_R05_LookAt_Boss::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (! bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if player has a locked target
+	if (!Context.InputContext.bHasTarget)
+	{
+		return false;
+	}
+	
+	// ONLY activate for boss targets
+	// This is the key difference from R03
+	if (! Context.InputContext.bTargetIsBoss)
+	{
+		return false;
+	}
+	
+	// All conditions met - activate boss look-at
+	return true;
+}
+```
+
+**说明：**
+- 与R03唯一区别：检查bTargetIsBoss必须为true
+- 优先级160（最高的锁定模块）
+- 与R03/R04互斥（bTargetIsBoss条件）
+
+---
+
+**B. Compute() 实现：**
+
+**当前占位符代码：**
+```cpp
+bool UCameraModule_R05_LookAt_Boss:: Compute(...)
+{
+	// Placeholder
+	OutOutput = CreateBaseOutput();
+	OutOutput.  RotationOutput = Context.InputContext.PreviousCameraRotation;
+	OutOutput.bHasRotationOutput = true;
+	return true;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * Compute - Calculate rotation to face boss with size-based adjustments
+ * 
+ * Boss fights require special camera handling due to:
+ * - Larger enemy models (need to look higher)
+ * - Variable sizes (dragon vs humanoid boss)
+ * - Dynamic framing needs (keep boss head/weak points visible)
+ * 
+ * Steps:
+ * 1. Validate boss target exists
+ * 2. Get camera focus point and boss location
+ * 3. Calculate dynamic height offset based on boss size
+ * 4. Apply size-to-distance ratio adjustment
+ * 5. Calculate look-at rotation
+ * 6. Apply pitch adjustment for very large bosses
+ * 7. Clamp pitch and output
+ * 
+ * Key Features:
+ * - Dynamic height offset (40% of boss size, 50cm-300cm range)
+ * - Pitch adjustment for close large bosses
+ * - Ensures boss weak points (head) are visible
+ * - Adapts to different boss sizes automatically
+ * 
+ * @param Context The current pipeline execution context
+ * @param StateConfig The current camera state configuration
+ * @param OutOutput Output structure to fill with computed values
+ * @return True if computation succeeded
+ */
+bool UCameraModule_R05_LookAt_Boss::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Step 1: Validate that we have a locked boss target
+	// Safety check - ShouldActivate should prevent this, but double-check
+	if (!Context. InputContext.bHasTarget)
+	{
+		// No target - cannot compute boss look-at rotation
+		OutOutput.bHasRotationOutput = false;
+		return false;
+	}
+	
+	// Step 2: Get camera focus point
+	FVector CameraFocusPoint = Context.Output.  FocusPoint;
+	
+	// Fallback if FocusPoint is invalid
+	if (CameraFocusPoint.  IsNearlyZero())
+	{
+		CameraFocusPoint = Context. InputContext.CharacterLocation;
+		CameraFocusPoint. Z += 100.0f;
+	}
+	
+	// Step 3: Get boss location and size
+	FVector TargetLocation = Context.InputContext.  TargetLocation;
+	float TargetSize = Context.InputContext.TargetSize;
+	
+	// If TargetSize not available, use default large boss size
+	if (TargetSize <= 0.0f)
+	{
+		TargetSize = 200.0f;  // Default:  2 meters (large enemy)
+	}
+	
+	// Step 4: Calculate dynamic height offset based on boss size
+	// Boss look-at aims at center mass or upper body
+	// Larger bosses = look higher (to see head/weak points)
+	// 
+	// Formula: 40% of boss size
+	// - Small boss (150cm): 60cm offset (chest level)
+	// - Medium boss (300cm): 120cm offset (head level)
+	// - Large boss (500cm): 200cm offset (upper body)
+	// - Huge boss (1000cm): 300cm offset (capped, prevent looking too high)
+	float BossHeightOffset = TargetSize * 0.4f;
+	
+	// Clamp to reasonable range
+	// Min 50cm:  ensure we don't look at feet even for small bosses
+	// Max 300cm: prevent looking too high for giant bosses
+	BossHeightOffset = FMath::Clamp(BossHeightOffset, 50.0f, 300.0f);
+	
+	// Apply height offset to boss location
+	FVector BossLookPoint = TargetLocation;
+	BossLookPoint.Z += BossHeightOffset;
+	
+	// Step 5: Calculate base look direction
+	FVector LookDirection = (BossLookPoint - CameraFocusPoint).GetSafeNormal();
+	
+	// Handle edge case: zero direction
+	if (LookDirection. IsNearlyZero())
+	{
+		LookDirection = FVector::  ForwardVector;
+	}
+	
+	// Convert to rotation
+	FRotator LookAtRotation = LookDirection.Rotation();
+	
+	// Step 6: Apply dynamic pitch adjustment for very large bosses
+	// When boss is large relative to distance, tilt up slightly
+	// This helps keep more of the boss visible in frame
+	
+	float DistanceToTarget = Context. InputContext.  TargetDistance;
+	
+	// If DistanceToTarget not available, calculate from positions
+	if (DistanceToTarget <= 0.0f)
+	{
+		DistanceToTarget = (TargetLocation - Context.InputContext.CharacterLocation).Size();
+	}
+	
+	// Calculate size-to-distance ratio
+	// High ratio = boss is large relative to how far away it is
+	// Example: 500cm boss at 1000cm distance → ratio = 0.5
+	float SizeToDistanceRatio = TargetSize / FMath::Max(DistanceToTarget, 100.0f);
+	
+	// If ratio > 0.5 (boss is more than half the distance in size)
+	// Apply additional pitch adjustment to tilt camera up
+	if (SizeToDistanceRatio > 0.5f)
+	{
+		// Boss is large relative to distance, tilt up slightly
+		// This prevents boss from filling entire frame awkwardly
+		// 
+		// Formula: (Ratio - 0.5) * 20 degrees
+		// - Ratio 0.5: 0 degrees (no adjustment)
+		// - Ratio 0.75: 5 degrees up
+		// - Ratio 1.0: 10 degrees up
+		// - Ratio 1.5: 15 degrees up (capped)
+		float PitchAdjust = (SizeToDistanceRatio - 0.5f) * 20.0f;
+		
+		// Clamp to max 15 degrees
+		PitchAdjust = FMath:: Clamp(PitchAdjust, 0.0f, 15.0f);
+		
+		// Apply adjustment (subtract to tilt up, negative pitch = up)
+		LookAtRotation.Pitch -= PitchAdjust;
+	}
+	
+	// Step 7: Clamp pitch to configured limits
+	float MinPitch = StateConfig.StateBase. Rotation.  MinPitch;
+	float MaxPitch = StateConfig.StateBase.Rotation.MaxPitch;
+	
+	// Validate pitch limits are reasonable
+	if (MinPitch >= MaxPitch)
+	{
+		MinPitch = -80.0f;
+		MaxPitch = 80.0f;
+	}
+	
+	LookAtRotation.Pitch = FMath::Clamp(LookAtRotation.Pitch, MinPitch, MaxPitch);
+	
+	// Step 8: Force roll to zero
+	LookAtRotation.Roll = 0.0f;
+	
+	// Step 9: Fill output structure
+	OutOutput.  RotationOutput = LookAtRotation;
+	OutOutput. bHasRotationOutput = true;
+	
+	return true;
+}
+```
+
+**说明：**
+- 动态高度偏移（40%，50-300cm范围）
+- 尺寸-距离比例调整（防止Boss填满屏幕）
+- Pitch微调（大型Boss额外上仰）
+- 与R03类似的基础结构
+
+---
+
+4. **完整的R05代码块（用于复制粘贴）：**
+
+如果AGENT需要完整的代码块，提供以下版本：
+
+```cpp
+//========================================
+// R05: LookAt Boss - Boss-specific look-at
+//========================================
+
+/**
+ * ShouldActivate - Activate only when locked onto boss target
+ */
+bool UCameraModule_R05_LookAt_Boss::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if player has a locked target
+	if (!Context.InputContext. bHasTarget)
+	{
+		return false;
+	}
+	
+	// ONLY activate for boss targets
+	if (!Context.InputContext.bTargetIsBoss)
+	{
+		return false;
+	}
+	
+	return true;
+}
+
+/**
+ * Compute - Calculate rotation to face boss with dynamic size adjustments
+ */
+bool UCameraModule_R05_LookAt_Boss:: Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output
+	OutOutput = CreateBaseOutput();
+	
+	// Validate target exists
+	if (!Context.InputContext.bHasTarget)
+	{
+		OutOutput.bHasRotationOutput = false;
+		return false;
+	}
+	
+	// Get camera focus point
+	FVector CameraFocusPoint = Context.Output.FocusPoint;
+	
+	// Fallback if invalid
+	if (CameraFocusPoint.IsNearlyZero())
+	{
+		CameraFocusPoint = Context. InputContext.CharacterLocation;
+		CameraFocusPoint. Z += 100.0f;
+	}
+	
+	// Get boss location and size
+	FVector TargetLocation = Context. InputContext.TargetLocation;
+	float TargetSize = Context.InputContext.TargetSize;
+	
+	if (TargetSize <= 0.0f)
+	{
+		TargetSize = 200.0f;  // Default large boss size
+	}
+	
+	// Calculate dynamic height offset (40% of boss size, 50-300cm range)
+	float BossHeightOffset = TargetSize * 0.4f;
+	BossHeightOffset = FMath::Clamp(BossHeightOffset, 50.0f, 300.0f);
+	
+	// Apply offset to boss location
+	FVector BossLookPoint = TargetLocation;
+	BossLookPoint.Z += BossHeightOffset;
+	
+	// Calculate look direction
+	FVector LookDirection = (BossLookPoint - CameraFocusPoint).GetSafeNormal();
+	
+	if (LookDirection.IsNearlyZero())
+	{
+		LookDirection = FVector::  ForwardVector;
+	}
+	
+	// Convert to rotation
+	FRotator LookAtRotation = LookDirection.Rotation();
+	
+	// Dynamic pitch adjustment for very large bosses
+	float DistanceToTarget = Context. InputContext.TargetDistance;
+	
+	if (DistanceToTarget <= 0.0f)
+	{
+		DistanceToTarget = (TargetLocation - Context. InputContext.CharacterLocation).Size();
+	}
+	
+	// Calculate size-to-distance ratio
+	float SizeToDistanceRatio = TargetSize / FMath::Max(DistanceToTarget, 100.0f);
+	
+	// If boss is large relative to distance, tilt up slightly
+	if (SizeToDistanceRatio > 0.5f)
+	{
+		// Boss is large relative to distance
+		float PitchAdjust = (SizeToDistanceRatio - 0.5f) * 20.0f;
+		PitchAdjust = FMath::Clamp(PitchAdjust, 0.0f, 15.0f);
+		
+		// Apply adjustment (subtract to tilt up)
+		LookAtRotation.  Pitch -= PitchAdjust;
+	}
+	
+	// Clamp pitch
+	float MinPitch = StateConfig.StateBase.Rotation.MinPitch;
+	float MaxPitch = StateConfig.StateBase.  Rotation.MaxPitch;
+	
+	if (MinPitch >= MaxPitch)
+	{
+		MinPitch = -80.0f;
+		MaxPitch = 80.0f;
+	}
+	
+	LookAtRotation.Pitch = FMath::Clamp(LookAtRotation.Pitch, MinPitch, MaxPitch);
+	
+	// Force roll to zero
+	LookAtRotation.Roll = 0.0f;
+	
+	// Fill output
+	OutOutput.RotationOutput = LookAtRotation;
+	OutOutput.bHasRotationOutput = true;
+	
+	return true;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 每个方法前添加详细的文档注释
+   - 说明动态调整的原理
+   - 解释尺寸-距离比例的作用
+   - 所有注释使用英文
+
+2. **格式：**
+   - 使用Tab缩进（与现有代码一致）
+   - 方法之间空两行
+   - 清晰的步骤标注
+
+3. **常量使用：**
+   - 0.4f（高度偏移比例）
+   - 50-300cm（高度偏移范围）
+   - 0.5（尺寸-距离阈值）
+   - 20.0f（Pitch调整系数）
+
+【技术说明】
+
+**R05的核心机制：**
+
+### 1. 动态高度偏移
+
+**为什么使用40%而非30%（R03）？**
+
+```
+R03 (普通敌人):
+TargetHeightOffset = TargetSize * 0.3f
+
+- 适用于人形敌人（100-150cm）
+- 偏移30-45cm（胸部/头部）
+- 标准视角
+
+R05 (Boss):
+BossHeightOffset = TargetSize * 0.4f
+
+- 适用于大型Boss（200-1000cm）
+- 偏移80-300cm（更高）
+- 看向Boss上半身/头部/弱点
+```
+
+**不同Boss尺寸的效果：**
+
+| Boss类型 | TargetSize | 40%偏移 | 限制后 | 注视点 |
+|---------|-----------|---------|--------|--------|
+| 小型Boss | 150cm | 60cm | 60cm | 上胸 |
+| 中型Boss | 300cm | 120cm | 120cm | 头部 |
+| 大型Boss | 500cm | 200cm | 200cm | 头顶 |
+| 巨型Boss | 1000cm | 400cm | 300cm ✅ | 上身（限制） |
+
+**Clamp的必要性：**
+```cpp
+BossHeightOffset = FMath::Clamp(BossHeightOffset, 50.0f, 300.0f);
+
+不限制：
+- 巨型Boss（1000cm）→ 偏移400cm
+- 相机看向Boss头顶很高的位置
+- Boss主体不在视野内（awkward）
+
+限制到300cm：
+- 即使巨型Boss，偏移也只有300cm
+- 保持Boss主体可见
+- 合理的上限
+```
+
+### 2. 尺寸-距离比例调整
+
+**为什么需要SizeToDistanceRatio？**
+
+```
+场景1：中型Boss，远距离
+TargetSize = 300cm
+Distance = 1500cm
+Ratio = 300 / 1500 = 0.2
+
+→ 比例低（<0.5）
+→ Boss在远处，看起来小
+→ 不需要额外调整
+→ PitchAdjust = 0
+
+场景2：大型Boss，近距离
+TargetSize = 800cm
+Distance = 1000cm
+Ratio = 800 / 1000 = 0.8
+
+→ 比例高（>0.5）
+→ Boss填满大部分视野
+→ 需要稍微上仰
+→ PitchAdjust = (0.8 - 0.5) * 20 = 6°
+→ 相机上仰6°，看到Boss全貌
+
+场景3：巨型Boss，很近
+TargetSize = 1000cm
+Distance = 800cm
+Ratio = 1000 / 800 = 1.25
+
+→ 比例很高（>1.0）
+→ Boss非常巨大
+→ PitchAdjust = (1.25 - 0.5) * 20 = 15°（限制到15°）
+→ 相机上仰15°（最大），尽量展现Boss
+```
+
+**数学公式：**
+```
+Ratio = TargetSize / Distance
+
+if Ratio > 0.5:
+    PitchAdjust = (Ratio - 0.5) * 20°
+    Clamp(PitchAdjust, 0°, 15°)
+    
+    FinalPitch = BasePitch - PitchAdjust
+
+解释：
+- Ratio越高，Boss相对越大
+- PitchAdjust越大，相机越上仰
+- 最多上仰15°（防止过度）
+```
+
+**为什么阈值是0.5？**
+
+```
+Ratio = 0.5 意味着：
+Boss尺寸 = 距离的一半
+
+示例：
+Boss高5米，距离10米 → Ratio=0.5
+
+视觉效果：
+- Boss占据视野的显著部分
+- 但不是压倒性的
+- 这是一个平衡点
+
+Ratio < 0.5:
+- Boss相对较小，标准视角足够
+
+Ratio > 0.5:
+- Boss相对较大，需要调整
+```
+
+### 3. 与R03的对比
+
+| 特性 | R03 (Standard Enemy) | R05 (Boss) |
+|------|---------------------|-----------|
+| **激活条件** | ! bTargetIsBoss | bTargetIsBoss |
+| **优先级** | 150 | 160 |
+| **高度偏移比例** | 30% | 40% |
+| **高度偏移范围** | 20-100cm | 50-300cm |
+| **动态Pitch调整** | 无 | 有（基于尺寸-距离比） |
+| **适用敌人** | 人形、中小型 | Boss、巨型 |
+| **默认尺寸** | 100cm | 200cm |
+
+**代码对比：**
+
+```cpp
+// R03
+float TargetHeightOffset = TargetSize * 0.3f;
+TargetHeightOffset = FMath::Clamp(TargetHeightOffset, 20.0f, 100.0f);
+TargetLocation.Z += TargetHeightOffset;
+// 无额外Pitch调整
+
+// R05
+float BossHeightOffset = TargetSize * 0.4f;
+BossHeightOffset = FMath::Clamp(BossHeightOffset, 50.0f, 300.0f);
+BossLookPoint.Z += BossHeightOffset;
+// 有尺寸-距离比例的Pitch调整
+if (SizeToDistanceRatio > 0.5f)
+{
+    float PitchAdjust = ...  ;
+    LookAtRotation.Pitch -= PitchAdjust;
+}
+```
+
+### 4. 实际使用场景
+
+**场景1：人形Boss（Dark Souls风格）**
+```
+Boss:   Humanoid, TargetSize=180cm
+Distance: 600cm
+Ratio = 180/600 = 0.3
+
+计算：
+- BossHeightOffset = 180 * 0.4 = 72cm
+- Ratio < 0.5，无Pitch调整
+- 最终：看向Boss胸部/头部
+
+效果：
+- 类似普通敌人
+- 标准视角
+- R05和R03效果接近
+```
+
+**场景2：大型Boss（巨龙）**
+```
+Boss: Dragon, TargetSize=800cm
+Distance: 1200cm
+Ratio = 800/1200 = 0.67
+
+计算：
+- BossHeightOffset = 800 * 0.4 = 300cm（限制）
+- Ratio > 0.5
+- PitchAdjust = (0.67 - 0.5) * 20 = 3. 4°
+
+效果：
+- 看向龙的中上部（颈部/头部）
+- 上仰3.4°，看到更多龙身
+- 史诗感
+```
+
+**场景3：巨型Boss（巨人）**
+```
+Boss: Giant, TargetSize=1500cm
+Distance: 1000cm
+Ratio = 1500/1000 = 1.5
+
+计算：
+- BossHeightOffset = 1500 * 0.4 = 600cm → 限制到300cm
+- Ratio > 0.5
+- PitchAdjust = (1.5 - 0.5) * 20 = 20° → 限制到15°
+
+效果：
+- 看向巨人上半身（300cm高）
+- 上仰15°（最大）
+- 尽量展现巨人全貌
+- 避免只看到腿部
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过（0 errors, 0 warnings）
+   - [ ] 文件编码为UTF-8 Without BOM
+   - [ ] 所有注释为英文
+
+2. **代码完整性：**
+   - [ ] ShouldActivate()实现完整
+   - [ ] Compute()实现完整
+   - [ ] 所有方法签名与.  h一致
+
+3. **逻辑正确性：**
+   - [ ] 仅在bTargetIsBoss时激活
+   - [ ] 高度偏移40%且限制50-300cm
+   - [ ] 尺寸-距离比例计算正确
+   - [ ] Pitch调整逻辑正确
+   - [ ] Pitch限制和Roll=0正确
+
+4. **字段访问：**
+   - [ ] Context.InputContext.bTargetIsBoss
+   - [ ] Context.InputContext. TargetSize
+   - [ ] Context.InputContext.TargetDistance
+   - [ ] 其他标准字段
+
+【注意事项】
+
+1. **不需要Regenerate：** 只修改.  cpp文件，保存后直接编译
+
+2. **TargetSize处理：**
+   ```cpp
+   // Boss通常比普通敌人大
+   if (TargetSize <= 0.0f)
+   {
+       TargetSize = 200.0f;  // Boss默认200cm（普通敌人100cm）
+   }
+   ```
+
+3. **TargetDistance处理：**
+   ```cpp
+   // 如果InputContext没有提供
+   if (DistanceToTarget <= 0.0f)
+   {
+       // 从位置计算
+       DistanceToTarget = (TargetLocation - CharacterLocation).Size();
+   }
+   ```
+
+4. **关键常量：**
+   - 0.4f:  Boss高度偏移比例（vs R03的0.3f）
+   - 50-300cm:  Boss高度偏移范围（vs R03的20-100cm）
+   - 0.5:  尺寸-距离比例阈值
+   - 20.0f: Pitch调整系数
+   - 15. 0f: 最大Pitch调整
+
+5. **测试建议：**
+   编译通过后，测试：
+   - 小型Boss（人形）
+   - 大型Boss（龙、巨兽）
+   - 巨型Boss（巨人、泰坦）
+   - 不同距离下的效果
+
+【输出要求】
+
+完成修改后，请报告：
+
+```
+================================================================================
+Sub-Step 3. 3. 6 完成报告
+================================================================================
+
+【修改内容】
+- 文件：CameraModule_Rotation.cpp
+- 修改位置：R05模块（ShouldActivate、Compute）
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ ShouldActivate：检查Boss目标
+- ✅ Compute：动态高度偏移 + 尺寸-距离比例调整
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误数：[数量]
+- 警告数：[数量]
+
+【遇到的问题】
+[如果有字段路径问题，详细描述]
+
+【最终状态】
+✅ R05模块完整实现，为Boss战提供优化的相机朝向
+
+================================================================================
+```
+
+【后续步骤】
+
+R05完成后，Rotation模块进度：
+- [x] ✅ 3.3.1:   CameraModule_Rotation.h
+- [x] ✅ 3.3.2: R01 - Player Input Free
+- [x] ✅ 3.3.3: R02 - Player Input Lagged
+- [x] ✅ 3.3.4: R03 - LookAt Target
+- [x] ✅ 3.3.5: R04 - LookAt Target Soft
+- [x] ✅ 3.3.6: R05 - LookAt Boss
+- [ ] ⏳ 3.3.7: R06 - AutoOrient Movement（下一步）
+- [ ] ⏳ 3.3.8: R07 - AutoOrient Delayed
+- [ ] ⏳ 3.3.9: R08 - LookAt Point
+- [ ] ⏳ 3.3.10: R09 - Spline Rotation
+
+**Rotation模块完成度：5/9 (55.6%)**
+
+**下一步：** R06-R07是自动旋转模块，R08-R09是特殊场景模块
+
+完成后准备进入Sub-Step 3.3.7（R06: AutoOrient Movement - 自动对齐移动方向）。
+
+================================================================================

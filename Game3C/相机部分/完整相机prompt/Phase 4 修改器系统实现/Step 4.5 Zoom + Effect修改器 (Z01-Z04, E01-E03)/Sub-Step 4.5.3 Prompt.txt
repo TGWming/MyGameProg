@@ -1,0 +1,436 @@
+Sub-Step 4.5.3 Prompt
+
+================================================================================
+任务：在CameraModifier_Zoom.cpp中添加Z02 ChargeRelease + Z03 SkillActivate实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4. 27 C++项目。
+Z02是蓄力攻击释放时的FOV爆发效果，强调力量释放。
+Z03是技能/魔法施放时的聚焦效果，强调技能激活。
+
+【当前进度】
+Phase 4 Step 4.5 Sub-Step 4.5.3 (共190个Sub-Step中的第136个)
+前置完成：4.5.2 ZoomBase + Z01实现 ✅
+
+【任务目标】
+在CameraModifier_Zoom.cpp中添加Z02和Z03实现。
+
+【⚠️ 重要提醒】
+
+1. **本Sub-Step是更新现有文件，不创建新文件**
+   因此**不需要Regenerate**，直接编译即可。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **类名必须与头文件一致：**
+   - `UCameraModifier_Z02_Zoom_ChargeRelease`
+   - `UCameraModifier_Z03_Zoom_SkillActivate`
+
+4. **在Z01实现之后添加代码**
+
+【具体要求】
+
+**在CameraModifier_Zoom.cpp的Z01实现之后添加：**
+
+```cpp
+//========================================
+// Z02: Charge Release Zoom Implementation
+//========================================
+
+/**
+ * Constructor - Configure charge release zoom parameters
+ * 
+ * Charge release creates an explosive FOV burst: 
+ * - Quick expansion for power release feel
+ * - Brief hold at peak
+ * - Gradual settle back to normal
+ * - Scales with charge level
+ */
+UCameraModifier_Z02_Zoom_ChargeRelease:: UCameraModifier_Z02_Zoom_ChargeRelease()
+	: FOVBurstAmount(8.0f)
+	, DistancePushAmount(25.0f)
+	, ChargeLevel(1.0f)
+	, MinChargeForFullEffect(0.8f)
+{
+	// Configure base zoom settings
+	BaseFOVChange = 8.0f;
+	BaseDistanceChange = 25.0f;
+	bApplyVignette = false;
+	FOVInterpSpeed = 20.0f;
+}
+
+/**
+ * OnTriggered - Initialize charge release state
+ * 
+ * Charge level from trigger data scales the effect. 
+ * Higher charge = more dramatic FOV burst. 
+ */
+void UCameraModifier_Z02_Zoom_ChargeRelease::OnTriggered(const FModifierTriggerData& InTriggerData)
+{
+	// Call parent
+	Super::OnTriggered(InTriggerData);
+	
+	// Get charge level from intensity (0.5 = half, 1.0 = full, 1.5+ = overcharge)
+	ChargeLevel = FMath::Clamp(CurrentIntensity, 0.5f, 2.0f);
+	
+	// Scale burst amounts based on charge level
+	float ChargeScale = ChargeLevel;
+	
+	// Only apply full effect if charge is above minimum
+	if (ChargeLevel < MinChargeForFullEffect)
+	{
+		ChargeScale *= (ChargeLevel / MinChargeForFullEffect);
+	}
+	
+	FOVBurstAmount = 8.0f * ChargeScale;
+	DistancePushAmount = 25.0f * ChargeScale;
+	
+	UE_LOG(LogTemp, Verbose, TEXT("Z02 ChargeRelease:  Triggered, ChargeLevel=%.2f, FOVBurst=%.1f"),
+		ChargeLevel, FOVBurstAmount);
+}
+
+/**
+ * ComputeEffect - Calculate charge release FOV burst each frame
+ * 
+ * Uses burst curve:  explosive expansion, brief hold, gradual settle. 
+ * Effect emphasizes the power release moment.
+ */
+void UCameraModifier_Z02_Zoom_ChargeRelease::ComputeEffect(float DeltaTime, const FStageExecutionContext& Context)
+{
+	// Calculate normalized time (0-1 over duration)
+	float NormalizedTime = 0.0f;
+	if (ActiveDuration > 0.0f)
+	{
+		NormalizedTime = FMath::Clamp(TotalActiveTime / ActiveDuration, 0.0f, 1.0f);
+	}
+	
+	// Charge release curve:  explosive start, brief hold, gradual settle
+	float ReleaseCurve;
+	if (NormalizedTime < 0.12f)
+	{
+		// Explosive expansion (0-12%)
+		ReleaseCurve = FMath::InterpEaseOut(0.0f, 1.0f, NormalizedTime / 0.12f, 2.5f);
+	}
+	else if (NormalizedTime < 0.25f)
+	{
+		// Brief hold at peak (12-25%)
+		ReleaseCurve = 1.0f;
+	}
+	else
+	{
+		// Gradual settle (25-100%)
+		float SettleProgress = (NormalizedTime - 0.25f) / 0.75f;
+		ReleaseCurve = FMath::InterpEaseOut(1.0f, 0.0f, SettleProgress, 1.5f);
+	}
+	
+	// Calculate FOV burst using curve (positive = widen)
+	TargetFOVChange = FOVBurstAmount * ReleaseCurve;
+	
+	// Calculate distance push (positive = farther)
+	CurrentDistanceChange = DistancePushAmount * ReleaseCurve;
+	
+	// Call base to apply interpolation and weight
+	Super::ComputeEffect(DeltaTime, Context);
+	
+	// Additional effects for full charge
+	if (ChargeLevel >= 1.0f)
+	{
+		// Brief time dilation at release moment
+		if (NormalizedTime < 0.08f)
+		{
+			float SlowMoProgress = NormalizedTime / 0.08f;
+			TimeDilationEffect = FMath::Lerp(0.7f, 1.0f, SlowMoProgress);
+		}
+		else
+		{
+			TimeDilationEffect = 1.0f;
+		}
+		
+		// Subtle screen shake at release
+		if (NormalizedTime < 0.15f)
+		{
+			float ShakeDecay = 1.0f - (NormalizedTime / 0.15f);
+			float ShakeIntensity = ShakeDecay * ChargeLevel * 0.8f * CurrentWeight * CurrentIntensity;
+			
+			RotationEffect.Pitch = FMath::PerlinNoise1D(TotalActiveTime * 35.0f) * ShakeIntensity;
+			RotationEffect.Yaw = FMath::PerlinNoise1D(TotalActiveTime * 35.0f + 100.0f) * ShakeIntensity * 0.5f;
+			RotationEffect.Roll = 0.0f;
+		}
+		else
+		{
+			RotationEffect = FRotator:: ZeroRotator;
+		}
+	}
+}
+
+
+//========================================
+// Z03: Skill Activate Zoom Implementation
+//========================================
+
+/**
+ * Constructor - Configure skill activate zoom parameters
+ * 
+ * Skill activation creates a sustained focus effect:
+ * - Gradual FOV tightening for focus feel
+ * - Hold at peak during skill activation
+ * - Gradual return to normal
+ * - Vignette for concentration effect
+ */
+UCameraModifier_Z03_Zoom_SkillActivate::UCameraModifier_Z03_Zoom_SkillActivate()
+	: FocusFOVAmount(-6.0f)
+	, SkillDistanceChange(-20.0f)
+	, HoldRatio(0.4f)
+	, bIsAoESkill(false)
+{
+	// Configure base zoom settings
+	BaseFOVChange = -6.0f;
+	BaseDistanceChange = -20.0f;
+	bApplyVignette = true;
+	ZoomVignetteIntensity = 0.12f;
+	FOVInterpSpeed = 12.0f;  // Smoother for sustained effect
+}
+
+/**
+ * OnTriggered - Initialize skill activate state
+ * 
+ * Skill type can affect zoom direction:
+ * - Single target: FOV tightens (focus on target)
+ * - AoE: FOV widens (see the area effect)
+ */
+void UCameraModifier_Z03_Zoom_SkillActivate::OnTriggered(const FModifierTriggerData& InTriggerData)
+{
+	// Call parent
+	Super:: OnTriggered(InTriggerData);
+	
+	// Check if AoE skill (could be passed via CustomFloat or CustomInt)
+	bIsAoESkill = (InTriggerData.CustomFloat > 0.5f);
+	
+	// Scale effect based on intensity (skill power)
+	float IntensityScale = FMath::Clamp(CurrentIntensity, 0.6f, 1.5f);
+	
+	if (bIsAoESkill)
+	{
+		// AoE skills: widen FOV to show area
+		FocusFOVAmount = 5.0f * IntensityScale;
+		SkillDistanceChange = 30.0f * IntensityScale;  // Pull back to see area
+	}
+	else
+	{
+		// Single target: tighten FOV for focus
+		FocusFOVAmount = -6.0f * IntensityScale;
+		SkillDistanceChange = -20.0f * IntensityScale;  // Push in for focus
+	}
+	
+	UE_LOG(LogTemp, Verbose, TEXT("Z03 SkillActivate:  Triggered, IsAoE=%d, FocusFOV=%.1f"),
+		bIsAoESkill ?  1 : 0, FocusFOVAmount);
+}
+
+/**
+ * ComputeEffect - Calculate skill activation focus zoom each frame
+ * 
+ * Uses sustain curve: gradual in, hold at peak, gradual out.
+ * Effect provides visual feedback for skill channeling.
+ */
+void UCameraModifier_Z03_Zoom_SkillActivate::ComputeEffect(float DeltaTime, const FStageExecutionContext& Context)
+{
+	// Calculate normalized time (0-1 over duration)
+	float NormalizedTime = 0.0f;
+	if (ActiveDuration > 0.0f)
+	{
+		NormalizedTime = FMath::Clamp(TotalActiveTime / ActiveDuration, 0.0f, 1.0f);
+	}
+	
+	// Calculate FOV using sustain curve from base class
+	TargetFOVChange = CalculateFOVSustain(NormalizedTime, FocusFOVAmount, HoldRatio);
+	
+	// Calculate distance using same sustain pattern
+	float DistanceCurve = CalculateFOVSustain(NormalizedTime, 1.0f, HoldRatio);
+	CurrentDistanceChange = SkillDistanceChange * DistanceCurve;
+	
+	// Call base to apply interpolation and weight
+	Super::ComputeEffect(DeltaTime, Context);
+	
+	// Vignette scales with zoom amount for focus effect
+	// (already handled in base class, but we can enhance)
+	if (bApplyVignette && ! bIsAoESkill)
+	{
+		// Extra vignette during hold phase for focus feel
+		float VignetteBoost = 0.0f;
+		float RampInEnd = (1.0f - HoldRatio) * 0.5f;
+		float HoldEnd = RampInEnd + HoldRatio;
+		
+		if (NormalizedTime >= RampInEnd && NormalizedTime < HoldEnd)
+		{
+			VignetteBoost = 0.05f;
+		}
+		
+		VignetteEffect += VignetteBoost * CurrentWeight * CurrentIntensity;
+	}
+	
+	// Slight saturation reduction for magical/focused feel
+	if (NormalizedTime > 0.1f && NormalizedTime < 0.9f)
+	{
+		float SaturationCurve = FMath::Sin((NormalizedTime - 0.1f) / 0.8f * PI);
+		SaturationEffect = FMath::Lerp(1.0f, 0.9f, SaturationCurve * 0.3f);
+	}
+	else
+	{
+		SaturationEffect = 1.0f;
+	}
+}
+```
+
+---
+
+【代码设计说明】
+
+### 1. Z02 Charge Release特点
+
+```
+触发场景：
+├── 蓄力攻击释放
+├── 重击完全蓄力后释放
+├── 战技蓄力完成
+└── 魔法咏唱完成后施放
+
+效果特点：
+├── 持续时间：0.25秒
+├── FOV扩张：+8度（可缩放至+16度）
+├── 距离推远：+25cm
+├── 根据蓄力等级缩放
+└── 满蓄力有时间膨胀和抖动
+```
+
+### 2. Z03 Skill Activate特点
+
+```
+触发场景：
+├── 战技激活
+├── 魔法施放
+├── 祈祷/咒术激活
+└── 特殊能力使用
+
+效果特点：
+├── 持续时间：0.6秒
+├── 单目标：FOV收紧-6度
+├── AoE技能：FOV扩张+5度
+├── 渐进-保持-渐出曲线
+├── 有晕影效果
+└── 轻微饱和度降低
+```
+
+### 3. 曲线对比
+
+```
+Z02 Burst曲线（0. 25秒）：
+0%──12%──25%─────────100%
+│爆发│保持│  缓慢衰减  │
+   ____
+  /    \______
+ /            \____
+
+Z03 Sustain曲线（0.6秒）：
+0%───20%────60%───80%───100%
+│渐入│  保持  │  渐出  │
+      ______
+     /      \
+____/        \____
+```
+
+### 4. 蓄力等级缩放（Z02）
+
+```cpp
+// ChargeLevel从Intensity获取
+ChargeLevel = Clamp(Intensity, 0.5, 2.0)
+
+// 半蓄力：ChargeLevel = 0.5
+FOVBurst = 8 * 0.5 = +4度
+
+// 满蓄力：ChargeLevel = 1.0
+FOVBurst = 8 * 1.0 = +8度
+
+// 过充：ChargeLevel = 1.5
+FOVBurst = 8 * 1.5 = +12度
+```
+
+### 5. AoE vs 单目标（Z03）
+
+```cpp
+// 通过CustomFloat传递技能类型
+bIsAoESkill = (TriggerData.CustomFloat > 0.5f)
+
+// 单目标技能：收紧聚焦
+FocusFOV = -6度, Distance = -20cm
+
+// AoE技能：扩展展示范围
+FocusFOV = +5度, Distance = +30cm
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过（0 errors）
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] Z02构造函数、OnTriggered、ComputeEffect
+   - [ ] Z03构造函数、OnTriggered、ComputeEffect
+   - [ ] 调用Super:: OnTriggered和Super::ComputeEffect
+   - [ ] 使用基类的曲线计算方法
+
+3. **效果验证：**
+   - [ ] Z02：FOV扩张 + 距离推远
+   - [ ] Z03：FOV收紧/扩张 + 晕影
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 4.5.3 完成报告
+================================================================================
+
+【更新的文件】
+- 文件：CameraModifier_Zoom.cpp
+- 添加位置：Z01实现之后
+
+【实现的修改器】
+- ✅ UCameraModifier_Z02_Zoom_ChargeRelease
+  - 构造函数：FOVBurst=8, DistancePush=25
+  - OnTriggered：根据蓄力等级缩放
+  - ComputeEffect：Burst曲线 + 时间膨胀 + 抖动
+
+- ✅ UCameraModifier_Z03_Zoom_SkillActivate
+  - 构造函数：FocusFOV=-6, SkillDistance=-20
+  - OnTriggered：区分AoE/单目标
+  - ComputeEffect：Sustain曲线 + 晕影
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【最终状态】
+✅ Z02 + Z03实现完成
+
+================================================================================
+```
+
+【后续步骤】
+
+4. 5.3完成后：
+- [x] ✅ 4.5.1:  CameraModifier_Zoom.h
+- [x] ✅ 4.5.2: ZoomBase + Z01实现
+- [x] ✅ 4.5.3: Z02 + Z03实现
+- [ ] ⏳ 4.5.4: Z04实现
+- [ ] ⏳ 4.5.5: CameraModifier_Effect.h
+- [ ] ⏳ 4.5.6: EffectBase + E01-E03实现
+- [ ] ⏳ 4.5.7: 注册Zoom + Effect
+
+**Phase 4.5进度：3/7**
+
+================================================================================

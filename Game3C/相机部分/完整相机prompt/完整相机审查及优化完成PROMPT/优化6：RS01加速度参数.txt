@@ -1,0 +1,172 @@
+优化6：RS01加速度参数
+
+================================================================================
+任务：RS01_PullIn碰撞响应加速度优化
+================================================================================
+
+【背景】
+当前RS01_PullIn响应策略使用固定速度拉近相机，改为加速度模式可使拉近
+效果更有动感，增强碰撞时的压迫感。
+
+【修改范围】
+1. CameraCollision_Response.h - RS01类添加加速度参数
+2. CameraCollision_Response.cpp - RS01的Execute方法
+
+【具体修改】
+
+## 1. CameraCollision_Response.h
+
+在RS01_PullIn类中添加：
+
+```cpp
+UCLASS()
+class UCameraCollision_RS01_PullIn : public UCameraCollisionBase
+{
+    GENERATED_BODY()
+    
+public: 
+    // ...  现有代码 ...
+    
+    // ===== 新增：加速度参数 =====
+    
+    /** 拉近加速度（cm/s²），0表示使用固定速度 */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PullIn",
+              meta = (ClampMin = "0.0", ClampMax = "2000.0"))
+    float PullInAcceleration = 500.0f;
+    
+    /** 最大拉近速度（cm/s） */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PullIn",
+              meta = (ClampMin = "100.0", ClampMax = "1000.0"))
+    float MaxPullInSpeed = 500.0f;
+    
+    /** 是否启用加速度模式 */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PullIn")
+    bool bUseAcceleration = true;
+    
+protected:
+    /** 当前拉近速度（运行时状态） */
+    float CurrentPullSpeed = 0.0f;
+    
+    /** 重置拉近状态 */
+    void ResetPullState();
+};
+```
+
+## 2. CameraCollision_Response.cpp
+
+```cpp
+UCameraCollision_RS01_PullIn::UCameraCollision_RS01_PullIn()
+{
+    // 现有初始化... 
+    
+    // 新增参数默认值
+    PullInAcceleration = 500.0f;
+    MaxPullInSpeed = 500.0f;
+    bUseAcceleration = true;
+    CurrentPullSpeed = 0.0f;
+}
+
+void UCameraCollision_RS01_PullIn::ResetPullState()
+{
+    CurrentPullSpeed = 0.0f;
+}
+
+bool UCameraCollision_RS01_PullIn::Execute(
+    FCollisionContext& Context,
+    const FCollisionDetectionResult& DetectionResult,
+    FCollisionResponseOutput& OutResponse)
+{
+    if (! DetectionResult.bCollisionDetected)
+    {
+        // 没有碰撞，重置状态
+        ResetPullState();
+        return false;
+    }
+    
+    float DeltaTime = Context.DeltaTime;
+    float DistanceToSafe = DetectionResult. DesiredDistance - DetectionResult.SafeDistance;
+    
+    float PullSpeed;
+    
+    if (bUseAcceleration && PullInAcceleration > 0.0f)
+    {
+        // 加速度模式
+        CurrentPullSpeed += PullInAcceleration * DeltaTime;
+        CurrentPullSpeed = FMath::Min(CurrentPullSpeed, MaxPullInSpeed);
+        PullSpeed = CurrentPullSpeed;
+    }
+    else
+    {
+        // 固定速度模式（原有行为）
+        PullSpeed = PullInSpeed; // 使用现有的PullInSpeed参数
+    }
+    
+    // 计算本帧拉近量
+    float PullAmount = PullSpeed * DeltaTime;
+    
+    // 确保不会过度拉近
+    PullAmount = FMath::Min(PullAmount, DistanceToSafe);
+    
+    // 设置输出
+    OutResponse. DistanceAdjustment = -PullAmount;
+    OutResponse.bHasDistanceAdjustment = true;
+    OutResponse.Priority = GetPriority();
+    
+    return true;
+}
+
+// 当碰撞结束或进入恢复阶段时调用
+void UCameraCollision_RS01_PullIn::OnCollisionEnd()
+{
+    ResetPullState();
+}
+```
+
+## 3. 可选：在碰撞状态变化时重置
+
+如果CameraCollisionResolver有状态变化回调，确保在合适的时机重置：
+
+```cpp
+// 在CameraCollisionResolver中
+void UCameraCollisionResolver::OnCollisionStateChanged(bool bNowColliding)
+{
+    if (! bNowColliding)
+    {
+        // 碰撞结束，重置RS01状态
+        if (UCameraCollision_RS01_PullIn* RS01 = Cast<UCameraCollision_RS01_PullIn>(
+            GetStrategy(ECollisionStrategyID:: Collision_RS01_PullIn)))
+        {
+            RS01->ResetPullState();
+        }
+    }
+}
+```
+
+【效果对比】
+```
+修改前（固定速度）：
+碰撞开始 ─────────────────────→ 安全位置
+速度:      ████████████████████  （恒定）
+
+修改后（加速度）：
+碰撞开始 ─────────────────────→ 安全位置  
+速度:     █▂▃▄▅▆▇████████████  （加速到最大）
+         ↑
+       从慢到快，有"被吸入"感
+```
+
+【验证要求】
+1. 编译通过，无错误无警告
+2. 碰撞时相机拉近有加速感
+3. 设置bUseAcceleration=false时恢复原有固定速度行为
+4. 连续碰撞时加速度累积正确
+5. 碰撞结束后状态正确重置
+
+【输出要求】
+完成后请报告：
+1. 修改的文件和位置
+2. 新增的参数和默认值
+3. 编译结果
+4. 测试碰撞场景的感受变化
+
+================================================================================

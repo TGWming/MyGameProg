@@ -1,0 +1,580 @@
+Sub-Step 3.5.4 Prompt
+
+================================================================================
+任务：在CameraModule_FOV.cpp中添加F03 Aim_FOV实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+F03在瞄准/聚焦模式下减小FOV，提供更精准、更聚焦的视角。
+这是类魂游戏锁定敌人时常见的视觉效果，增强战斗沉浸感。
+
+【Pipeline中的位置】
+```
+FOV模块计算流程：
+1. F01:  BaseFOV = 90° (Override，基础值)
+2. F02: +10° (Additive，速度) → 100°
+3. F03: -15° (Additive，瞄准) ← 当前
+   → 100 - 15 = 85°（瞄准时更窄更聚焦）
+4. F04-F06: 后续调整
+```
+
+【当前进度】
+Phase 3 Step 3.5 Sub-Step 3.5.4 (共190个Sub-Step中的第90个)
+前置完成：3.5.3 F02实现 ✅
+
+【任务目标】
+在CameraModule_FOV.cpp中完整实现F03模块，替换现有的占位符。
+
+【⚠️ 重要提醒】
+
+1. **编译前必做步骤：**
+   本Sub-Step只修改现有. cpp文件，不添加新文件。
+   因此**不需要Regenerate**，可以直接编译。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   确认StateConfig和InputContext的字段路径与项目实际结构一致。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_FOV.cpp
+
+2. **定位修改位置：**
+
+在文件中找到F03的占位符实现部分：
+
+```cpp
+//========================================
+// F03: Aim FOV
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.5.4
+// Reduces FOV when aiming
+...  占位符代码
+```
+
+**将上述占位符代码完整替换为下方的完整实现。**
+
+---
+
+3. **F03完整实现代码：**
+
+**A. 构造函数（保持不变）：**
+
+```cpp
+/**
+ * Constructor - Initialize aim blend state
+ */
+UCameraModule_F03_Aim_FOV::UCameraModule_F03_Aim_FOV()
+	: CurrentAimFOVBlend(0.0f)
+{
+}
+```
+
+---
+
+**B. ShouldActivate() 实现：**
+
+```cpp
+/**
+ * ShouldActivate - Determine if aim FOV reduction should be active
+ * 
+ * F03 activates when: 
+ * - Module is enabled
+ * - Player is in aiming/focus mode (bIsAiming)
+ * - OR player has a locked target in combat
+ * 
+ * In Souls-like games, locking onto an enemy often triggers a slight
+ * FOV reduction to create a more focused, intense combat feel. 
+ * 
+ * Priority 115 (higher than speed/combat), uses Additive policy. 
+ * Negative offset to reduce FOV. 
+ * 
+ * Use Cases:
+ * - Lock-on combat (common in Souls-like games)
+ * - Bow/crossbow aiming
+ * - Spell casting focus
+ * - Precision attacks
+ */
+bool UCameraModule_F03_Aim_FOV:: ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if player is explicitly aiming
+	// This flag is typically set when using ranged weapons or focus mode
+	bool bIsAiming = Context.InputContext. bIsAiming;
+	
+	// In Souls-like games, locking onto a target also counts as "aiming"
+	// The camera focuses on the target, so FOV should narrow slightly
+	bool bHasLockedTarget = Context. InputContext.bHasTarget;
+	
+	// Activate if either aiming or has locked target
+	if (! bIsAiming && !bHasLockedTarget)
+	{
+		return false;
+	}
+	
+	// All conditions met - activate aim FOV
+	return true;
+}
+```
+
+---
+
+**C. Compute() 实现：**
+
+```cpp
+/**
+ * Compute - Calculate FOV reduction for aiming/focus mode
+ * 
+ * This module calculates a negative FOV offset to narrow the view
+ * during aiming or lock-on.  This creates a more focused, intense
+ * visual experience during combat.
+ * 
+ * Steps:
+ * 1. Determine aim intensity (full aim vs lock-on)
+ * 2. Get aim FOV reduction from config
+ * 3. Calculate target blend value
+ * 4. Smooth the blend transition
+ * 5. Calculate final FOV offset (negative)
+ * 6. Output with Additive policy
+ * 
+ * Aim Types and Intensity:
+ * - Full aim (bIsAiming): 100% FOV reduction
+ * - Lock-on only: 50-70% FOV reduction (configurable)
+ * 
+ * Typical FOV reductions:
+ * - Light focus: -5 to -10 degrees
+ * - Standard aim: -10 to -15 degrees
+ * - Heavy zoom: -20 to -30 degrees
+ * 
+ * @param Context The current pipeline execution context
+ * @param StateConfig The current camera state configuration
+ * @param OutOutput Output structure to fill with computed values
+ * @return True if computation succeeded
+ */
+bool UCameraModule_F03_Aim_FOV::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Step 1: Determine aim intensity based on context
+	bool bIsAiming = Context.InputContext.bIsAiming;
+	bool bHasLockedTarget = Context.InputContext.bHasTarget;
+	
+	float TargetBlend = 0.0f;
+	
+	if (bIsAiming)
+	{
+		// Full aiming (e.g., bow, crossbow, spell targeting)
+		// Apply 100% of the FOV reduction
+		TargetBlend = 1.0f;
+	}
+	else if (bHasLockedTarget)
+	{
+		// Lock-on only (Souls-like target lock)
+		// Apply partial FOV reduction for subtle focus effect
+		// This can be configured, default to 50%
+		float LockOnIntensity = StateConfig.Module. FOV.LockOnFOVIntensity;
+		if (LockOnIntensity <= 0.0f)
+		{
+			LockOnIntensity = 0.5f;  // Default:  50% of aim reduction
+		}
+		TargetBlend = LockOnIntensity;
+	}
+	
+	// Step 2: Get aim FOV reduction from config
+	float AimFOVReduction = StateConfig.Module. FOV.AimFOVReduction;
+	
+	// If not configured, use default
+	if (AimFOVReduction <= 0.0f)
+	{
+		AimFOVReduction = 15.0f;  // Default: 15 degrees reduction
+	}
+	
+	// Step 3: Smooth the blend transition
+	// Fast blend for responsive aiming feel
+	float BlendSpeed = 8.0f;  // Quick response
+	
+	// Try to get blend speed from config
+	float ConfigBlendSpeed = StateConfig.Module.FOV.AimFOVBlendSpeed;
+	if (ConfigBlendSpeed > 0.0f)
+	{
+		BlendSpeed = ConfigBlendSpeed;
+	}
+	
+	// Interpolate current blend towards target
+	CurrentAimFOVBlend = FMath::FInterpTo(
+		CurrentAimFOVBlend, 
+		TargetBlend, 
+		Context.DeltaTime, 
+		BlendSpeed
+	);
+	
+	// Step 4: Calculate FOV reduction (negative value)
+	// Negative because we want to REDUCE the FOV
+	float FOVOffset = -AimFOVReduction * CurrentAimFOVBlend;
+	
+	// Step 5: Fill output structure
+	OutOutput. FOVOutput = FOVOffset;
+	OutOutput.bHasFOVOutput = true;
+	
+	// Full weight for aim FOV
+	OutOutput.Weight = 1.0f;
+	
+	return true;
+}
+```
+
+---
+
+4. **完整的F03代码块（用于复制粘贴）：**
+
+```cpp
+//========================================
+// F03: Aim FOV
+//========================================
+
+/**
+ * Constructor - Initialize aim blend state
+ */
+UCameraModule_F03_Aim_FOV::UCameraModule_F03_Aim_FOV()
+	: CurrentAimFOVBlend(0.0f)
+{
+}
+
+/**
+ * ShouldActivate - Activate when aiming or has locked target
+ */
+bool UCameraModule_F03_Aim_FOV:: ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if player is aiming
+	bool bIsAiming = Context.InputContext.bIsAiming;
+	
+	// Check if player has locked target (Souls-like lock-on)
+	bool bHasLockedTarget = Context. InputContext.bHasTarget;
+	
+	// Activate if either condition is true
+	if (!bIsAiming && ! bHasLockedTarget)
+	{
+		return false;
+	}
+	
+	return true;
+}
+
+/**
+ * Compute - Calculate FOV reduction for aiming/focus mode
+ */
+bool UCameraModule_F03_Aim_FOV:: Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output
+	OutOutput = CreateBaseOutput();
+	
+	// Determine aim intensity
+	bool bIsAiming = Context.InputContext.bIsAiming;
+	bool bHasLockedTarget = Context.InputContext.bHasTarget;
+	
+	float TargetBlend = 0.0f;
+	
+	if (bIsAiming)
+	{
+		// Full aiming:  100% reduction
+		TargetBlend = 1.0f;
+	}
+	else if (bHasLockedTarget)
+	{
+		// Lock-on:  partial reduction
+		float LockOnIntensity = StateConfig. Module.FOV. LockOnFOVIntensity;
+		if (LockOnIntensity <= 0.0f)
+		{
+			LockOnIntensity = 0.5f;  // Default: 50%
+		}
+		TargetBlend = LockOnIntensity;
+	}
+	
+	// Get aim FOV reduction from config
+	float AimFOVReduction = StateConfig.Module.FOV.AimFOVReduction;
+	if (AimFOVReduction <= 0.0f)
+	{
+		AimFOVReduction = 15.0f;  // Default: 15 degrees
+	}
+	
+	// Smooth blend transition
+	float BlendSpeed = 8.0f;
+	float ConfigBlendSpeed = StateConfig.Module.FOV.AimFOVBlendSpeed;
+	if (ConfigBlendSpeed > 0.0f)
+	{
+		BlendSpeed = ConfigBlendSpeed;
+	}
+	
+	// Interpolate blend value
+	CurrentAimFOVBlend = FMath:: FInterpTo(
+		CurrentAimFOVBlend, 
+		TargetBlend, 
+		Context. DeltaTime, 
+		BlendSpeed
+	);
+	
+	// Calculate FOV reduction (negative)
+	float FOVOffset = -AimFOVReduction * CurrentAimFOVBlend;
+	
+	// Fill output
+	OutOutput.FOVOutput = FOVOffset;
+	OutOutput. bHasFOVOutput = true;
+	OutOutput.Weight = 1.0f;
+	
+	return true;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 说明瞄准和锁定的区别
+   - 解释负偏移的含义
+   - 提供典型数值
+   - 所有注释英文
+
+2. **格式：**
+   - Tab缩进
+   - 清晰步骤标注
+   - 方法间空两行
+
+3. **防御性编程：**
+   - 配置值默认值处理
+   - 区分瞄准和锁定
+   - 平滑过渡
+
+【技术说明】
+
+**F03的核心机制：**
+
+### 1. 瞄准 vs 锁定
+
+**两种触发方式的区别：**
+
+```
+bIsAiming (明确瞄准):
+- 使用弓/弩/法杖
+- 明确的瞄准模式
+- 100% FOV减少
+- 最终FOV:  90 - 15 = 75°
+
+bHasTarget (锁定目标):
+- 类魂游戏的锁定机制
+- 只是关注目标，不是精确瞄准
+- 50% FOV减少（可配置）
+- 最终FOV: 90 - 7.5 = 82.5°
+
+设计理念：
+- 锁定时轻微聚焦，保持战斗灵活性
+- 明确瞄准时强力聚焦，强调精确
+```
+
+### 2. 负偏移的含义
+
+**为什么是负值？**
+
+```cpp
+// FOV减少 = 视野变窄 = 放大效果
+float FOVOffset = -AimFOVReduction * CurrentAimFOVBlend;
+
+// 示例：
+// AimFOVReduction = 15°
+// CurrentAimFOVBlend = 1.0 (完全瞄准)
+// FOVOffset = -15 × 1.0 = -15°
+
+// Stage 5混合：
+// BaseFOV + Offset = 90 + (-15) = 75°
+```
+
+### 3. 平滑过渡的重要性
+
+**为什么需要平滑？**
+
+```
+无平滑（假设）：
+T=0s: 未锁定，FOV=90°
+T=0.1s: 锁定目标，FOV=75°（瞬间跳变）
+→ 视觉突兀，体验差
+
+有平滑（实际）：
+T=0s: 未锁定，FOV=90°
+T=0.1s: 锁定，Blend=0.4，FOV=84°
+T=0.2s:  Blend=0.7，FOV=79. 5°
+T=0.3s: Blend=0.9，FOV=76.5°
+T=0.5s: Blend≈1.0，FOV≈75°
+→ 平滑过渡，专业感
+
+BlendSpeed=8.0表示每秒变化8个单位
+约0.5秒达到目标
+```
+
+### 4. 与F02(Speed FOV)的交互
+
+**冲刺时锁定目标：**
+
+```
+场景：玩家冲刺中锁定敌人
+
+F02 (Speed): +12°（冲刺FOV增加）
+F03 (Aim): -7.5°（锁定FOV减少，50%强度）
+
+最终偏移: +12 + (-7.5) = +4.5°
+最终FOV: 90 + 4.5 = 94.5°
+
+效果：
+- 冲刺的速度感仍在
+- 但锁定目标略微收窄
+- 两者平衡
+```
+
+### 5. LockOnIntensity的设计
+
+**为什么锁定强度可配置？**
+
+```cpp
+// 不同游戏风格的需求：
+float LockOnIntensity = StateConfig. Module.FOV. LockOnFOVIntensity;
+
+// 快节奏动作游戏：
+LockOnIntensity = 0.3f;  // 30%，轻微聚焦
+
+// 标准类魂游戏：
+LockOnIntensity = 0.5f;  // 50%，适中聚焦
+
+// 慢节奏策略游戏：
+LockOnIntensity = 0.7f;  // 70%，明显聚焦
+
+// 好处：
+// - 可以在配置中调整
+// - 不同敌人类型可以有不同强度
+// - 设计师可以微调手感
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] 构造函数完整
+   - [ ] ShouldActivate()完整
+   - [ ] Compute()完整
+   - [ ] 使用成员变量CurrentAimFOVBlend
+
+3. **逻辑正确性：**
+   - [ ] 检查bIsAiming或bHasTarget
+   - [ ] 区分瞄准和锁定强度
+   - [ ] 负偏移计算正确
+   - [ ] FInterpTo平滑正确
+   - [ ] 默认值正确
+
+4. **字段访问：**
+   - [ ] Context.InputContext.bIsAiming
+   - [ ] Context. InputContext.bHasTarget
+   - [ ] StateConfig.Module.FOV.AimFOVReduction
+   - [ ] StateConfig.Module.FOV.LockOnFOVIntensity（可选）
+   - [ ] StateConfig.Module.FOV.AimFOVBlendSpeed（可选）
+
+【注意事项】
+
+1. **不需要Regenerate**
+
+2. **字段缺失处理：**
+   ```cpp
+   // 如果字段不存在，使用默认值
+   float AimFOVReduction = 15.0f;
+   float LockOnIntensity = 0.5f;
+   float BlendSpeed = 8.0f;
+   ```
+
+3. **bIsAiming字段：**
+   确认InputContext中有bIsAiming字段。如果没有：
+   ```cpp
+   // 方案1：只使用bHasTarget
+   bool bIsAiming = false;  // 暂时禁用
+   
+   // 方案2：在InputContext中添加bIsAiming
+   ```
+
+4. **默认值说明：**
+   - AimFOVReduction = 15°（减少15度）
+   - LockOnIntensity = 0.5（锁定时50%强度）
+   - BlendSpeed = 8.0（快速响应）
+
+5. **测试建议：**
+   - 锁定目标 → FOV应减少约7.5°
+   - 明确瞄准 → FOV应减少15°
+   - 解除锁定 → FOV应平滑恢复
+   - 确认过渡平滑
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 3.5.4 完成报告
+================================================================================
+
+【修改内容】
+- 文件：CameraModule_FOV.cpp
+- 修改位置：F03模块
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ 构造函数：初始化CurrentAimFOVBlend
+- ✅ ShouldActivate：检查瞄准/锁定状态
+- ✅ Compute：区分瞄准和锁定的FOV减少
+
+【编译结果】
+- 编译状态：[成功/失败]
+
+【最终状态】
+✅ F03完成，瞄准/锁定时减少FOV
+
+================================================================================
+```
+
+【后续步骤】
+
+F03完成后，FOV模块进度：
+- [x] ✅ 3.5.1:  CameraModule_FOV.h
+- [x] ✅ 3.5.2: F01 - Base FOV
+- [x] ✅ 3.5.3: F02 - Speed FOV
+- [x] ✅ 3.5.4: F03 - Aim FOV
+- [ ] ⏳ 3.5.5: F04 - Combat FOV（下一步）
+- [ ] ⏳ 3.5.6: F05 - Boss FOV
+- [ ] ⏳ 3.5.7: F06 - Impact FOV
+
+**FOV模块完成度：3/6 (50%)**
+
+================================================================================

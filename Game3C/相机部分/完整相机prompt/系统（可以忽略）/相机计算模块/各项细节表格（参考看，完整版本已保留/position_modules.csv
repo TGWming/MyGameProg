@@ -1,0 +1,9 @@
+ModuleID,ModuleName,ChineseName,Category,Description,BlendPolicy,Priority,ActiveStates,InputParams,OutputParams
+P01,FollowTarget,目标跟随,Position,基础跟随角色位置加上焦点偏移,Override,100,All,CharacterLocation/FocusOffset/SocketName,PositionOverride
+P02,FollowTarget_Lagged,惯性跟随,Position,带惯性的目标跟随使用指数衰减插值,Override,100,Explore/Sprint/Combat,CharacterLocation/PositionLagSpeed/VerticalLagSpeed,PositionOverride
+P03,FollowTarget_Predictive,预测性跟随,Position,基于角色速度预测未来位置,Additive,90,Sprint/Mount,CharacterVelocity/PredictionTime,PositionOffset
+P04,Orbit_LockOn,锁定轨道,Position,锁定时围绕玩家-目标中点的轨道位置,Override,110,LockOn/LockOn_Multi,PlayerLocation/TargetLocation/OrbitRadius,PositionOverride
+P05,Orbit_Boss,Boss轨道,Position,Boss战时的特殊轨道计算考虑Boss体型,Override,120,Boss_Medium/Boss_Large/Boss_Huge,PlayerLocation/BossLocation/BossSize,PositionOverride
+P06,FixedPoint,固定点跟随,Position,跟随场景中的固定点用于过场,Override,200,Cinematic/BossIntro,FixedPointLocation,PositionOverride
+P07,Spline_Follow,样条跟随,Position,沿预设样条曲线移动,Override,200,Cinematic/AreaReveal,SplineComponent/SplineProgress,PositionOverride
+P08,MidPoint_TwoTarget,双目标中点,Position,计算玩家与目标之间的加权中点,Override,105,Execution/Dialogue,PlayerLocation/TargetLocation/MidPointWeight,PositionOverride

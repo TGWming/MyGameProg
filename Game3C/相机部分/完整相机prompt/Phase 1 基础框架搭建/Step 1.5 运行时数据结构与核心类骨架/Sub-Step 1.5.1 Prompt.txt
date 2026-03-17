@@ -1,0 +1,353 @@
+================================================================================
+任务：创建SoulsCameraRuntimeTypes.h - FCameraInputContext结构体
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.    27 C++项目。
+创建运行时数据结构，用于Pipeline各Stage之间传递数据。
+FCameraInputContext是Pipeline的输入，在Stage 1中填充。
+
+【当前进度】
+Phase 1 Step 1.5 Sub-Step 1.5.1 (共190个Sub-Step中的第29个)
+前置完成：
+- Step 1.1 SoulsCameraTypes.h
+- Step 1.2-1.4 所有参数结构体
+
+【任务目标】
+创建文件：Source/[ProjectName]/Camera/Core/SoulsCameraRuntimeTypes.h
+本Sub-Step创建文件框架和FCameraInputContext结构体。
+
+【具体要求】
+
+1. 文件路径：Source/[ProjectName]/Camera/Core/SoulsCameraRuntimeTypes. h
+
+2. 文件内容：
+
+```cpp
+// Copyright Your Company.       All Rights Reserved.   
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "SoulsCameraTypes.h"
+#include "SoulsCameraRuntimeTypes.generated.h"
+
+/**
+ * Runtime data structures for the camera pipeline
+ * These structures are used to pass data between pipeline stages
+ */
+
+//========================================
+// FCameraInputContext - Pipeline Input (Stage 1 Output)
+//========================================
+/**
+ * Input context gathered at the start of each frame
+ * Contains all information needed for camera calculations
+ * Populated by Stage 1 (InputGather) and consumed by all subsequent stages
+ */
+USTRUCT(BlueprintType)
+struct FCameraInputContext
+{
+    GENERATED_BODY()
+
+    //--- Time ---
+    
+    /** Delta time for this frame */
+    UPROPERTY(BlueprintReadOnly, Category = "Time")
+    float DeltaTime;
+
+    /** Total game time */
+    UPROPERTY(BlueprintReadOnly, Category = "Time")
+    float GameTime;
+
+    //--- Player Input ---
+    
+    /** Camera rotation input from player (Yaw, Pitch) */
+    UPROPERTY(BlueprintReadOnly, Category = "Input")
+    FVector2D CameraInput;
+
+    /** Raw input magnitude (0-1) */
+    UPROPERTY(BlueprintReadOnly, Category = "Input")
+    float InputMagnitude;
+
+    /** Time since last input */
+    UPROPERTY(BlueprintReadOnly, Category = "Input")
+    float TimeSinceLastInput;
+
+    //--- Character State ---
+    
+    /** Character world location */
+    UPROPERTY(BlueprintReadOnly, Category = "Character")
+    FVector CharacterLocation;
+
+    /** Character world rotation */
+    UPROPERTY(BlueprintReadOnly, Category = "Character")
+    FRotator CharacterRotation;
+
+    /** Character velocity */
+    UPROPERTY(BlueprintReadOnly, Category = "Character")
+    FVector CharacterVelocity;
+
+    /** Character movement speed (horizontal) */
+    UPROPERTY(BlueprintReadOnly, Category = "Character")
+    float CharacterSpeed;
+
+    /** Character is currently moving */
+    UPROPERTY(BlueprintReadOnly, Category = "Character")
+    bool bIsMoving;
+
+    /** Character is sprinting */
+    UPROPERTY(BlueprintReadOnly, Category = "Character")
+    bool bIsSprinting;
+
+    /** Character is crouching */
+    UPROPERTY(BlueprintReadOnly, Category = "Character")
+    bool bIsCrouching;
+
+    /** Character is in air (jumping/falling) */
+    UPROPERTY(BlueprintReadOnly, Category = "Character")
+    bool bIsInAir;
+
+    /** Character current health ratio (0-1) */
+    UPROPERTY(BlueprintReadOnly, Category = "Character")
+    float HealthRatio;
+
+    //--- Combat State ---
+    
+    /** Currently in combat */
+    UPROPERTY(BlueprintReadOnly, Category = "Combat")
+    bool bIsInCombat;
+
+    /** Has a locked target */
+    UPROPERTY(BlueprintReadOnly, Category = "Combat")
+    bool bHasTarget;
+
+    /** Currently locked target actor (can be null) */
+    UPROPERTY(BlueprintReadOnly, Category = "Combat")
+    TWeakObjectPtr<AActor> TargetActor;
+
+    /** Target world location (valid only if bHasTarget) */
+    UPROPERTY(BlueprintReadOnly, Category = "Combat")
+    FVector TargetLocation;
+
+    /** Distance to target */
+    UPROPERTY(BlueprintReadOnly, Category = "Combat")
+    float TargetDistance;
+
+    /** Target bounding box size (for distance adjustment) */
+    UPROPERTY(BlueprintReadOnly, Category = "Combat")
+    float TargetSize;
+
+    /** Target is a boss */
+    UPROPERTY(BlueprintReadOnly, Category = "Combat")
+    bool bTargetIsBoss;
+
+    //--- Environment ---
+    
+    /** Camera is in a tight space */
+    UPROPERTY(BlueprintReadOnly, Category = "Environment")
+    bool bInTightSpace;
+
+    /** Camera is under low ceiling */
+    UPROPERTY(BlueprintReadOnly, Category = "Environment")
+    bool bUnderLowCeiling;
+
+    /** Near a cliff edge */
+    UPROPERTY(BlueprintReadOnly, Category = "Environment")
+    bool bNearCliffEdge;
+
+    //--- Previous Frame Data ---
+    
+    /** Previous frame camera location */
+    UPROPERTY(BlueprintReadOnly, Category = "Previous")
+    FVector PreviousCameraLocation;
+
+    /** Previous frame camera rotation */
+    UPROPERTY(BlueprintReadOnly, Category = "Previous")
+    FRotator PreviousCameraRotation;
+
+    /** Constructor with default values */
+    FCameraInputContext()
+        : DeltaTime(0.0f)
+        , GameTime(0.0f)
+        , CameraInput(FVector2D::ZeroVector)
+        , InputMagnitude(0.0f)
+        , TimeSinceLastInput(0.0f)
+        , CharacterLocation(FVector::ZeroVector)
+        , CharacterRotation(FRotator::ZeroRotator)
+        , CharacterVelocity(FVector:: ZeroVector)
+        , CharacterSpeed(0.0f)
+        , bIsMoving(false)
+        , bIsSprinting(false)
+        , bIsCrouching(false)
+        , bIsInAir(false)
+        , HealthRatio(1.0f)
+        , bIsInCombat(false)
+        , bHasTarget(false)
+        , TargetActor(nullptr)
+        , TargetLocation(FVector:: ZeroVector)
+        , TargetDistance(0.0f)
+        , TargetSize(100.0f)
+        , bTargetIsBoss(false)
+        , bInTightSpace(false)
+        , bUnderLowCeiling(false)
+        , bNearCliffEdge(false)
+        , PreviousCameraLocation(FVector::ZeroVector)
+        , PreviousCameraRotation(FRotator::ZeroRotator)
+    {}
+
+    /** Reset to default values */
+    void Reset()
+    {
+        *this = FCameraInputContext();
+    }
+
+    /** Check if we have valid target data */
+    FORCEINLINE bool HasValidTarget() const
+    {
+        return bHasTarget && TargetActor.IsValid();
+    }
+};
+
+//========================================
+// Placeholder for additional runtime types
+// FSoulsCameraOutput - Sub-Step 1.5.2
+// FModuleOutput/FModifierOutput - Sub-Step 1.5.3
+//========================================
+```
+
+3. 代码风格：
+   - BlueprintReadOnly因为这是只读输入数据
+   - 使用TWeakObjectPtr避免阻止Actor被GC
+   - 提供Reset()函数和HasValidTarget()辅助函数
+   - 详细的Category分组便于调试查看
+
+【验证标准】
+- 编译通过
+- 可创建FCameraInputContext实例
+- 结构体可在蓝图中读取
+
+【注意事项】
+- 这是运行时数据，不是配置数据
+- TWeakObjectPtr需要包含正确的头文件
+
+【输出要求】
+输出SoulsCameraRuntimeTypes.h的初始代码（包含FCameraInputContext）。
+
+================================================================================
+                        上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+```
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：Sub-Step 1.5.1 SoulsCameraRuntimeTypes.h (FCameraInputContext)
+- 完成进度：[X/26] 成员变量 或 [百分比]
+- 中断位置：[具体说明在哪里中断，例如：完成到Combat State分组，未完成Environment和Previous Frame Data]
+
+【已完成内容】
+- 文件头部（#pragma once, includes）
+- FCameraInputContext结构体开始
+- [列出已完成的Category分组]
+
+【未完成内容】
+- [列出剩余Category分组]
+- 构造函数
+- Reset()函数
+- HasValidTarget()函数
+
+【已生成代码保存提示】
+请将上方已生成的代码保存到新文件SoulsCameraRuntimeTypes.h，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Phase 1 Step 1.5 Sub-Step 1.5.1 续接任务。
+创建FCameraInputContext运行时输入结构体。
+
+【前置完成】
+- Step 1.1-1.4 所有参数结构体和配置 ✅
+- Sub-Step 1.5.1 部分完成：
+  - 文件头部 ✅
+  - FCameraInputContext结构体开始 ✅
+  - [列出已完成的Category分组] ✅
+
+【续接任务】
+继续完成SoulsCameraRuntimeTypes.h文件的FCameraInputContext：
+- [列出剩余Category分组]
+- 构造函数
+- Reset()函数
+- HasValidTarget()函数
+- 占位符注释（供后续Sub-Step使用）
+
+【已有代码上下文】
+文件：SoulsCameraRuntimeTypes.h（已创建，需要继续添加）
+FCameraInputContext结构体已开始定义。
+
+【FCameraInputContext成员变量清单（共26个）】
+Time (2个)：
+- DeltaTime, GameTime
+
+Input (3个)：
+- CameraInput, InputMagnitude, TimeSinceLastInput
+
+Character (9个)：
+- CharacterLocation, CharacterRotation, CharacterVelocity, CharacterSpeed
+- bIsMoving, bIsSprinting, bIsCrouching, bIsInAir, HealthRatio
+
+Combat (7个)：
+- bIsInCombat, bHasTarget, TargetActor, TargetLocation
+- TargetDistance, TargetSize, bTargetIsBoss
+
+Environment (3个)：
+- bInTightSpace, bUnderLowCeiling, bNearCliffEdge
+
+Previous (2个)：
+- PreviousCameraLocation, PreviousCameraRotation
+
+【输出要求】
+继续生成剩余代码，完成Sub-Step 1.5.1的FCameraInputContext结构体。
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。如再次达到限制，请再次生成交接信息。
+
+---结束复制---
+
+================================================================================
+```
+
+【交接信息要求】
+1. 交接PROMPT必须是**完全自包含**的，新对话无需任何额外信息即可继续
+2. 包含所有必要的**代码上下文**（关键结构体定义、依赖关系等）
+3. 明确标注**中断位置**和**剩余任务**
+4. 标明目标文件：SoulsCameraRuntimeTypes.h
+5. 包含FCameraInputContext完整成员清单（按Category分组，共26个）
+6. 这是运行时数据结构，后续Sub-Step会继续添加更多类型
+7. 注意TWeakObjectPtr的使用
+
+================================================================================

@@ -1,0 +1,3 @@
+[submodule "Yabber-Class-Library"]
+	path = Yabber-Class-Library
+	url = https://github.com/Nordgaren/Yabber-Class-Library.git

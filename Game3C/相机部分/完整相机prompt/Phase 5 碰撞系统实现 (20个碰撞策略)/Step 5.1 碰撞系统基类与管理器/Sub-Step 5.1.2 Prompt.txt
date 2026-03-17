@@ -1,0 +1,567 @@
+Sub-Step 5.1.2 Prompt
+
+================================================================================
+任务：创建CameraCollisionBase. cpp - 碰撞策略抽象基类实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4. 27 C++项目。
+实现碰撞策略基类的通用功能，包括各种碰撞检测辅助方法。
+
+【当前进度】
+Phase 5 Step 5. 1 Sub-Step 5. 1.2 (共190个Sub-Step中的第150个)
+前置完成：5.1.1 CameraCollisionBase.h ✅
+
+【任务目标】
+创建文件：Source/MyProject/Private/Camera/Collision/CameraCollisionBase.cpp
+实现碰撞策略基类的所有方法。
+
+【⚠️ 重要提醒】
+
+1. **本Sub-Step创建新文件**
+   创建后需要：
+   - 保存文件
+   - 右键.  uproject → Generate Visual Studio project files
+   - 重新加载解决方案
+   - 编译
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **确保头文件路径正确：**
+   - `#include "Camera/Collision/CameraCollisionBase. h"`
+
+【具体要求】
+
+**文件路径：** `Source/MyProject/Private/Camera/Collision/CameraCollisionBase.cpp`
+
+**完整文件内容：**
+
+```cpp
+// Copyright Epic Games, Inc.   All Rights Reserved.  
+
+#include "Camera/Collision/CameraCollisionBase. h"
+#include "Camera/Core/SoulsCameraManager.h"
+#include "Engine/World.h"
+#include "DrawDebugHelpers. h"
+
+/**
+ * CameraCollisionBase. cpp
+ * 
+ * Implementation of the abstract base class for all collision strategies. 
+ * Provides common functionality for collision detection, tracing, and utilities.
+ * 
+ * This file implements: 
+ * - Constructor and initialization
+ * - Strategy identity methods
+ * - Update and reset functionality
+ * - Trace helpers (Line, Sphere, Cone)
+ * - Location validation
+ * - Debug visualization
+ */
+
+
+//========================================
+// Constructor
+//========================================
+
+UCameraCollisionBase::UCameraCollisionBase()
+	: Priority(100)
+	, BlendWeight(1.0f)
+	, bCanBlend(true)
+	, TraceChannel(ECC_Camera)
+	, MinDistance(50.0f)
+	, ProbeRadius(12.0f)
+	, bIsActive(false)
+	, bIsEnabled(true)
+	, ActiveTime(0.0f)
+{
+}
+
+
+//========================================
+// Strategy Identity
+//========================================
+
+FName UCameraCollisionBase:: GetStrategyName() const
+{
+	// Return class name as default strategy name
+	return GetClass()->GetFName();
+}
+
+FString UCameraCollisionBase::GetStrategyDescription() const
+{
+	// Return formatted description with type and category
+	return FString::Printf(TEXT("Collision Strategy: %s [%s]"),
+		*GetStrategyName().ToString(),
+		*UEnum::GetValueAsString(GetStrategyCategory()));
+}
+
+
+//========================================
+// Strategy Execution
+//========================================
+
+bool UCameraCollisionBase::ShouldExecute(const FStageExecutionContext& Context) const
+{
+	// Default implementation: execute if enabled
+	// Derived classes can add additional conditions
+	return bIsEnabled;
+}
+
+void UCameraCollisionBase::Update(float DeltaTime, const FStageExecutionContext& Context)
+{
+	// Update active time if currently active
+	if (bIsActive)
+	{
+		ActiveTime += DeltaTime;
+	}
+	else
+	{
+		// Reset active time when not active
+		ActiveTime = 0.0f;
+	}
+}
+
+void UCameraCollisionBase::Reset()
+{
+	bIsActive = false;
+	ActiveTime = 0.0f;
+}
+
+
+//========================================
+// Trace Helpers
+//========================================
+
+bool UCameraCollisionBase::LineTrace(
+	const FVector& Start,
+	const FVector& End,
+	FHitResult& OutHit,
+	const FCollisionQueryParams& Params) const
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("CameraCollisionBase:: LineTrace - No world available"));
+		return false;
+	}
+
+	return World->LineTraceSingleByChannel(
+		OutHit,
+		Start,
+		End,
+		TraceChannel,
+		Params
+	);
+}
+
+bool UCameraCollisionBase:: SphereTrace(
+	const FVector& Start,
+	const FVector& End,
+	float Radius,
+	FHitResult& OutHit,
+	const FCollisionQueryParams& Params) const
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("CameraCollisionBase::SphereTrace - No world available"));
+		return false;
+	}
+
+	FCollisionShape SphereShape;
+	SphereShape.SetSphere(Radius);
+
+	return World->SweepSingleByChannel(
+		OutHit,
+		Start,
+		End,
+		FQuat::Identity,
+		TraceChannel,
+		SphereShape,
+		Params
+	);
+}
+
+int32 UCameraCollisionBase::ConeTrace(
+	const FVector& Origin,
+	const FVector& Direction,
+	float Distance,
+	float ConeAngle,
+	int32 NumRays,
+	TArray<FHitResult>& OutHits,
+	const FCollisionQueryParams& Params) const
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("CameraCollisionBase::ConeTrace - No world available"));
+		return 0;
+	}
+
+	OutHits.Reset();
+	OutHits.Reserve(NumRays);
+
+	// Ensure we have at least one ray
+	NumRays = FMath::Max(1, NumRays);
+
+	// Normalize direction
+	FVector NormalizedDir = Direction.GetSafeNormal();
+	if (NormalizedDir.IsNearlyZero())
+	{
+		NormalizedDir = FVector::ForwardVector;
+	}
+
+	// Calculate perpendicular vectors for cone
+	FVector Right = FVector::CrossProduct(NormalizedDir, FVector:: UpVector).GetSafeNormal();
+	if (Right.IsNearlyZero())
+	{
+		Right = FVector:: CrossProduct(NormalizedDir, FVector::RightVector).GetSafeNormal();
+	}
+	FVector Up = FVector::CrossProduct(Right, NormalizedDir).GetSafeNormal();
+
+	int32 HitCount = 0;
+	float ConeAngleRad = FMath::DegreesToRadians(ConeAngle);
+
+	// Cast rays in cone pattern
+	for (int32 i = 0; i < NumRays; ++i)
+	{
+		FVector RayDirection;
+
+		if (i == 0)
+		{
+			// First ray is always the center
+			RayDirection = NormalizedDir;
+		}
+		else
+		{
+			// Distribute remaining rays in a spiral pattern
+			float t = static_cast<float>(i) / static_cast<float>(NumRays - 1);
+			float AngleOffset = t * ConeAngleRad;
+			float RotationAngle = t * PI * 4.0f;  // Spiral
+
+			// Calculate offset direction
+			FVector OffsetDir = Right * FMath:: Cos(RotationAngle) + Up * FMath:: Sin(RotationAngle);
+			OffsetDir = OffsetDir.GetSafeNormal();
+
+			// Rotate main direction by cone angle
+			RayDirection = FMath::Lerp(NormalizedDir, OffsetDir, FMath::Sin(AngleOffset)).GetSafeNormal();
+		}
+
+		FVector End = Origin + RayDirection * Distance;
+
+		FHitResult Hit;
+		if (World->LineTraceSingleByChannel(Hit, Origin, End, TraceChannel, Params))
+		{
+			OutHits. Add(Hit);
+			HitCount++;
+		}
+	}
+
+	return HitCount;
+}
+
+bool UCameraCollisionBase::IsLocationValid(const FVector& Location, float Radius) const
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		// Assume valid if no world (safe default)
+		return true;
+	}
+
+	FCollisionQueryParams Params = GetDefaultTraceParams();
+
+	FCollisionShape SphereShape;
+	SphereShape. SetSphere(Radius);
+
+	// Check if location overlaps with any geometry
+	TArray<FOverlapResult> Overlaps;
+	bool bOverlap = World->OverlapMultiByChannel(
+		Overlaps,
+		Location,
+		FQuat:: Identity,
+		TraceChannel,
+		SphereShape,
+		Params
+	);
+
+	// Location is valid if there are no overlaps
+	return !bOverlap;
+}
+
+bool UCameraCollisionBase::FindSafeLocation(
+	const FVector& DesiredLocation,
+	FVector& OutSafeLocation,
+	float SearchRadius) const
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		OutSafeLocation = DesiredLocation;
+		return false;
+	}
+
+	// First check if desired location is already valid
+	if (IsLocationValid(DesiredLocation, ProbeRadius))
+	{
+		OutSafeLocation = DesiredLocation;
+		return true;
+	}
+
+	// Search in expanding spheres
+	const int32 NumSearchRings = 4;
+	const int32 PointsPerRing = 8;
+
+	for (int32 Ring = 1; Ring <= NumSearchRings; ++Ring)
+	{
+		float RingRadius = SearchRadius * (static_cast<float>(Ring) / NumSearchRings);
+
+		for (int32 Point = 0; Point < PointsPerRing; ++Point)
+		{
+			float Angle = (static_cast<float>(Point) / PointsPerRing) * 2.0f * PI;
+
+			// Try horizontal offsets
+			FVector TestLocation = DesiredLocation + FVector(
+				FMath:: Cos(Angle) * RingRadius,
+				FMath::Sin(Angle) * RingRadius,
+				0.0f
+			);
+
+			if (IsLocationValid(TestLocation, ProbeRadius))
+			{
+				OutSafeLocation = TestLocation;
+				return true;
+			}
+
+			// Try with upward offset
+			TestLocation. Z += RingRadius * 0.5f;
+			if (IsLocationValid(TestLocation, ProbeRadius))
+			{
+				OutSafeLocation = TestLocation;
+				return true;
+			}
+		}
+	}
+
+	// No safe location found, return original
+	OutSafeLocation = DesiredLocation;
+	return false;
+}
+
+
+//========================================
+// Utility Methods
+//========================================
+
+UWorld* UCameraCollisionBase::GetWorld() const
+{
+	// Try cached world first
+	if (CachedWorld.IsValid())
+	{
+		return CachedWorld. Get();
+	}
+
+	// Try to get world from owner camera manager
+	if (OwnerCameraManager. IsValid())
+	{
+		UWorld* World = OwnerCameraManager->GetWorld();
+		if (World)
+		{
+			const_cast<UCameraCollisionBase*>(this)->CachedWorld = World;
+			return World;
+		}
+	}
+
+	// Try to get world from outer chain
+	UObject* Outer = GetOuter();
+	while (Outer)
+	{
+		UWorld* World = Outer->GetWorld();
+		if (World)
+		{
+			const_cast<UCameraCollisionBase*>(this)->CachedWorld = World;
+			return World;
+		}
+		Outer = Outer->GetOuter();
+	}
+
+	return nullptr;
+}
+
+FCollisionQueryParams UCameraCollisionBase::GetDefaultTraceParams() const
+{
+	FCollisionQueryParams Params;
+	Params.bTraceComplex = false;
+	Params. bReturnPhysicalMaterial = false;
+
+	// Ignore the owner character
+	if (OwnerCameraManager.IsValid())
+	{
+		AActor* Owner = OwnerCameraManager->GetOwner();
+		if (Owner)
+		{
+			Params.AddIgnoredActor(Owner);
+		}
+	}
+
+	return Params;
+}
+
+ECollisionChannel UCameraCollisionBase::GetCameraCollisionChannel() const
+{
+	return TraceChannel;
+}
+
+
+//========================================
+// Debug
+//========================================
+
+void UCameraCollisionBase::DrawDebug(const UWorld* World, float Duration) const
+{
+#if ENABLE_DRAW_DEBUG
+	if (!World)
+	{
+		return;
+	}
+
+	// Base implementation draws nothing
+	// Derived classes should override to draw specific debug info
+#endif
+}
+```
+
+---
+
+【代码设计说明】
+
+### 1. 构造函数默认值
+
+```cpp
+Priority = 100;        // 标准优先级
+BlendWeight = 1.0f;    // 完全权重
+bCanBlend = true;      // 默认可混合
+TraceChannel = ECC_Camera;  // 使用相机碰撞通道
+MinDistance = 50.0f;   // 最小距离50cm
+ProbeRadius = 12.0f;   // 探测半径12cm（与UE4 SpringArm默认值一致）
+```
+
+### 2. ConeTrace算法
+
+```
+锥形射线检测算法：
+├── 第一条射线：中心方向
+├── 后续射线：螺旋分布
+│   ├── t = i / (NumRays - 1)  // 0-1 归一化
+│   ├── AngleOffset = t * ConeAngle  // 逐渐增大角度
+│   └── RotationAngle = t * 4π  // 螺旋旋转
+└── 返回命中数量
+```
+
+### 3. FindSafeLocation搜索模式
+
+```
+安全位置搜索：
+├── 首先检查原始位置
+├── 扩展环搜索：
+│   ├── 4个环（25%、50%、75%、100%半径）
+│   ├── 每环8个点（45°间隔）
+│   └── 每点测试水平和上偏移
+└── 找不到则返回原始位置
+```
+
+### 4. GetWorld()查找顺序
+
+```
+World获取优先级：
+1. CachedWorld（缓存）
+2. OwnerCameraManager->GetWorld()
+3. Outer链遍历
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] Regenerate执行
+   - [ ] 编译通过（0 errors）
+   - [ ] 无链接错误
+
+2. **代码完整性：**
+   - [ ] 构造函数
+   - [ ] GetStrategyName / GetStrategyDescription
+   - [ ] ShouldExecute / Update / Reset
+   - [ ] LineTrace / SphereTrace / ConeTrace
+   - [ ] IsLocationValid / FindSafeLocation
+   - [ ] GetWorld / GetDefaultTraceParams
+   - [ ] DrawDebug
+
+3. **方法功能：**
+   - [ ] 所有方法可被派生类调用
+   - [ ] Trace方法正确使用TraceChannel
+   - [ ] GetDefaultTraceParams忽略Owner
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 5. 1.2 完成报告
+================================================================================
+
+【创建的文件】
+- 文件：CameraCollisionBase.  cpp
+- 路径：Source/MyProject/Private/Camera/Collision/
+
+【实现的方法】
+构造与身份：
+- ✅ 构造函数（设置默认值）
+- ✅ GetStrategyName()
+- ✅ GetStrategyDescription()
+
+执行控制：
+- ✅ ShouldExecute()
+- ✅ Update()
+- ✅ Reset()
+
+射线检测：
+- ✅ LineTrace()
+- ✅ SphereTrace()
+- ✅ ConeTrace()
+
+位置验证：
+- ✅ IsLocationValid()
+- ✅ FindSafeLocation()
+
+工具方法：
+- ✅ GetWorld()
+- ✅ GetDefaultTraceParams()
+- ✅ GetCameraCollisionChannel()
+
+调试：
+- ✅ DrawDebug()
+
+【编译结果】
+- Regenerate：[已执行]
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【最终状态】
+✅ 碰撞策略基类实现完成
+
+================================================================================
+```
+
+【后续步骤】
+
+5.  1.2完成后：
+- [x] ✅ 5.  1.1:   CameraCollisionBase.h
+- [x] ✅ 5. 1.2:  CameraCollisionBase.cpp（当前）
+- [ ] ⏳ 5.1.3: CameraCollisionResolver.h
+- [ ] ⏳ 5.1.4: CameraCollisionResolver.cpp
+
+**Phase 5. 1进度：2/4**
+
+================================================================================

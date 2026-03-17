@@ -1,0 +1,485 @@
+Sub-Step 3.5.5 Prompt
+
+================================================================================
+任务：在CameraModule_FOV.cpp中添加F04 Combat_FOV实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+F04在战斗状态下调整FOV，通常略微增加以提供更好的战斗感知。
+与F03(Aim FOV)配合，在战斗中提供适当的视野范围。
+
+【Pipeline中的位置】
+```
+FOV模块计算流程：
+1. F01:  BaseFOV = 90° (Override，基础值)
+2. F02: +10° (Additive，速度) → 100°
+3. F03: -7.5° (Additive，锁定) → 92.5°
+4. F04: +5° (Additive，战斗) ← 当前
+   → 92.5 + 5 = 97.5°（战斗时略宽）
+5. F05-F06: 后续调整
+```
+
+【当前进度】
+Phase 3 Step 3.5 Sub-Step 3.5.5 (共190个Sub-Step中的第91个)
+前置完成：3.5.4 F03实现 ✅
+
+【任务目标】
+在CameraModule_FOV.cpp中完整实现F04模块，替换现有的占位符。
+
+【⚠️ 重要提醒】
+
+1. **编译前必做步骤：**
+   本Sub-Step只修改现有.  cpp文件，不添加新文件。
+   因此**不需要Regenerate**，可以直接编译。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   确认StateConfig和InputContext的字段路径与项目实际结构一致。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_FOV.cpp
+
+2. **定位修改位置：**
+
+在文件中找到F04的占位符实现部分：
+
+```cpp
+//========================================
+// F04: Combat FOV
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.5.5
+// Combat-specific FOV adjustment
+...  占位符代码
+```
+
+**将上述占位符代码完整替换为下方的完整实现。**
+
+---
+
+3. **F04完整实现代码：**
+
+**A.  ShouldActivate() 实现：**
+
+```cpp
+/**
+ * ShouldActivate - Determine if combat FOV adjustment should be active
+ * 
+ * F04 activates when: 
+ * - Module is enabled
+ * - Player is in combat state (bIsInCombat)
+ * 
+ * Combat FOV provides slightly wider view for better situational awareness
+ * during fights.  This helps players track multiple enemies and react to
+ * attacks from different directions.
+ * 
+ * Priority 110 (between speed and aim), uses Additive policy. 
+ * 
+ * Use Cases:
+ * - General combat awareness
+ * - Multi-enemy encounters
+ * - Boss arena fights
+ * - Defensive situations
+ */
+bool UCameraModule_F04_Combat_FOV::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if player is in combat state
+	// This flag is set by gameplay systems when enemies are engaged
+	if (! Context.InputContext. bIsInCombat)
+	{
+		return false;
+	}
+	
+	// All conditions met - activate combat FOV
+	return true;
+}
+```
+
+---
+
+**B.  Compute() 实现：**
+
+```cpp
+/**
+ * Compute - Calculate combat FOV adjustment
+ * 
+ * This module adjusts FOV during combat.  Typically provides a slightly
+ * wider view for better situational awareness, but can be configured
+ * for narrower view in certain combat styles.
+ * 
+ * Steps:
+ * 1. Get combat FOV offset from config
+ * 2. Adjust intensity based on target lock status
+ * 3. Apply offset
+ * 4. Output with Additive policy
+ * 
+ * Offset Behavior:
+ * - Positive offset: Wider FOV (better peripheral vision)
+ * - Negative offset:  Narrower FOV (more focused)
+ * - With target locked: Full offset applied
+ * - Without target: Partial offset (50%) for general combat
+ * 
+ * Typical Values:
+ * - Aggressive combat: +5 to +10 degrees (wider)
+ * - Defensive combat: -5 degrees (more focused)
+ * - Default: +5 degrees (slightly wider)
+ * 
+ * @param Context The current pipeline execution context
+ * @param StateConfig The current camera state configuration
+ * @param OutOutput Output structure to fill with computed values
+ * @return True if computation succeeded
+ */
+bool UCameraModule_F04_Combat_FOV::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Step 1: Get combat FOV offset from config
+	// Positive = wider view, Negative = narrower view
+	float CombatFOVOffset = StateConfig.Module.FOV.CombatFOVOffset;
+	
+	// If not configured, use default (slightly wider for awareness)
+	if (FMath::IsNearlyZero(CombatFOVOffset))
+	{
+		CombatFOVOffset = 5.0f;  // Default:  5 degrees wider
+	}
+	
+	// Step 2: Adjust intensity based on target lock status
+	float EffectiveOffset = 0.0f;
+	
+	if (Context.InputContext.bHasTarget)
+	{
+		// With locked target:  Apply full combat offset
+		// Player is focused on specific enemy
+		EffectiveOffset = CombatFOVOffset;
+	}
+	else
+	{
+		// Without locked target: Apply partial offset (50%)
+		// General combat awareness, not focused on specific enemy
+		EffectiveOffset = CombatFOVOffset * 0.5f;
+	}
+	
+	// Step 3: Clamp offset to reasonable range
+	// Prevent extreme FOV changes
+	const float MinOffset = -15.0f;  // Max 15 degrees narrower
+	const float MaxOffset = 15.0f;   // Max 15 degrees wider
+	EffectiveOffset = FMath:: Clamp(EffectiveOffset, MinOffset, MaxOffset);
+	
+	// Step 4: Fill output structure
+	OutOutput. FOVOutput = EffectiveOffset;
+	OutOutput. bHasFOVOutput = true;
+	
+	// Full weight in combat
+	OutOutput.Weight = 1.0f;
+	
+	return true;
+}
+```
+
+---
+
+4. **完整的F04代码块（用于复制粘贴）：**
+
+```cpp
+//========================================
+// F04: Combat FOV
+//========================================
+
+/**
+ * ShouldActivate - Activate when in combat state
+ */
+bool UCameraModule_F04_Combat_FOV::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if player is in combat state
+	if (!Context.InputContext.bIsInCombat)
+	{
+		return false;
+	}
+	
+	return true;
+}
+
+/**
+ * Compute - Calculate combat FOV adjustment
+ */
+bool UCameraModule_F04_Combat_FOV:: Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output
+	OutOutput = CreateBaseOutput();
+	
+	// Get combat FOV offset from config
+	float CombatFOVOffset = StateConfig.Module.FOV.CombatFOVOffset;
+	
+	// Default: 5 degrees wider for awareness
+	if (FMath::IsNearlyZero(CombatFOVOffset))
+	{
+		CombatFOVOffset = 5.0f;
+	}
+	
+	// Adjust based on target lock status
+	float EffectiveOffset = 0.0f;
+	
+	if (Context.InputContext.bHasTarget)
+	{
+		// With locked target: Full offset
+		EffectiveOffset = CombatFOVOffset;
+	}
+	else
+	{
+		// Without locked target: Partial offset (50%)
+		EffectiveOffset = CombatFOVOffset * 0.5f;
+	}
+	
+	// Clamp to reasonable range
+	const float MinOffset = -15.0f;
+	const float MaxOffset = 15.0f;
+	EffectiveOffset = FMath::Clamp(EffectiveOffset, MinOffset, MaxOffset);
+	
+	// Fill output
+	OutOutput.FOVOutput = EffectiveOffset;
+	OutOutput.bHasFOVOutput = true;
+	OutOutput.Weight = 1.0f;
+	
+	return true;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 说明正负偏移的含义
+   - 解释锁定/未锁定的差异
+   - 提供典型数值
+   - 所有注释英文
+
+2. **格式：**
+   - Tab缩进
+   - 清晰步骤标注
+   - 方法间空两行
+
+3. **防御性编程：**
+   - 使用IsNearlyZero检测零值配置
+   - Clamp确保有效范围
+   - 处理两种战斗场景
+
+【技术说明】
+
+**F04的核心机制：**
+
+### 1. 战斗FOV的设计理念
+
+**为什么战斗时调整FOV？**
+
+```
+探索状态：
+- FOV = 90°（标准）
+- 平衡的视野
+
+战斗状态（无锁定）：
+- FOV = 90 + 2. 5 = 92.5°（略宽）
+- 更好的周边视野
+- 感知多个敌人
+
+战斗状态（有锁定）：
+- FOV = 90 + 5 = 95°（更宽）
+- 锁定目标的同时看到周围
+- 平衡聚焦和感知
+
+设计目的：
+- 提高战斗中的situational awareness
+- 帮助玩家应对多敌人场景
+- 增强战斗紧张感
+```
+
+### 2. 与F03(Aim FOV)的关系
+
+**两者如何配合？**
+
+```
+场景：战斗中锁定目标
+
+F03 (Aim): -7.5°（锁定聚焦，50%强度）
+F04 (Combat): +5°（战斗awareness）
+
+净效果:  -7.5 + 5 = -2.5°
+最终FOV: 90 - 2.5 = 87.5°
+
+分析：
+- F03聚焦目标（减少FOV）
+- F04增加awareness（增加FOV）
+- 两者部分抵消
+- 最终略微聚焦但不过度
+
+这是有意的设计：
+- 锁定时稍微聚焦（F03主导）
+- 但保持战斗awareness（F04补偿）
+```
+
+### 3. 锁定 vs 未锁定
+
+| 状态 | F03效果 | F04效果 | 净效果 |
+|------|---------|---------|--------|
+| 探索（无战斗） | 0° | 0° | 0° |
+| 战斗（未锁定） | 0° | +2.5° | +2.5° |
+| 战斗（已锁定） | -7.5° | +5° | -2.5° |
+| 明确瞄准 | -15° | +5° | -10° |
+
+**设计意图：**
+- 未锁定战斗：略宽视野
+- 已锁定战斗：略窄视野（聚焦）
+- 明确瞄准：明显窄视野（精确）
+
+### 4. 与D04(Combat Distance)的对比
+
+| 特性 | D04 (Distance) | F04 (FOV) |
+|------|----------------|-----------|
+| **触发条件** | 战斗状态 | 战斗状态 |
+| **效果** | 相机拉近 | 视野变宽 |
+| **典型值** | -50cm | +5° |
+| **配合效果** | 拉近+变宽=紧张但不局促 |
+
+### 5. IsNearlyZero的使用
+
+**为什么用IsNearlyZero而不是 <= 0？**
+
+```cpp
+// Distance模块：
+if (CombatDistanceOffset <= 0.0f)  // 允许负值（拉近）
+
+// FOV模块：
+if (FMath::IsNearlyZero(CombatFOVOffset))  // 只检测是否配置
+
+原因：
+- FOV偏移可以是正（变宽）或负（变窄）
+- <= 0.0f 会错误地触发负值配置的默认值
+- IsNearlyZero 只在确实未配置时使用默认值
+
+示例：
+CombatFOVOffset = -5.0f  // 配置为变窄
+if (CombatFOVOffset <= 0.0f)  // 错误：会触发默认值
+if (FMath:: IsNearlyZero(CombatFOVOffset))  // 正确：不触发
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] ShouldActivate()完整
+   - [ ] Compute()完整
+   - [ ] 所有方法签名与. h一致
+
+3. **逻辑正确性：**
+   - [ ] 检查bIsInCombat
+   - [ ] 区分锁定/未锁定
+   - [ ] 使用IsNearlyZero检测配置
+   - [ ] 默认值+5°
+   - [ ] Clamp范围±15°
+
+4. **字段访问：**
+   - [ ] Context.InputContext.bIsInCombat
+   - [ ] Context.InputContext.bHasTarget
+   - [ ] StateConfig.Module.FOV.CombatFOVOffset
+
+【注意事项】
+
+1. **不需要Regenerate**
+
+2. **字段缺失处理：**
+   ```cpp
+   // 如果CombatFOVOffset不存在
+   float CombatFOVOffset = 5.0f;  // 直接使用默认值
+   ```
+
+3. **bIsInCombat字段：**
+   确认InputContext中有bIsInCombat字段。如果没有：
+   ```cpp
+   // 方案1：使用bHasTarget代替
+   if (! Context.InputContext. bHasTarget)
+   
+   // 方案2：在InputContext中添加bIsInCombat
+   ```
+
+4. **默认值说明：**
+   - CombatFOVOffset = +5°（默认略宽）
+   - 未锁定时50%效果
+   - 范围限制±15°
+
+5. **测试建议：**
+   - 进入战斗状态 → FOV应略微增大
+   - 锁定目标 → FOV偏移应为+5°
+   - 未锁定 → FOV偏移应为+2.5°
+   - 离开战斗 → FOV应恢复正常
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 3.5.5 完成报告
+================================================================================
+
+【修改内容】
+- 文件：CameraModule_FOV.cpp
+- 修改位置：F04模块
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ ShouldActivate：检查战斗状态
+- ✅ Compute：区分锁定/未锁定的FOV调整
+
+【编译结果】
+- 编译状态：[成功/失败]
+
+【最终状态】
+✅ F04完成，战斗时调整FOV
+
+================================================================================
+```
+
+【后续步骤】
+
+F04完成后，FOV模块进度：
+- [x] ✅ 3.5.1:  CameraModule_FOV.h
+- [x] ✅ 3.5.2: F01 - Base FOV
+- [x] ✅ 3.5.3: F02 - Speed FOV
+- [x] ✅ 3.5.4: F03 - Aim FOV
+- [x] ✅ 3.5.5: F04 - Combat FOV
+- [ ] ⏳ 3.5.6: F05 - Boss FOV（下一步）
+- [ ] ⏳ 3.5.7: F06 - Impact FOV
+
+**FOV模块完成度：4/6 (66. 7%)**
+
+================================================================================

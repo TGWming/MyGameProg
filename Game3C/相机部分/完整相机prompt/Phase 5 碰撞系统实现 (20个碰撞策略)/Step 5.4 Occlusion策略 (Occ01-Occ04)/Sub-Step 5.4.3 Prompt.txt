@@ -1,0 +1,553 @@
+Sub-Step 5.4.3 Prompt
+
+================================================================================
+任务：在CameraCollision_Occlusion. cpp中实现OC02 Hide和OC03 PullInFurther
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4. 27 C++项目。
+- OC02通过隐藏遮挡物来保持角色可见性
+- OC03通过进一步拉近相机来绕过遮挡
+
+【当前进度】
+Phase 5 Step 5. 4 Sub-Step 5.4.3 (共190个Sub-Step中的第165个)
+前置完成：
+- 5.4.1: CameraCollision_Occlusion.h ✅
+- 5.4.2: OcclusionBase + OC01实现 ✅
+
+【任务目标】
+在CameraCollision_Occlusion. cpp中替换OC02和OC03的placeholder为完整实现。
+
+【⚠️ 重要提醒】
+
+1. **本Sub-Step是更新现有文件，不创建新文件**
+   因此**不需要Regenerate**，直接编译即可。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **方法签名（与头文件一致）：**
+   - ShouldExecute: 1个参数（只有Context）
+   - Execute: 3个参数（无StateConfig）
+
+4. **Occlusion策略特点：**
+   - OC02: 不产生Response，直接操作Actor可见性
+   - OC03: 产生Response（额外的距离调整）
+
+【具体要求】
+
+**文件路径：** `Source/MyProject/Private/Camera/Collision/CameraCollision_Occlusion.cpp`
+
+**找到OC02和OC03的placeholder代码，替换为以下实现：**
+
+---
+
+### OC02: Hide 完整实现
+
+```cpp
+//========================================
+// OC02: Hide Implementation
+//========================================
+
+/**
+ * Constructor - Configure hide parameters
+ * 
+ * Hide is a simple but effective occlusion handling method: 
+ * - Completely hides occluding objects
+ * - Fast performance
+ * - May cause visual popping if not handled carefully
+ */
+UCameraCollision_OC02_Hide::UCameraCollision_OC02_Hide()
+    : HideDelay(0.1f)
+    , ShowDelay(0.05f)
+    , bUseActorVisibility(true)
+{
+    Priority = 105;
+    OcclusionDelay = 0.1f;
+}
+
+bool UCameraCollision_OC02_Hide::ShouldExecute(const FStageExecutionContext& Context) const
+{
+    return bIsEnabled;
+}
+
+bool UCameraCollision_OC02_Hide::Execute(
+    const FStageExecutionContext& Context,
+    const FCollisionDetectionResult& DetectionResult,
+    FCollisionResponseOutput& OutResponse)
+{
+    // Check if character is occluded
+    bool bIsOccluded = DetectionResult.bCharacterOccluded;
+    
+    // Track new occluding actors
+    TArray<TWeakObjectPtr<AActor>> NewOccludingActors;
+    
+    if (bIsOccluded)
+    {
+        // Update occlusion time
+        OcclusionTime += CachedDeltaTime;
+        
+        // Only process after delay to prevent flickering
+        if (OcclusionTime >= OcclusionDelay)
+        {
+            // Perform trace to get occluding actors
+            FVector CharacterLocation = GetCharacterLocation(Context);
+            TArray<FHitResult> Hits;
+            int32 HitCount = PerformOcclusionTrace(Context, CharacterLocation, Hits);
+            
+            // Process hits
+            for (const FHitResult& Hit : Hits)
+            {
+                AActor* HitActor = Hit.GetActor();
+                if (HitActor && ShouldHandleActor(HitActor))
+                {
+                    TWeakObjectPtr<AActor> WeakActor = HitActor;
+                    NewOccludingActors.Add(WeakActor);
+                    
+                    // Check if this is a new actor to hide
+                    if (! HiddenActors.Contains(WeakActor))
+                    {
+                        // Check actor-specific delay
+                        float* OcclusionTimePtr = ActorOcclusionTimes.Find(WeakActor);
+                        if (! OcclusionTimePtr)
+                        {
+                            // Start tracking this actor
+                            ActorOcclusionTimes.Add(WeakActor, 0.0f);
+                        }
+                        else
+                        {
+                            *OcclusionTimePtr += CachedDeltaTime;
+                            
+                            // Hide after delay
+                            if (*OcclusionTimePtr >= HideDelay)
+                            {
+                                HideActor(HitActor);
+                                HiddenActors.AddUnique(WeakActor);
+                            }
+                        }
+                    }
+                    
+                    // Update current occluding actors list
+                    AddOccludingActor(HitActor);
+                }
+            }
+        }
+    }
+    else
+    {
+        // Not occluded - reset occlusion time
+        OcclusionTime = 0.0f;
+    }
+    
+    // Find actors that are no longer occluding and should be shown
+    TArray<TWeakObjectPtr<AActor>> ActorsToShow;
+    
+    for (const TWeakObjectPtr<AActor>& WeakActor : HiddenActors)
+    {
+        if (! WeakActor.IsValid())
+        {
+            ActorsToShow.Add(WeakActor);
+            continue;
+        }
+        
+        // Check if still in new occluding list
+        if (! NewOccludingActors.Contains(WeakActor))
+        {
+            // Actor is no longer occluding
+            float* OcclusionTimePtr = ActorOcclusionTimes.Find(WeakActor);
+            if (OcclusionTimePtr)
+            {
+                *OcclusionTimePtr -= CachedDeltaTime;
+                
+                // Show after delay expires
+                if (*OcclusionTimePtr <= -ShowDelay)
+                {
+                    ShowActor(WeakActor. Get());
+                    ActorsToShow.Add(WeakActor);
+                    ActorOcclusionTimes.Remove(WeakActor);
+                }
+            }
+            else
+            {
+                // No tracking info, show immediately
+                ShowActor(WeakActor.Get());
+                ActorsToShow.Add(WeakActor);
+            }
+        }
+    }
+    
+    // Remove shown actors from hidden list
+    for (const TWeakObjectPtr<AActor>& WeakActor : ActorsToShow)
+    {
+        HiddenActors.Remove(WeakActor);
+        RemoveOccludingActor(WeakActor.IsValid() ? WeakActor.Get() : nullptr);
+    }
+    
+    // Update active state
+    SetActive(HiddenActors. Num() > 0);
+    
+    UE_LOG(LogTemp, Verbose, TEXT("OC02 Hide:  Occluded=%d, Hidden=%d"),
+        bIsOccluded ?  1 : 0, HiddenActors.Num());
+    
+    // Hide strategy doesn't produce camera adjustments
+    return false;
+}
+
+void UCameraCollision_OC02_Hide::Update(float DeltaTime, const FStageExecutionContext& Context)
+{
+    Super::Update(DeltaTime, Context);
+    
+    // Update occlusion times for all tracked actors
+    TArray<TWeakObjectPtr<AActor>> StaleActors;
+    
+    for (auto& Pair : ActorOcclusionTimes)
+    {
+        if (! Pair.Key.IsValid())
+        {
+            StaleActors.Add(Pair.Key);
+        }
+    }
+    
+    // Remove stale entries
+    for (const TWeakObjectPtr<AActor>& WeakActor : StaleActors)
+    {
+        ActorOcclusionTimes.Remove(WeakActor);
+    }
+}
+
+void UCameraCollision_OC02_Hide::Reset()
+{
+    Super::Reset();
+    
+    // Show all hidden actors
+    for (const TWeakObjectPtr<AActor>& WeakActor : HiddenActors)
+    {
+        if (WeakActor.IsValid())
+        {
+            ShowActor(WeakActor.Get());
+        }
+    }
+    
+    HiddenActors.Empty();
+    ActorOcclusionTimes.Empty();
+}
+
+TArray<AActor*> UCameraCollision_OC02_Hide::GetHiddenActors() const
+{
+    TArray<AActor*> Result;
+    
+    for (const TWeakObjectPtr<AActor>& WeakActor : HiddenActors)
+    {
+        if (WeakActor.IsValid())
+        {
+            Result.Add(WeakActor.Get());
+        }
+    }
+    
+    return Result;
+}
+
+void UCameraCollision_OC02_Hide::HideActor(AActor* Actor)
+{
+    if (! Actor)
+    {
+        return;
+    }
+    
+    if (bUseActorVisibility)
+    {
+        Actor->SetActorHiddenInGame(true);
+    }
+    else
+    {
+        // Alternative: Use render custom depth for outline/silhouette
+        TArray<UPrimitiveComponent*> Components;
+        Actor->GetComponents<UPrimitiveComponent>(Components);
+        
+        for (UPrimitiveComponent* Component : Components)
+        {
+            if (Component)
+            {
+                Component->SetRenderCustomDepth(true);
+                Component->SetCustomDepthStencilValue(1);
+            }
+        }
+    }
+    
+    UE_LOG(LogTemp, Verbose, TEXT("OC02 Hide:  Hiding actor %s"), *Actor->GetName());
+}
+
+void UCameraCollision_OC02_Hide::ShowActor(AActor* Actor)
+{
+    if (!Actor)
+    {
+        return;
+    }
+    
+    if (bUseActorVisibility)
+    {
+        Actor->SetActorHiddenInGame(false);
+    }
+    else
+    {
+        // Restore custom depth settings
+        TArray<UPrimitiveComponent*> Components;
+        Actor->GetComponents<UPrimitiveComponent>(Components);
+        
+        for (UPrimitiveComponent* Component : Components)
+        {
+            if (Component)
+            {
+                Component->SetRenderCustomDepth(false);
+            }
+        }
+    }
+    
+    UE_LOG(LogTemp, Verbose, TEXT("OC02 Hide:  Showing actor %s"), *Actor->GetName());
+}
+```
+
+---
+
+### OC03: PullInFurther 完整实现
+
+```cpp
+//========================================
+// OC03: Pull In Further Implementation
+//========================================
+
+/**
+ * Constructor - Configure pull-in parameters
+ * 
+ * Pull-in further is used when material-based solutions don't work: 
+ * - Pulls camera even closer than collision response
+ * - Ensures character is visible without modifying materials
+ * - Works with any object type
+ */
+UCameraCollision_OC03_PullInFurther::UCameraCollision_OC03_PullInFurther()
+    : AdditionalPullInDistance(50.0f)
+    , MaxTotalPullIn(200.0f)
+    , PullInSpeed(10.0f)
+    , MinCharacterDistance(30.0f)
+    , CurrentPullIn(0.0f)
+    , TargetPullIn(0.0f)
+{
+    Priority = 110;
+    OcclusionDelay = 0.15f;
+}
+
+bool UCameraCollision_OC03_PullInFurther::ShouldExecute(const FStageExecutionContext& Context) const
+{
+    return bIsEnabled;
+}
+
+bool UCameraCollision_OC03_PullInFurther::Execute(
+    const FStageExecutionContext& Context,
+    const FCollisionDetectionResult& DetectionResult,
+    FCollisionResponseOutput& OutResponse)
+{
+    // Check if character is occluded
+    bool bIsOccluded = DetectionResult.bCharacterOccluded;
+    
+    if (bIsOccluded)
+    {
+        // Update occlusion time
+        OcclusionTime += CachedDeltaTime;
+        
+        // Only apply pull-in after delay
+        if (OcclusionTime >= OcclusionDelay)
+        {
+            // Calculate how much additional pull-in is needed
+            // Start with base additional distance
+            float DesiredPullIn = AdditionalPullInDistance;
+            
+            // Increase pull-in over time if still occluded
+            float TimeMultiplier = FMath::Clamp((OcclusionTime - OcclusionDelay) / 0.5f, 0.0f, 1.0f);
+            DesiredPullIn *= (1.0f + TimeMultiplier * 0.5f);
+            
+            // Check current camera distance
+            float CurrentDistance = DetectionResult.bCollisionDetected ? 
+                DetectionResult.SafeDistance : Context.Output.Distance;
+            
+            // Ensure we don't pull in closer than minimum
+            float MaxPullIn = FMath::Max(0.0f, CurrentDistance - MinCharacterDistance);
+            MaxPullIn = FMath::Min(MaxPullIn, MaxTotalPullIn);
+            
+            TargetPullIn = FMath::Min(DesiredPullIn, MaxPullIn);
+        }
+        else
+        {
+            // During delay, don't change target
+            TargetPullIn = CurrentPullIn;
+        }
+    }
+    else
+    {
+        // Not occluded - return to normal
+        OcclusionTime = 0.0f;
+        TargetPullIn = 0.0f;
+    }
+    
+    // Interpolate current pull-in towards target
+    float InterpSpeed = bIsOccluded ? PullInSpeed : (PullInSpeed * 0.5f);  // Return slower
+    CurrentPullIn = FMath::FInterpTo(CurrentPullIn, TargetPullIn, CachedDeltaTime, InterpSpeed);
+    
+    // Only output if we have significant pull-in
+    if (FMath::Abs(CurrentPullIn) > 0.1f)
+    {
+        OutResponse.Reset();
+        OutResponse.StrategyType = GetStrategyType();
+        OutResponse.Category = GetStrategyCategory();
+        OutResponse. DistanceAdjustment = -CurrentPullIn;  // Negative = closer
+        OutResponse. Weight = BlendWeight;
+        OutResponse.Priority = GetPriority();
+        OutResponse.bIsActive = true;
+        OutResponse.ActiveDuration = OcclusionTime;
+        
+        SetActive(true);
+        
+        UE_LOG(LogTemp, Verbose, TEXT("OC03 PullInFurther: Occluded=%d, PullIn=%.1f (target=%.1f)"),
+            bIsOccluded ?  1 : 0, CurrentPullIn, TargetPullIn);
+        
+        return true;
+    }
+    
+    SetActive(false);
+    return false;
+}
+
+void UCameraCollision_OC03_PullInFurther::Update(float DeltaTime, const FStageExecutionContext& Context)
+{
+    Super::Update(DeltaTime, Context);
+}
+
+void UCameraCollision_OC03_PullInFurther::Reset()
+{
+    Super::Reset();
+    CurrentPullIn = 0.0f;
+    TargetPullIn = 0.0f;
+}
+```
+
+---
+
+【代码设计说明】
+
+### 1. OC02 Hide 特性
+
+```
+隐藏逻辑：
+├── 检测到遮挡后，等待HideDelay
+├── 每个Actor独立计时
+├── 遮挡结束后，等待ShowDelay再显示
+└── 防止快速闪烁
+
+两种隐藏模式：
+├── bUseActorVisibility = true：SetActorHiddenInGame()
+└── bUseActorVisibility = false：使用CustomDepth（轮廓效果）
+
+ActorOcclusionTimes追踪：
+├── 正值：累计遮挡时间
+└── 负值：累计非遮挡时间（用于ShowDelay）
+```
+
+### 2. OC03 PullInFurther 特性
+
+```
+拉近计算：
+├── 基础拉近距离：AdditionalPullInDistance
+├── 时间乘数：遮挡越久，拉近越多（最高1.5x）
+├── 最大限制：不能超过MaxTotalPullIn
+└── 最小距离：不能比MinCharacterDistance更近
+
+插值速度：
+├── 拉近时：PullInSpeed
+└── 恢复时：PullInSpeed × 0.5（更慢，避免弹回）
+
+返回值：
+├── 有效拉近 > 0.1：返回true，产生Response
+└── 否则：返回false
+```
+
+### 3. OC02 vs OC03 对比
+
+| 特性 | OC02 Hide | OC03 PullInFurther |
+|------|-----------|-------------------|
+| 处理方式 | 隐藏Actor | 调整相机距离 |
+| 产生Response | ❌ 否 | ✅ 是 |
+| 优先级 | 105 | 110 |
+| 适用场景 | 可隐藏的物体 | 不能隐藏的物体 |
+| 视觉效果 | 物体消失 | 画面放大 |
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过（0 errors）
+   - [ ] 无链接错误
+
+2. **代码完整性：**
+   - [ ] OC02 Hide完整实现
+   - [ ] OC02辅助方法（HideActor, ShowActor, GetHiddenActors）
+   - [ ] OC03 PullInFurther完整实现
+   - [ ] 平滑恢复机制
+
+3. **功能验证：**
+   - [ ] OC02可隐藏/显示遮挡物
+   - [ ] OC03可产生距离调整Response
+   - [ ] 延迟机制正常工作
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 5.4.3 完成报告
+================================================================================
+
+【更新的文件】
+- 文件：CameraCollision_Occlusion.cpp
+- 修改：替换OC02和OC03的placeholder为完整实现
+
+【实现的内容】
+
+OC02 Hide：
+- ✅ Execute() - 完整隐藏实现
+- ✅ Update() - 清理过期追踪
+- ✅ Reset() - 恢复所有隐藏Actor
+- ✅ HideActor() - 隐藏单个Actor
+- ✅ ShowActor() - 显示单个Actor
+- ✅ GetHiddenActors() - 获取隐藏列表
+- ✅ 延迟显示/隐藏机制
+- ✅ 两种隐藏模式
+
+OC03 PullInFurther：
+- ✅ Execute() - 完整拉近实现
+- ✅ Update()
+- ✅ Reset()
+- ✅ 时间乘数机制
+- ✅ 最大/最小距离限制
+- ✅ 平滑恢复
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【最终状态】
+✅ OC02 + OC03实现完成
+⏳ OC04待实现
+
+================================================================================
+```
+
+【后续步骤】
+
+5. 4.3完成后：
+- [x] ✅ 5.4.1:  CameraCollision_Occlusion. h
+- [x] ✅ 5.4.2: OcclusionBase + OC01
+- [x] ✅ 5.4.3: OC02 + OC03（当前）
+- [ ] ⏳ 5.4.4: OC04实现 + 注册
+
+**Phase 5.4进度：3/4**
+
+================================================================================

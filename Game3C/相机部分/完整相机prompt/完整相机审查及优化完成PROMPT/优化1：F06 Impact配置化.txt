@@ -1,0 +1,92 @@
+优化1：F06 Impact配置化
+
+================================================================================
+任务：F06 Impact模块配置化优化
+================================================================================
+
+【背景】
+当前F06_Impact_FOV模块的ImpactFOVAmount和ImpactDuration使用硬编码默认值，
+需要改为从配置读取，以便在蓝图/DataTable中针对不同状态配置不同的冲击效果。
+
+【修改范围】
+1. SoulsCameraParams_Module. h - FModuleParams_FOV结构体
+2. CameraModule_FOV.cpp - F06模块的Compute方法
+
+【具体修改】
+
+## 1. SoulsCameraParams_Module.h
+
+在FModuleParams_FOV结构体中添加以下参数：
+
+```cpp
+USTRUCT(BlueprintType)
+struct FModuleParams_FOV
+{
+    GENERATED_BODY()
+    
+    // ...  保留现有参数 ...
+    
+    // ===== 新增：Impact FOV配置 =====
+    
+    /** FOV冲击量（度），受击时FOV变化幅度 */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FOV|Impact", 
+              meta = (ClampMin = "0.0", ClampMax = "30.0"))
+    float ImpactFOVAmount = 10.0f;
+    
+    /** FOV冲击持续时间（秒） */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FOV|Impact",
+              meta = (ClampMin = "0.05", ClampMax = "1.0"))
+    float ImpactDuration = 0.15f;
+};
+```
+
+## 2. CameraModule_FOV.cpp - F06类修改
+
+修改F06_Impact_FOV的Compute方法，从配置读取参数：
+
+```cpp
+void UCameraModule_F06_Impact_FOV::Compute(
+    const FStageExecutionContext& Context,
+    FModuleOutput& OutOutput)
+{
+    // 从配置读取参数（替代硬编码）
+    const FCameraStateConfig& StateConfig = Context.CurrentStateConfig;
+    float ConfigImpactFOV = StateConfig. Module.FOV.ImpactFOVAmount;
+    float ConfigDuration = StateConfig. Module.FOV. ImpactDuration;
+    
+    // 如果配置值有效则使用配置值，否则使用默认值
+    float EffectiveImpactFOV = (ConfigImpactFOV > 0. 0f) ? ConfigImpactFOV : 10.0f;
+    float EffectiveDuration = (ConfigDuration > 0.0f) ? ConfigDuration : 0.15f;
+    
+    // ... 后续计算逻辑使用EffectiveImpactFOV和EffectiveDuration ... 
+    // （保持现有的冲击计算逻辑，只是替换硬编码值为上述变量）
+}
+```
+
+## 3. 如果F06有TriggerImpact方法，也需要修改
+
+```cpp
+void UCameraModule_F06_Impact_FOV::TriggerImpact(float Intensity)
+{
+    // 使用缓存的配置值或在触发时获取
+    // 确保使用配置的ImpactDuration而非硬编码
+    bImpactActive = true;
+    CurrentImpactIntensity = Intensity;
+    ImpactTimeRemaining = CachedImpactDuration; // 从配置读取的值
+}
+```
+
+【验证要求】
+1. 编译通过，无错误无警告
+2. 在DataTable中可以看到新增的ImpactFOVAmount和ImpactDuration字段
+3. 修改DataTable中的值后，游戏内的FOV冲击效果相应变化
+4. 默认值与原硬编码值一致（10.0f和0.15f）
+
+【输出要求】
+完成后请报告：
+1. 修改的文件列表
+2. 新增的代码行数
+3. 编译结果
+4. 任何需要注意的事项
+
+================================================================================

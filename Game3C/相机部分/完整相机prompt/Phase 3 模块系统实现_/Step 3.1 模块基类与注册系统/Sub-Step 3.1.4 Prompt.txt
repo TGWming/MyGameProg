@@ -1,0 +1,231 @@
+Sub-Step 3.1.4 Prompt
+
+================================================================================
+任务：验证CameraModuleRegistry.cpp - 模块注册表类实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+CameraModuleRegistry.cpp已在Sub-Step 3.1.3中由AGENT自动生成。
+本Sub-Step是验证任务，确保实现符合预期。
+
+【当前进度】
+Phase 3 Step 3.1 Sub-Step 3.1.4 (共190个Sub-Step中的第59个)
+前置完成：3.1.3 CameraModuleRegistry. h + CameraModuleRegistry.cpp ✅
+
+【任务目标】
+验证已生成的CameraModuleRegistry.cpp文件，确保：
+1. 所有方法实现完整
+2. CreateAllModules使用智能占位符
+3. 编译通过
+
+【⚠️ 重要说明】
+
+根据前面的检查，CameraModuleRegistry. cpp **已经在Sub-Step 3.1.3中生成**。
+本Sub-Step原本是创建任务，但AGENT已经提前完成。
+
+因此，本任务调整为**验证任务**。
+
+【验证清单】
+
+请对照以下清单，逐项检查CameraModuleRegistry.cpp文件：
+
+**1. 文件基本信息**
+- [ ] 文件路径：Source/[ProjectName]/Private/Camera/Modules/CameraModuleRegistry.cpp
+- [ ] 版权声明：// Copyright Epic Games, Inc. All Rights Reserved.   
+- [ ] Include正确：#include "Camera/Modules/CameraModuleRegistry.h"
+- [ ] 文件编码：UTF-8 Without BOM
+
+**2. 构造函数**
+- [ ] UCameraModuleRegistry:: UCameraModuleRegistry() 存在
+- [ ] 使用初始化列表初始化 bIsInitialized(false)
+
+**3. Initialize() 方法**
+- [ ] 检查是否已初始化（避免重复初始化）
+- [ ] 调用 CreateAllModules(Outer)
+- [ ] 设置 bIsInitialized = true
+- [ ] 输出日志（初始化成功，模块数量）
+
+**4. RegisterModule() 方法**
+- [ ] 空指针检查
+- [ ] 检查ModuleType是否为ModuleNone
+- [ ] 检查是否已注册（Contains）
+- [ ] 添加到RegisteredModules
+- [ ] 输出日志（成功/失败）
+
+**5. UnregisterModule() 方法**
+- [ ] 检查是否存在
+- [ ] 从RegisteredModules移除
+- [ ] 返回bool（成功/失败）
+
+**6. GetModule() 方法**
+- [ ] 使用RegisteredModules.Find()查找
+- [ ] 使用const_cast返回非const指针
+- [ ] 未找到返回nullptr
+
+**7. GetAllModules() 方法**
+- [ ] 使用GenerateValueArray()生成数组
+- [ ] 返回TArray<UCameraModuleBase*>
+
+**8. GetModulesByCategory() 方法**
+- [ ] 遍历RegisteredModules
+- [ ] 空指针检查
+- [ ] 按Category过滤
+- [ ] 返回过滤后的数组
+
+**9. GetActiveModules() 方法**
+- [ ] 先清空OutActiveModules
+- [ ] 遍历RegisteredModules
+- [ ] 检查IsEnabled() 和 ShouldActivate()
+- [ ] **按优先级排序（降序：高优先级在前）**
+- [ ] 使用lambda表达式排序
+
+**10. UpdateModuleStates() 方法**
+- [ ] 遍历所有模块
+- [ ] 计算bShouldBeActive
+- [ ] 状态转换逻辑（激活/停用）
+- [ ] 调用OnActivate/OnDeactivate
+- [ ] 维护ActiveModules数组
+
+**11. GetActiveModuleCount() 方法**
+- [ ] 遍历RegisteredModules
+- [ ] 统计IsActive()为true的模块
+- [ ] 返回计数
+
+**12. CreateAllModules() 方法（关键检查）**
+- [ ] **使用TODO注释标记**
+- [ ] **说明这是占位符，将在后续Step实现**
+- [ ] **提供示例代码注释**
+- [ ] **输出日志说明当前状态**
+- [ ] **不要强行创建不存在的模块类**
+
+示例：
+```cpp
+void UCameraModuleRegistry::CreateAllModules(UObject* Outer)
+{
+	// TODO: Create all 39 module instances here
+	// This will be implemented when individual module classes are created
+	// Example: 
+	// CreateModule<UCameraModule_P01_FollowTarget>(Outer, ECameraModuleType::Module_P01_FollowTarget);
+	
+	UE_LOG(LogTemp, Log, TEXT("CameraModuleRegistry: CreateAllModules called - modules will be added as they are implemented"));
+}
+```
+
+**13. 模板方法CreateModule<T>()（如果存在）**
+- [ ] 如果在cpp中实现，检查是否有static_assert
+- [ ] 检查是否调用NewObject<T>
+- [ ] 检查是否自动调用RegisterModule
+- [ ] 注意：此方法可能已在.  h中实现
+
+**14. 代码风格**
+- [ ] 所有注释为英文
+- [ ] 日志使用LogTemp或专用LogCategory
+- [ ] 空指针检查完整
+- [ ] 使用分隔注释组织代码（可选）
+
+【执行步骤】
+
+**步骤1：打开文件**
+打开 Source/[ProjectName]/Private/Camera/Modules/CameraModuleRegistry.  cpp
+
+**步骤2：逐项检查**
+按照上述验证清单，逐项检查并勾选
+
+**步骤3：重点检查CreateAllModules**
+确认此方法使用了TODO占位符，而不是强行创建不存在的类
+
+**步骤4：编译验证**
+```
+Build > Compile [ProjectName]
+预期：0 errors, 0 warnings
+```
+
+**步骤5：报告结果**
+
+使用以下格式报告验证结果：
+
+```
+================================================================================
+验证结果报告
+================================================================================
+
+【文件信息】
+- 文件路径：[实际路径]
+- 文件编码：[UTF-8 Without BOM / 其他]
+- 文件行数：[行数]
+
+【验证结果】
+- 构造函数：[✅通过 / ❌问题]
+- Initialize()：[✅通过 / ❌问题]
+- RegisterModule()：[✅通过 / ❌问题]
+- UnregisterModule()：[✅通过 / ❌问题]
+- GetModule()：[✅通过 / ❌问题]
+- GetAllModules()：[✅通过 / ❌问题]
+- GetModulesByCategory()：[✅通过 / ❌问题]
+- GetActiveModules()：[✅通过 / ❌问题]
+- UpdateModuleStates()：[✅通过 / ❌问题]
+- GetActiveModuleCount()：[✅通过 / ❌问题]
+- CreateAllModules()：[✅通过 / ❌问题]
+
+【CreateAllModules详细检查】
+- 是否使用TODO标记：[是 / 否]
+- 是否说明后续实现：[是 / 否]
+- 是否提供示例代码：[是 / 否]
+- 是否输出日志：[是 / 否]
+- 是否尝试创建不存在的类：[否 / 是（问题）]
+
+【编译结果】
+- 编译状态：[通过 / 失败]
+- 错误数：[数量]
+- 警告数：[数量]
+
+【发现的问题】
+[如果有问题，列出详细描述；如果无问题，写"无"]
+
+【总体结论】
+[✅ 完全符合预期 / ⚠️ 需要调整 / ❌ 存在问题]
+
+================================================================================
+```
+
+【如果发现问题】
+
+如果验证发现问题，请详细描述：
+1. 具体是哪个方法有问题
+2. 问题的具体表现（缺少实现/逻辑错误/命名错误等）
+3. 当前代码内容（复制相关代码段）
+
+我会提供修正方案。
+
+【如果验证通过】
+
+如果所有检查项都通过，报告：
+"Sub-Step 3.1.4验证通过，CameraModuleRegistry.cpp完全符合预期"
+
+然后我们将进入Phase 3的下一个阶段。
+
+【注意事项】
+
+1. **不要修改代码**
+   本任务是验证任务，不是修改任务
+   仅检查并报告，不要改动代码
+
+2. **重点关注CreateAllModules**
+   这是最关键的占位符使用案例
+   必须确认使用TODO而不是强行实现
+
+3. **编译是必须的**
+   即使检查都通过，也必须编译验证
+
+【预期结果】
+
+根据前面的检查，CameraModuleRegistry.cpp应该：
+- ✅ 已完整实现所有方法
+- ✅ CreateAllModules使用智能TODO占位符
+- ✅ 可以编译通过
+- ✅ 所有注释为英文
+
+如果实际情况与预期不符，请详细报告。
+
+================================================================================

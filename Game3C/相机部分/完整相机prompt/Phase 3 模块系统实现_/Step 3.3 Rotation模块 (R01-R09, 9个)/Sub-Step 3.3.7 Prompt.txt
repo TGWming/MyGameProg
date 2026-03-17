@@ -1,0 +1,610 @@
+Sub-Step 3.3.7 Prompt
+
+================================================================================
+任务：在CameraModule_Rotation.cpp中添加R06 AutoOrient_Movement实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+R06在角色移动时自动将相机朝向移动方向，提供自然的探索体验。
+当玩家移动但不控制相机时，相机逐渐对齐到角色移动方向后方。
+
+【当前进度】
+Phase 3 Step 3.3 Sub-Step 3.3.7 (共190个Sub-Step中的第75个)
+前置完成：3.3.6 R05实现 ✅
+
+【任务目标】
+在CameraModule_Rotation.cpp中完整实现R06模块，替换现有的占位符。
+
+【⚠️ 重要提醒】
+
+1. **编译前必做步骤：**
+   本Sub-Step只修改现有. cpp文件，不添加新文件。
+   因此**不需要Regenerate**，可以直接编译。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   确认StateConfig和InputContext的字段路径与项目实际结构一致。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_Rotation. cpp
+
+2. **定位修改位置：**
+
+在文件中找到R06的占位符实现部分：
+
+```cpp
+//========================================
+// R06: AutoOrient Movement - Auto-align to movement
+//========================================
+
+// TODO: Will be implemented in Sub-Step 3.3.7
+// ...  占位符代码
+```
+
+**将上述占位符代码完整替换为下方的完整实现。**
+
+---
+
+3. **R06完整实现代码：**
+
+**A. ShouldActivate() 实现：**
+
+**当前占位符代码：**
+```cpp
+bool UCameraModule_R06_AutoOrient_Movement::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Placeholder:  Will be properly implemented in Sub-Step 3.3.7
+	// Should activate when character is moving
+	return false;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * ShouldActivate - Determine if auto-orient to movement should be active
+ * 
+ * R06 activates when: 
+ * - Module is enabled
+ * - Character is moving (bIsMoving)
+ * - Character speed exceeds minimum threshold
+ * - No target is locked (free camera mode)
+ * - Player is NOT actively controlling camera (no camera input)
+ * 
+ * This creates natural camera behavior:  when player moves forward without
+ * touching camera controls, the camera gradually aligns behind the character. 
+ * 
+ * Priority 90 (lower than input modules) ensures player input takes precedence.
+ * Uses Blend policy with dynamic weight based on movement speed.
+ * 
+ * Use Cases:
+ * - Exploration with automatic camera following
+ * - Running forward without manual camera adjustment
+ * - Natural camera behavior during navigation
+ */
+bool UCameraModule_R06_AutoOrient_Movement::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Don't activate when target is locked
+	// Lock-on modules handle camera in combat
+	if (Context.InputContext. bHasTarget)
+	{
+		return false;
+	}
+	
+	// Check if character is moving
+	if (!Context.InputContext.bIsMoving)
+	{
+		return false;
+	}
+	
+	// Check if character speed exceeds minimum threshold
+	// This prevents activation during very slow movement
+	float MinSpeed = StateConfig.Module. Rotation.AutoOrientMinSpeed;
+	
+	// If MinSpeed not configured, use default
+	if (MinSpeed <= 0.0f)
+	{
+		MinSpeed = 100.0f;  // Default:  1 m/s (walking speed)
+	}
+	
+	if (Context.InputContext.CharacterSpeed < MinSpeed)
+	{
+		return false;  // Too slow, don't auto-orient
+	}
+	
+	// Check if player is NOT actively controlling camera
+	// Only auto-orient when player isn't using camera input
+	FVector2D CameraInput = Context.InputContext.CameraInput;
+	float InputMagnitude = CameraInput.Size();
+	
+	if (InputMagnitude >= 0.1f)
+	{
+		return false;  // Player is controlling camera, don't interfere
+	}
+	
+	// All conditions met - activate auto-orient
+	return true;
+}
+```
+
+**说明：**
+- 5个条件检查：启用 + 移动 + 速度 + 无锁定 + 无相机输入
+- 速度阈值防止极慢移动时激活
+- 检测相机输入，玩家控制时不激活
+- 优先级90（低于输入模块）
+
+---
+
+**B. Compute() 实现：**
+
+**当前占位符代码：**
+```cpp
+bool UCameraModule_R06_AutoOrient_Movement::Compute(...)
+{
+	// Placeholder
+	OutOutput = CreateBaseOutput();
+	OutOutput. RotationOutput = Context.InputContext.PreviousCameraRotation;
+	OutOutput.bHasRotationOutput = true;
+	return true;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * Compute - Calculate rotation to align camera behind moving character
+ * 
+ * This module calculates the desired camera rotation to position the camera
+ * behind the character, facing the direction of movement.  This provides
+ * natural camera behavior during exploration and navigation.
+ * 
+ * Steps:
+ * 1. Get character velocity (movement direction)
+ * 2. Extract horizontal movement (ignore vertical)
+ * 3. Calculate desired camera yaw (facing movement direction)
+ * 4. Preserve current pitch (don't affect vertical angle)
+ * 5. Calculate dynamic weight based on movement speed
+ * 6. Output with blend policy
+ * 
+ * Key Features:
+ * - Camera aligns to movement direction (not character facing)
+ * - Only affects yaw (horizontal), preserves pitch
+ * - Dynamic weight:  faster movement = stronger effect
+ * - Blends with input modules (doesn't override)
+ * 
+ * @param Context The current pipeline execution context
+ * @param StateConfig The current camera state configuration
+ * @param OutOutput Output structure to fill with computed values
+ * @return True if computation succeeded
+ */
+bool UCameraModule_R06_AutoOrient_Movement::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Step 1: Get character velocity (movement direction)
+	FVector Velocity = Context.InputContext.CharacterVelocity;
+	
+	// Step 2: Extract horizontal movement only
+	// We only care about horizontal direction, not vertical (jumping/falling)
+	Velocity.Z = 0.0f;
+	
+	// Validate velocity
+	if (Velocity. IsNearlyZero())
+	{
+		// No horizontal movement, cannot compute orientation
+		OutOutput.bHasRotationOutput = false;
+		return false;
+	}
+	
+	// Step 3: Calculate desired camera yaw from movement direction
+	// Velocity. Rotation() gives the rotation of the movement vector
+	FRotator MovementRotation = Velocity.Rotation();
+	
+	// Step 4: Construct desired camera rotation
+	// We want camera to face the movement direction (camera behind character)
+	// 
+	// Important: We only control yaw, preserve existing pitch
+	// This allows player to look up/down while auto-orient handles horizontal
+	FRotator DesiredRotation;
+	
+	// Yaw: Align to movement direction
+	DesiredRotation.Yaw = MovementRotation.Yaw;
+	
+	// Pitch:  Preserve current camera pitch
+	// Get current pitch from output or input context
+	FRotator CurrentRotation = Context. Output.Rotation;
+	if (CurrentRotation.IsNearlyZero())
+	{
+		// Fallback to previous camera rotation
+		CurrentRotation = Context.InputContext.PreviousCameraRotation;
+	}
+	DesiredRotation.Pitch = CurrentRotation.Pitch;
+	
+	// Roll: Always zero
+	DesiredRotation.Roll = 0.0f;
+	
+	// Step 5: Calculate dynamic weight based on movement speed
+	// Faster movement = stronger auto-orient effect
+	// This creates smooth transition and prevents jarring at low speeds
+	
+	float CharacterSpeed = Context.InputContext. CharacterSpeed;
+	
+	// Normalize speed to 0-1 range
+	// Assume max run speed is around 600 cm/s (6 m/s)
+	const float MaxRunSpeed = 600.0f;
+	float SpeedRatio = FMath::Clamp(CharacterSpeed / MaxRunSpeed, 0.0f, 1.0f);
+	
+	// Apply speed ratio as weight, scaled down to max 50% influence
+	// Max 50% ensures auto-orient is assistive, not dominant
+	// This allows blending with input modules (R01/R02)
+	const float MaxInfluence = 0.5f;
+	float Weight = SpeedRatio * MaxInfluence;
+	
+	// Alternative: Get weight from config
+	// float AutoOrientStrength = StateConfig.Module. Rotation.AutoOrientStrength;
+	// if (AutoOrientStrength > 0.0f && AutoOrientStrength <= 1.0f)
+	// {
+	//     Weight = SpeedRatio * AutoOrientStrength;
+	// }
+	
+	// Step 6: Fill output structure
+	OutOutput.RotationOutput = DesiredRotation;
+	OutOutput.bHasRotationOutput = true;
+	
+	// Set weight for blending
+	// Lower weight = subtle effect (assistive)
+	// Higher weight = stronger effect (more noticeable)
+	OutOutput.Weight = Weight;
+	
+	return true;
+}
+```
+
+**说明：**
+- 基于速度向量计算朝向
+- 仅控制Yaw，保留Pitch
+- 动态权重（0-0.5范围）
+- Blend策略（辅助性，不强制）
+
+---
+
+4. **完整的R06代码块（用于复制粘贴）：**
+
+```cpp
+//========================================
+// R06: AutoOrient Movement - Auto-align to movement
+//========================================
+
+/**
+ * ShouldActivate - Activate when moving without camera input
+ */
+bool UCameraModule_R06_AutoOrient_Movement::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (! bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Don't activate when target is locked
+	if (Context.InputContext.bHasTarget)
+	{
+		return false;
+	}
+	
+	// Check if character is moving
+	if (!Context.InputContext.bIsMoving)
+	{
+		return false;
+	}
+	
+	// Check if character speed exceeds minimum threshold
+	float MinSpeed = StateConfig.Module. Rotation.AutoOrientMinSpeed;
+	if (MinSpeed <= 0.0f)
+	{
+		MinSpeed = 100.0f;  // Default: 1 m/s
+	}
+	
+	if (Context.InputContext.CharacterSpeed < MinSpeed)
+	{
+		return false;
+	}
+	
+	// Check if player is NOT actively controlling camera
+	FVector2D CameraInput = Context.InputContext.CameraInput;
+	float InputMagnitude = CameraInput.Size();
+	
+	if (InputMagnitude >= 0.1f)
+	{
+		return false;  // Player controlling camera
+	}
+	
+	return true;
+}
+
+/**
+ * Compute - Align camera to movement direction with dynamic weight
+ */
+bool UCameraModule_R06_AutoOrient_Movement::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output
+	OutOutput = CreateBaseOutput();
+	
+	// Get character velocity
+	FVector Velocity = Context.InputContext.CharacterVelocity;
+	
+	// Extract horizontal movement only
+	Velocity.Z = 0.0f;
+	
+	// Validate velocity
+	if (Velocity.IsNearlyZero())
+	{
+		OutOutput.bHasRotationOutput = false;
+		return false;
+	}
+	
+	// Calculate desired camera yaw from movement direction
+	FRotator MovementRotation = Velocity.Rotation();
+	
+	// Construct desired rotation (only control yaw)
+	FRotator DesiredRotation;
+	DesiredRotation.Yaw = MovementRotation. Yaw;
+	
+	// Preserve current pitch
+	FRotator CurrentRotation = Context.Output.Rotation;
+	if (CurrentRotation.IsNearlyZero())
+	{
+		CurrentRotation = Context.InputContext.PreviousCameraRotation;
+	}
+	DesiredRotation.Pitch = CurrentRotation.Pitch;
+	
+	// Force roll to zero
+	DesiredRotation.Roll = 0.0f;
+	
+	// Calculate dynamic weight based on movement speed
+	float CharacterSpeed = Context. InputContext.CharacterSpeed;
+	const float MaxRunSpeed = 600.0f;
+	float SpeedRatio = FMath:: Clamp(CharacterSpeed / MaxRunSpeed, 0.0f, 1.0f);
+	
+	// Max 50% influence (assistive, not dominant)
+	const float MaxInfluence = 0.5f;
+	float Weight = SpeedRatio * MaxInfluence;
+	
+	// Fill output
+	OutOutput.RotationOutput = DesiredRotation;
+	OutOutput.bHasRotationOutput = true;
+	OutOutput.Weight = Weight;
+	
+	return true;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 说明自动对齐的逻辑
+   - 解释为什么只控制Yaw
+   - 说明动态权重的作用
+   - 所有注释使用英文
+
+2. **格式：**
+   - 使用Tab缩进
+   - 清晰的步骤划分
+   - 方法之间空两行
+
+3. **常量使用：**
+   - MinSpeed默认100 cm/s
+   - MaxRunSpeed = 600 cm/s
+   - MaxInfluence = 0.5（50%）
+   - 输入阈值0.1
+
+【技术说明】
+
+**R06的核心机制：**
+
+### 1. 自动对齐的触发条件
+
+**为什么需要这么多条件？**
+
+```
+条件1: ! bHasTarget
+- 战斗中不要自动对齐
+- 让锁定模块控制
+
+条件2: bIsMoving && Speed > MinSpeed
+- 静止时不对齐（保持玩家设置的角度）
+- 太慢时不对齐（微调位置时）
+
+条件3: InputMagnitude < 0.1
+- 玩家控制相机时不干扰
+- 只在"无输入"时辅助
+
+结果：
+- 仅在探索移动时辅助
+- 不干扰战斗和玩家控制
+- 自然流畅的体验
+```
+
+### 2. 仅控制Yaw的原因
+
+**为什么不控制Pitch？**
+
+```
+场景：玩家向前跑，同时向上看天空
+
+如果控制Pitch：
+DesiredRotation.Pitch = 0°（水平）
+→ 相机被强制拉回水平
+→ 玩家无法看天空
+→ 体验差
+
+只控制Yaw：
+DesiredRotation.Yaw = MovementDirection
+DesiredRotation.Pitch = CurrentPitch（保持）
+→ 相机水平方向对齐移动
+→ 垂直方向保持玩家设置
+→ 体验好 ✅
+```
+
+### 3. 动态权重系统
+
+**权重计算：**
+```
+Weight = SpeedRatio * MaxInfluence
+
+SpeedRatio = Clamp(CharacterSpeed / 600, 0, 1)
+MaxInfluence = 0.5
+
+示例：
+速度100 cm/s (慢走): SpeedRatio=0.17 → Weight=0.085 (8.5%)
+速度300 cm/s (快走): SpeedRatio=0.5  → Weight=0.25 (25%)
+速度600 cm/s (跑步): SpeedRatio=1.0  → Weight=0.5 (50%)
+
+效果：
+- 慢走：轻微对齐
+- 快走：适度对齐
+- 跑步：明显对齐
+```
+
+**为什么最大50%？**
+```
+如果MaxInfluence = 1.0（100%）：
+- R06完全控制相机
+- 玩家输入被压制
+- 感觉失控
+
+如果MaxInfluence = 0.5（50%）：
+- R06提供辅助
+- 玩家输入仍主导（R01权重1.0）
+- 混合：R01 67% + R06 33%
+- 平衡 ✅
+```
+
+### 4. 与其他模块的交互
+
+**优先级关系：**
+```
+R01 (Free Input): 100, Override
+R06 (Auto Orient): 90, Blend
+
+场景：玩家移动但不控制相机
+
+如果R01激活（有输入）：
+- R06的ShouldActivate返回false（检测到输入）
+- 只有R01工作
+- 玩家完全控制
+
+如果R01不激活（无输入）：
+- R06激活
+- 自动对齐生效
+- 辅助性调整
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] ShouldActivate()完整
+   - [ ] Compute()完整
+   - [ ] 所有条件检查正确
+
+3. **逻辑正确性：**
+   - [ ] 仅在移动时激活
+   - [ ] 检测相机输入
+   - [ ] 仅控制Yaw
+   - [ ] 保留Pitch
+   - [ ] 动态权重计算正确
+
+【注意事项】
+
+1. **不需要Regenerate**
+
+2. **MinSpeed处理：**
+   ```cpp
+   // 如果字段不存在
+   float MinSpeed = 100.0f;  // 直接使用默认值
+   ```
+
+3. **InputMagnitude阈值：**
+   ```cpp
+   // 0.1是摇杆死区
+   // 可以调整为0.05（更敏感）或0.15（不敏感）
+   ```
+
+4. **MaxInfluence调整：**
+   ```cpp
+   // 0.3:  更微妙
+   // 0.5: 推荐 ✅
+   // 0.7: 更明显
+   ```
+
+5. **测试建议：**
+   - 向前跑，不动相机 → 应该自动对齐
+   - 向前跑，转动相机 → 不应该自动对齐
+   - 不同速度测试权重效果
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 3.3.7 完成报告
+================================================================================
+
+【修改内容】
+- 文件：CameraModule_Rotation.cpp
+- 修改位置：R06模块
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ ShouldActivate:  检测移动+无输入
+- ✅ Compute:  对齐到移动方向
+
+【编译结果】
+- 编译状态：[成功/失败]
+
+【最终状态】
+✅ R06完成，提供自然的移动对齐
+
+================================================================================
+```
+
+【后续步骤】
+
+R06完成后：
+- [x] ✅ 3.3.6:  R05 - LookAt Boss
+- [x] ✅ 3.3.7: R06 - AutoOrient Movement
+- [ ] ⏳ 3.3.8: R07 - AutoOrient Delayed（下一步）
+
+**Rotation模块完成度：6/9 (66.7%)**
+
+================================================================================

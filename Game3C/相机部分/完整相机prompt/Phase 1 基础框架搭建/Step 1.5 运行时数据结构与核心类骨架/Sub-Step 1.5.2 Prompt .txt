@@ -1,0 +1,305 @@
+================================================================================
+任务：在SoulsCameraRuntimeTypes.  h中添加FSoulsCameraOutput结构体
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.     27 C++项目。
+FSoulsCameraOutput是Pipeline的输出，从Stage 5开始传递到Stage 8。
+最终被写入UE4原生的SpringArm和Camera组件。
+
+【当前进度】
+Phase 1 Step 1.5 Sub-Step 1.5.2 (共190个Sub-Step中的第30个)
+前置完成：1. 5.1 FCameraInputContext
+
+【任务目标】
+在SoulsCameraRuntimeTypes.h中添加FSoulsCameraOutput结构体。
+这是相机最终输出的数据，包含位置、旋转、距离、FOV等。
+
+【具体要求】
+
+1. 在FCameraInputContext之后添加：
+
+```cpp
+//========================================
+// FSoulsCameraOutput - Pipeline Output (Stage 5-8)
+//========================================
+/**
+ * Final camera output after all calculations
+ * This data is applied to the SpringArm and Camera components in Stage 8
+ */
+USTRUCT(BlueprintType)
+struct FSoulsCameraOutput
+{
+    GENERATED_BODY()
+
+    //--- Core Transform ---
+    
+    /** Focus/pivot point (where the camera arm attaches) */
+    UPROPERTY(BlueprintReadWrite, Category = "Transform")
+    FVector FocusPoint;
+
+    /** Camera world rotation */
+    UPROPERTY(BlueprintReadWrite, Category = "Transform")
+    FRotator Rotation;
+
+    /** Camera arm length (distance from focus point) */
+    UPROPERTY(BlueprintReadWrite, Category = "Transform")
+    float Distance;
+
+    //--- Field of View ---
+    
+    /** Camera field of view in degrees */
+    UPROPERTY(BlueprintReadWrite, Category = "FOV")
+    float FOV;
+
+    //--- Offsets ---
+    
+    /** Socket offset (camera position relative to arm end) */
+    UPROPERTY(BlueprintReadWrite, Category = "Offset")
+    FVector SocketOffset;
+
+    /** Target offset (arm pivot point offset) */
+    UPROPERTY(BlueprintReadWrite, Category = "Offset")
+    FVector TargetOffset;
+
+    //--- Post Process ---
+    
+    /** Vignette intensity (0-1) */
+    UPROPERTY(BlueprintReadWrite, Category = "PostProcess")
+    float VignetteIntensity;
+
+    /** Color tint multiplier */
+    UPROPERTY(BlueprintReadWrite, Category = "PostProcess")
+    FLinearColor ColorTint;
+
+    /** Depth of field focal distance */
+    UPROPERTY(BlueprintReadWrite, Category = "PostProcess")
+    float DOFFocalDistance;
+
+    /** Motion blur amount */
+    UPROPERTY(BlueprintReadWrite, Category = "PostProcess")
+    float MotionBlurAmount;
+
+    //--- State Info ---
+    
+    /** Current active state name */
+    UPROPERTY(BlueprintReadOnly, Category = "State")
+    FName CurrentStateName;
+
+    /** Blend alpha for state transition (0-1) */
+    UPROPERTY(BlueprintReadOnly, Category = "State")
+    float StateBlendAlpha;
+
+    /** Is currently in transition between states */
+    UPROPERTY(BlueprintReadOnly, Category = "State")
+    bool bIsInTransition;
+
+    //--- Collision Info ---
+    
+    /** Camera was adjusted due to collision */
+    UPROPERTY(BlueprintReadOnly, Category = "Collision")
+    bool bCollisionAdjusted;
+
+    /** Original distance before collision adjustment */
+    UPROPERTY(BlueprintReadOnly, Category = "Collision")
+    float PreCollisionDistance;
+
+    /** Collision compression ratio (current/desired distance) */
+    UPROPERTY(BlueprintReadOnly, Category = "Collision")
+    float CollisionCompressionRatio;
+
+    /** Constructor with default values */
+    FSoulsCameraOutput()
+        : FocusPoint(FVector::ZeroVector)
+        , Rotation(FRotator:: ZeroRotator)
+        , Distance(400.0f)
+        , FOV(70.0f)
+        , SocketOffset(FVector::ZeroVector)
+        , TargetOffset(FVector::ZeroVector)
+        , VignetteIntensity(0.0f)
+        , ColorTint(FLinearColor::White)
+        , DOFFocalDistance(0.0f)
+        , MotionBlurAmount(0.5f)
+        , CurrentStateName(NAME_None)
+        , StateBlendAlpha(1.0f)
+        , bIsInTransition(false)
+        , bCollisionAdjusted(false)
+        , PreCollisionDistance(400.0f)
+        , CollisionCompressionRatio(1.0f)
+    {}
+
+    /** Get the final camera world location */
+    FORCEINLINE FVector GetCameraLocation() const
+    {
+        // Camera location = FocusPoint + Rotation direction * Distance + SocketOffset
+        FVector Direction = Rotation. Vector() * -1.0f; // Camera looks opposite to its forward
+        return FocusPoint + Direction * Distance + SocketOffset;
+    }
+
+    /** Blend between two outputs */
+    static FSoulsCameraOutput Lerp(const FSoulsCameraOutput& A, const FSoulsCameraOutput& B, float Alpha)
+    {
+        FSoulsCameraOutput Result;
+        
+        Result.  FocusPoint = FMath:: Lerp(A. FocusPoint, B. FocusPoint, Alpha);
+        Result. Rotation = FMath::Lerp(A. Rotation, B. Rotation, Alpha);
+        Result. Distance = FMath:: Lerp(A.Distance, B. Distance, Alpha);
+        Result. FOV = FMath:: Lerp(A.FOV, B. FOV, Alpha);
+        Result. SocketOffset = FMath::Lerp(A. SocketOffset, B.SocketOffset, Alpha);
+        Result. TargetOffset = FMath:: Lerp(A.  TargetOffset, B.TargetOffset, Alpha);
+        Result. VignetteIntensity = FMath:: Lerp(A.  VignetteIntensity, B. VignetteIntensity, Alpha);
+        Result. ColorTint = FMath::Lerp(A. ColorTint, B.ColorTint, Alpha);
+        Result. DOFFocalDistance = FMath:: Lerp(A.  DOFFocalDistance, B.DOFFocalDistance, Alpha);
+        Result. MotionBlurAmount = FMath:: Lerp(A. MotionBlurAmount, B. MotionBlurAmount, Alpha);
+        
+        // State info uses B's values when blending
+        Result.CurrentStateName = B.CurrentStateName;
+        Result. StateBlendAlpha = Alpha;
+        Result.bIsInTransition = (Alpha > 0.0f && Alpha < 1.0f);
+        
+        // Collision info uses current (B) values
+        Result.bCollisionAdjusted = B.bCollisionAdjusted;
+        Result. PreCollisionDistance = B.PreCollisionDistance;
+        Result.CollisionCompressionRatio = B.CollisionCompressionRatio;
+        
+        return Result;
+    }
+};
+```
+
+2. 代码风格：
+   - BlueprintReadWrite用于可修改的输出值
+   - BlueprintReadOnly用于状态信息
+   - 提供静态Lerp函数用于状态混合
+   - GetCameraLocation()辅助函数计算最终位置
+
+【验证标准】
+- 编译通过
+- 可创建FSoulsCameraOutput实例
+- Lerp函数可正常调用
+
+【注意事项】
+- 添加在FCameraInputContext之后
+- FLinearColor需要确保头文件正确
+
+【输出要求】
+输出FSoulsCameraOutput结构体代码块。
+
+================================================================================
+                        上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+```
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：Sub-Step 1.5.2 FSoulsCameraOutput结构体
+- 完成进度：[X/16] 成员变量 或 [百分比]
+- 中断位置：[具体说明在哪里中断，例如：完成到Post Process分组，未完成State Info和Collision Info]
+
+【已完成内容】
+- FSoulsCameraOutput结构体开始
+- [列出已完成的Category分组]
+
+【未完成内容】
+- [列出剩余Category分组]
+- 构造函数
+- GetCameraLocation()函数
+- 静态Lerp()函数
+
+【已生成代码保存提示】
+请将上方已生成的代码添加到SoulsCameraRuntimeTypes.h中FCameraInputContext之后，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Phase 1 Step 1.5 Sub-Step 1.5.2 续接任务。
+创建FSoulsCameraOutput运行时输出结构体。
+
+【前置完成】
+- Step 1.1-1.4 所有参数结构体和配置 ✅
+- Sub-Step 1.5.1 FCameraInputContext ✅
+- Sub-Step 1.5.2 部分完成：
+  - FSoulsCameraOutput结构体开始 ✅
+  - [列出已完成的Category分组] ✅
+
+【续接任务】
+继续完成SoulsCameraRuntimeTypes.h文件的FSoulsCameraOutput：
+- [列出剩余Category分组]
+- 构造函数
+- GetCameraLocation()辅助函数
+- 静态Lerp()混合函数
+
+【已有代码上下文】
+文件：SoulsCameraRuntimeTypes.h
+已有结构体：FCameraInputContext
+FSoulsCameraOutput结构体已开始定义。
+
+【FSoulsCameraOutput成员变量清单（共16个）】
+Core Transform (3个)：
+- FocusPoint, Rotation, Distance
+
+FOV (1个)：
+- FOV
+
+Offset (2个)：
+- SocketOffset, TargetOffset
+
+PostProcess (4个)：
+- VignetteIntensity, ColorTint, DOFFocalDistance, MotionBlurAmount
+
+State Info (3个)：
+- CurrentStateName, StateBlendAlpha, bIsInTransition
+
+Collision Info (3个)：
+- bCollisionAdjusted, PreCollisionDistance, CollisionCompressionRatio
+
+【辅助函数】
+- GetCameraLocation() - 计算最终相机世界位置
+- static Lerp() - 两个输出之间的混合
+
+【输出要求】
+继续生成剩余代码，完成Sub-Step 1.5.2的FSoulsCameraOutput结构体。
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。如再次达到限制，请再次生成交接信息。
+
+---结束复制---
+
+================================================================================
+```
+
+【交接信息要求】
+1. 交接PROMPT必须是**完全自包含**的，新对话无需任何额外信息即可继续
+2. 包含所有必要的**代码上下文**（关键结构体定义、依赖关系等）
+3. 明确标注**中断位置**和**剩余任务**
+4. 标明目标文件：SoulsCameraRuntimeTypes.h
+5. 包含FSoulsCameraOutput完整成员清单（按Category分组，共16个）
+6. 列出两个重要辅助函数：GetCameraLocation()和static Lerp()
+7. 注意BlueprintReadWrite和BlueprintReadOnly的区分使用
+
+================================================================================

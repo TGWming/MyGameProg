@@ -1,0 +1,684 @@
+================================================================================
+任务：创建CameraStage_BlendSolve. cpp - Stage 5实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4. 27 C++项目。
+实现Stage 5的混合逻辑。
+
+【当前进度】
+Phase 2 Step 2. 3 Sub-Step 2.3.6 (共190个Sub-Step中的第48个)
+
+前置完成：
+- Phase 1 全部完成 ✅
+- Sub-Step 2.1. 1-2.1.3:  Pipeline骨架 ✅
+- Sub-Step 2.2.1-2.2.4: Stage 1-2 ✅
+- Sub-Step 2.3.1-2.3.2: Stage 3 (ModuleCompute) ✅
+- Sub-Step 2.3.3-2.3.4: Stage 4 (ModifierApply) ✅
+- Sub-Step 2.3.5: CameraStage_BlendSolve. h ✅
+
+【任务目标】
+创建文件：Source/[ProjectName]/Camera/Pipeline/CameraStage_BlendSolve.cpp
+实现Stage 5混合逻辑。
+
+**这是一个. cpp文件，添加后需要重新Generate Visual Studio project files。**
+
+【具体要求】
+
+1. 文件路径：Source/[ProjectName]/Camera/Pipeline/CameraStage_BlendSolve.cpp
+
+2. 完整文件内容：
+
+```cpp
+// Copyright Epic Games, Inc.  All Rights Reserved. 
+
+#include "CameraStage_BlendSolve.h"
+#include "Camera/Core/SoulsCameraManager.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogCameraStage_Blend, Log, All);
+
+//========================================
+// Constructor 构造函数
+//========================================
+
+UCameraStage_BlendSolve::UCameraStage_BlendSolve()
+    : ModuleOutputsProcessed(0)
+    , ModifierOutputsProcessed(0)
+    , OverrideConflictsResolved(0)
+    , TotalBlendTimeMs(0.0f)
+{
+}
+
+//========================================
+// ICameraStage Interface 接口实现
+//========================================
+
+EStageResult UCameraStage_BlendSolve::Execute(FStageExecutionContext& Context)
+{
+    // Reset statistics
+    ModuleOutputsProcessed = 0;
+    ModifierOutputsProcessed = 0;
+    OverrideConflictsResolved = 0;
+
+    const double StartTime = FPlatformTime:: Seconds();
+
+    // Step 1: Sort module outputs by priority
+    SortOutputsByPriority(Context. ModuleOutputs);
+
+    // Step 2: Resolve override conflicts
+    ResolveOverrideConflicts(Context.ModuleOutputs);
+
+    // Step 3: Blend all module outputs
+    BlendModuleOutputs(Context);
+
+    // Step 4: Sort modifier outputs by priority
+    SortModifiersByPriority(Context.ModifierOutputs);
+
+    // Step 5: Apply modifier effects
+    ApplyModifierOutputs(Context);
+
+    TotalBlendTimeMs = static_cast<float>((FPlatformTime::Seconds() - StartTime) * 1000.0);
+
+    UE_LOG(LogCameraStage_Blend, Verbose, TEXT("Execute:  Processed %d modules, %d modifiers in %. 2fms"),
+        ModuleOutputsProcessed, ModifierOutputsProcessed, TotalBlendTimeMs);
+
+    return EStageResult::Success;
+}
+
+void UCameraStage_BlendSolve::OnPreExecute(const FStageExecutionContext& Context)
+{
+    UE_LOG(LogCameraStage_Blend, VeryVerbose, TEXT("Stage 5 BlendSolve:  PreExecute - %d module outputs, %d modifier outputs"),
+        Context.ModuleOutputs.Num(), Context.ModifierOutputs.Num());
+}
+
+void UCameraStage_BlendSolve::OnPostExecute(const FStageExecutionContext& Context, EStageResult Result)
+{
+    UE_LOG(LogCameraStage_Blend, VeryVerbose, TEXT("Stage 5 BlendSolve: PostExecute - Distance=%.1f, FOV=%.1f"),
+        Context.Output.Distance, Context. Output.FOV);
+}
+
+//========================================
+// Sorting 排序
+//========================================
+
+void UCameraStage_BlendSolve::SortOutputsByPriority(TArray<FModuleOutput>& Outputs)
+{
+    // Sort by priority (lower priority first, higher priority processed last and can override)
+    Outputs.Sort([](const FModuleOutput& A, const FModuleOutput& B)
+    {
+        return A.Priority < B.Priority;
+    });
+
+    UE_LOG(LogCameraStage_Blend, VeryVerbose, TEXT("SortOutputsByPriority: Sorted %d outputs"), Outputs.Num());
+}
+
+void UCameraStage_BlendSolve::SortModifiersByPriority(TArray<FModifierOutput>& Outputs)
+{
+    // Sort by priority (lower priority first, higher priority processed last and can override)
+    Outputs.Sort([](const FModifierOutput& A, const FModifierOutput& B)
+    {
+        return A.Priority < B.Priority;
+    });
+
+    UE_LOG(LogCameraStage_Blend, VeryVerbose, TEXT("SortModifiersByPriority:  Sorted %d outputs"), Outputs.Num());
+}
+
+//========================================
+// Module Blending 模块混合
+//========================================
+
+void UCameraStage_BlendSolve:: BlendModuleOutputs(FStageExecutionContext& Context)
+{
+    // Start with base values from Stage 2 (StateMachine)
+    FVector BlendedPosition = Context.Output.FocusPoint;
+    FRotator BlendedRotation = Context.Output. Rotation;
+    float BlendedDistance = Context.Output.Distance;
+    float BlendedFOV = Context.Output.FOV;
+    FVector BlendedSocketOffset = Context.Output. SocketOffset;
+
+    // Process each module output in priority order
+    for (const FModuleOutput& Output : Context. ModuleOutputs)
+    {
+        if (Output.Weight <= 0.0f)
+        {
+            continue;
+        }
+
+        ModuleOutputsProcessed++;
+
+        // Position
+        if (Output.bHasPositionOutput)
+        {
+            BlendedPosition = ApplyBlendPolicyVector(
+                BlendedPosition, 
+                Output. PositionOffset, 
+                Output.BlendPolicy, 
+                Output. Weight
+            );
+        }
+
+        // Rotation
+        if (Output.bHasRotationOutput)
+        {
+            BlendedRotation = ApplyBlendPolicyRotator(
+                BlendedRotation,
+                Output. RotationOutput,
+                Output. BlendPolicy,
+                Output.Weight
+            );
+        }
+
+        // Distance
+        if (Output. bHasDistanceOutput)
+        {
+            if (Output.bDistanceIsMultiplier)
+            {
+                // Multiplier mode:  lerp towards multiplier effect
+                BlendedDistance *= FMath:: Lerp(1.0f, Output.DistanceOutput, Output.Weight);
+            }
+            else
+            {
+                BlendedDistance = ApplyBlendPolicy(
+                    BlendedDistance, 
+                    Output.DistanceOutput, 
+                    Output.BlendPolicy, 
+                    Output.Weight
+                );
+            }
+        }
+
+        // FOV
+        if (Output.bHasFOVOutput)
+        {
+            BlendedFOV = ApplyBlendPolicy(
+                BlendedFOV, 
+                Output. FOVOutput, 
+                Output.BlendPolicy, 
+                Output.Weight
+            );
+        }
+
+        // Socket Offset
+        if (Output.bHasSocketOffsetOutput)
+        {
+            BlendedSocketOffset = ApplyBlendPolicyVector(
+                BlendedSocketOffset, 
+                Output.SocketOffsetOutput, 
+                Output.BlendPolicy, 
+                Output.Weight
+            );
+        }
+    }
+
+    // Apply blended values to output
+    Context.Output.FocusPoint = BlendedPosition;
+    Context.Output. Rotation = BlendedRotation;
+    Context.Output. Distance = BlendedDistance;
+    Context.Output.FOV = BlendedFOV;
+    Context.Output. SocketOffset = BlendedSocketOffset;
+
+    UE_LOG(LogCameraStage_Blend, VeryVerbose, TEXT("BlendModuleOutputs: Final Distance=%.1f, FOV=%.1f"),
+        BlendedDistance, BlendedFOV);
+}
+
+FVector UCameraStage_BlendSolve::BlendPositions(const TArray<FModuleOutput>& Outputs, const FVector& BasePosition)
+{
+    FVector Result = BasePosition;
+
+    for (const FModuleOutput& Output :  Outputs)
+    {
+        if (Output.bHasPositionOutput && Output.Weight > 0.0f)
+        {
+            Result = ApplyBlendPolicyVector(Result, Output.PositionOffset, Output.BlendPolicy, Output.Weight);
+        }
+    }
+
+    return Result;
+}
+
+FRotator UCameraStage_BlendSolve::BlendRotations(const TArray<FModuleOutput>& Outputs, const FRotator& BaseRotation)
+{
+    FRotator Result = BaseRotation;
+
+    for (const FModuleOutput& Output : Outputs)
+    {
+        if (Output.bHasRotationOutput && Output.Weight > 0.0f)
+        {
+            Result = ApplyBlendPolicyRotator(Result, Output. RotationOutput, Output.BlendPolicy, Output.Weight);
+        }
+    }
+
+    return Result;
+}
+
+float UCameraStage_BlendSolve::BlendDistances(const TArray<FModuleOutput>& Outputs, float BaseDistance)
+{
+    float Result = BaseDistance;
+
+    for (const FModuleOutput& Output :  Outputs)
+    {
+        if (Output.bHasDistanceOutput && Output.Weight > 0.0f)
+        {
+            if (Output.bDistanceIsMultiplier)
+            {
+                Result *= FMath:: Lerp(1.0f, Output. DistanceOutput, Output.Weight);
+            }
+            else
+            {
+                Result = ApplyBlendPolicy(Result, Output.DistanceOutput, Output.BlendPolicy, Output. Weight);
+            }
+        }
+    }
+
+    return Result;
+}
+
+float UCameraStage_BlendSolve::BlendFOVs(const TArray<FModuleOutput>& Outputs, float BaseFOV)
+{
+    float Result = BaseFOV;
+
+    for (const FModuleOutput& Output : Outputs)
+    {
+        if (Output.bHasFOVOutput && Output.Weight > 0.0f)
+        {
+            Result = ApplyBlendPolicy(Result, Output.FOVOutput, Output.BlendPolicy, Output. Weight);
+        }
+    }
+
+    return Result;
+}
+
+FVector UCameraStage_BlendSolve::BlendSocketOffsets(const TArray<FModuleOutput>& Outputs, const FVector& BaseOffset)
+{
+    FVector Result = BaseOffset;
+
+    for (const FModuleOutput& Output :  Outputs)
+    {
+        if (Output.bHasSocketOffsetOutput && Output.Weight > 0.0f)
+        {
+            Result = ApplyBlendPolicyVector(Result, Output.SocketOffsetOutput, Output.BlendPolicy, Output.Weight);
+        }
+    }
+
+    return Result;
+}
+
+//========================================
+// Modifier Application 修改器应用
+//========================================
+
+void UCameraStage_BlendSolve::ApplyModifierOutputs(FStageExecutionContext& Context)
+{
+    // Apply modifier effects on top of blended module outputs
+    for (const FModifierOutput& Output : Context. ModifierOutputs)
+    {
+        if (! Output.IsActive())
+        {
+            continue;
+        }
+
+        // Check for complete camera override first
+        if (ShouldModifierOverride(Output))
+        {
+            // Camera override takes full control
+            Context.Output.FocusPoint = Output.OverrideTransform.GetLocation();
+            Context.Output.Rotation = Output.OverrideTransform.GetRotation().Rotator();
+            
+            UE_LOG(LogCameraStage_Blend, Verbose, TEXT("ApplyModifierOutputs: Camera override applied"));
+            
+            // Skip remaining modifiers after override
+            break;
+        }
+
+        ApplySingleModifier(Context. Output, Output);
+        ModifierOutputsProcessed++;
+    }
+
+    UE_LOG(LogCameraStage_Blend, VeryVerbose, TEXT("ApplyModifierOutputs: Applied %d modifiers"),
+        ModifierOutputsProcessed);
+}
+
+void UCameraStage_BlendSolve::ApplySingleModifier(FSoulsCameraOutput& Output, const FModifierOutput& Modifier)
+{
+    const float Weight = Modifier. CurrentWeight;
+
+    if (Weight <= 0.0f)
+    {
+        return;
+    }
+
+    // Position effect (shake, knockback, etc.)
+    if (! Modifier. PositionEffect.IsNearlyZero())
+    {
+        Output. FocusPoint += Modifier.PositionEffect * Weight;
+    }
+
+    // Rotation effect (shake, reaction, etc.)
+    if (!Modifier. RotationEffect. IsNearlyZero())
+    {
+        Output. Rotation += Modifier.RotationEffect * Weight;
+    }
+
+    // Distance effect (zoom pulse, etc.)
+    if (!FMath::IsNearlyZero(Modifier.DistanceEffect))
+    {
+        Output.Distance += Modifier.DistanceEffect * Weight;
+    }
+
+    // FOV effect (zoom, impact, etc.)
+    if (!FMath::IsNearlyZero(Modifier.FOVEffect))
+    {
+        Output.FOV += Modifier.FOVEffect * Weight;
+    }
+
+    // Post-process effects
+    if (! FMath::IsNearlyZero(Modifier.VignetteEffect))
+    {
+        Output.VignetteIntensity += Modifier.VignetteEffect * Weight;
+    }
+
+    // Color tint (for status effects, low health, etc.)
+    if (Modifier.ColorTintEffect != FLinearColor::White)
+    {
+        Output.ColorTint = FMath::Lerp(Output.ColorTint, Modifier.ColorTintEffect, Weight);
+    }
+
+    // Time dilation (slow-mo, hit-stop)
+    if (!FMath::IsNearlyZero(Modifier.TimeDilationEffect))
+    {
+        Output. TimeDilation = FMath:: Lerp(1.0f, Modifier.TimeDilationEffect, Weight);
+    }
+}
+
+//========================================
+// Blend Policy Implementation 混合策略实现
+//========================================
+
+float UCameraStage_BlendSolve::ApplyBlendPolicy(float CurrentValue, float NewValue, EBlendPolicy Policy, float Weight)
+{
+    // Clamp weight to valid range
+    Weight = FMath:: Clamp(Weight, 0.0f, 1.0f);
+
+    switch (Policy)
+    {
+        case EBlendPolicy::Override:
+            // Smoothly transition to new value
+            return FMath:: Lerp(CurrentValue, NewValue, Weight);
+
+        case EBlendPolicy:: Additive:
+            // Add new value scaled by weight
+            return CurrentValue + NewValue * Weight;
+
+        case EBlendPolicy::Multiplicative: 
+            // Multiply by new value (lerp towards multiplier effect)
+            return CurrentValue * FMath::Lerp(1.0f, NewValue, Weight);
+
+        case EBlendPolicy::Blend:
+            // Same as Override for float values
+            return FMath::Lerp(CurrentValue, NewValue, Weight);
+
+        case EBlendPolicy::Minimum:
+            // Lerp towards minimum of both values
+            return FMath::Lerp(CurrentValue, FMath::Min(CurrentValue, NewValue), Weight);
+
+        case EBlendPolicy::Maximum:
+            // Lerp towards maximum of both values
+            return FMath::Lerp(CurrentValue, FMath::Max(CurrentValue, NewValue), Weight);
+
+        default:
+            // Default to Blend behavior
+            return FMath::Lerp(CurrentValue, NewValue, Weight);
+    }
+}
+
+FVector UCameraStage_BlendSolve::ApplyBlendPolicyVector(const FVector& CurrentValue, const FVector& NewValue, EBlendPolicy Policy, float Weight)
+{
+    // Clamp weight to valid range
+    Weight = FMath:: Clamp(Weight, 0.0f, 1.0f);
+
+    switch (Policy)
+    {
+        case EBlendPolicy::Override:
+            return FMath:: Lerp(CurrentValue, NewValue, Weight);
+
+        case EBlendPolicy:: Additive:
+            return CurrentValue + NewValue * Weight;
+
+        case EBlendPolicy::Multiplicative:
+            return CurrentValue * FMath::Lerp(FVector::OneVector, NewValue, Weight);
+
+        case EBlendPolicy::Blend:
+            return FMath::Lerp(CurrentValue, NewValue, Weight);
+
+        case EBlendPolicy::Minimum:
+            return FMath::Lerp(CurrentValue, CurrentValue.ComponentMin(NewValue), Weight);
+
+        case EBlendPolicy::Maximum:
+            return FMath::Lerp(CurrentValue, CurrentValue.ComponentMax(NewValue), Weight);
+
+        default:
+            return FMath::Lerp(CurrentValue, NewValue, Weight);
+    }
+}
+
+FRotator UCameraStage_BlendSolve::ApplyBlendPolicyRotator(const FRotator& CurrentValue, const FRotator& NewValue, EBlendPolicy Policy, float Weight)
+{
+    // Clamp weight to valid range
+    Weight = FMath::Clamp(Weight, 0.0f, 1.0f);
+
+    switch (Policy)
+    {
+        case EBlendPolicy::Override: 
+        case EBlendPolicy::Blend:
+            // Use RInterpTo for smooth rotation blending
+            return FMath::Lerp(CurrentValue, NewValue, Weight);
+
+        case EBlendPolicy::Additive:
+            // Add rotation (useful for shake effects)
+            return CurrentValue + NewValue * Weight;
+
+        case EBlendPolicy::Multiplicative: 
+            // Not meaningful for rotators, treat as blend
+            return FMath::Lerp(CurrentValue, NewValue, Weight);
+
+        case EBlendPolicy::Minimum: 
+            // Take minimum of each component
+            return FRotator(
+                FMath:: Lerp(CurrentValue. Pitch, FMath::Min(CurrentValue.Pitch, NewValue. Pitch), Weight),
+                FMath:: Lerp(CurrentValue.Yaw, FMath:: Min(CurrentValue. Yaw, NewValue.Yaw), Weight),
+                FMath:: Lerp(CurrentValue.Roll, FMath::Min(CurrentValue.Roll, NewValue.Roll), Weight)
+            );
+
+        case EBlendPolicy::Maximum: 
+            // Take maximum of each component
+            return FRotator(
+                FMath:: Lerp(CurrentValue.Pitch, FMath::Max(CurrentValue. Pitch, NewValue. Pitch), Weight),
+                FMath::Lerp(CurrentValue.Yaw, FMath::Max(CurrentValue.Yaw, NewValue.Yaw), Weight),
+                FMath:: Lerp(CurrentValue.Roll, FMath::Max(CurrentValue.Roll, NewValue.Roll), Weight)
+            );
+
+        default: 
+            return FMath::Lerp(CurrentValue, NewValue, Weight);
+    }
+}
+
+//========================================
+// Conflict Resolution 冲突解决
+//========================================
+
+void UCameraStage_BlendSolve::ResolveOverrideConflicts(TArray<FModuleOutput>& Outputs)
+{
+    // When multiple outputs with Override policy exist, only keep the highest priority one
+    // Others are converted to Blend policy
+    
+    TArray<int32> OverrideIndices;
+    
+    // Find all Override outputs
+    for (int32 i = 0; i < Outputs.Num(); ++i)
+    {
+        if (Outputs[i].BlendPolicy == EBlendPolicy::Override && Outputs[i]. Weight > 0.0f)
+        {
+            OverrideIndices.Add(i);
+        }
+    }
+
+    // If multiple overrides, convert all but the last (highest priority after sort) to Blend
+    if (OverrideIndices. Num() > 1)
+    {
+        for (int32 i = 0; i < OverrideIndices. Num() - 1; ++i)
+        {
+            Outputs[OverrideIndices[i]].BlendPolicy = EBlendPolicy::Blend;
+            OverrideConflictsResolved++;
+        }
+
+        UE_LOG(LogCameraStage_Blend, Verbose, TEXT("ResolveOverrideConflicts:  Resolved %d conflicts"),
+            OverrideConflictsResolved);
+    }
+}
+
+bool UCameraStage_BlendSolve::ShouldModifierOverride(const FModifierOutput& Modifier) const
+{
+    // Check if modifier wants to completely override camera
+    return Modifier.bOverrideCamera && Modifier.CurrentWeight >= 0.99f;
+}
+```
+
+3. 代码风格：
+   - 使用专用日志类别 `LogCameraStage_Blend`
+   - 初始化. h中声明的所有成员变量
+   - 完整实现所有6种EBlendPolicy
+   - 实现ApplyBlendPolicyRotator（旋转专用）
+   - 实现冲突解决逻辑
+   - 处理修改器的完整覆盖（bOverrideCamera）
+   - 添加TimeDilation处理
+   - 中英文注释分组
+
+【验证标准】
+- 编译通过
+- 混合逻辑正确处理所有BlendPolicy类型
+- 日志输出正确
+
+【注意事项】
+- 使用EBlendPolicy、FModuleOutput、FModifierOutput、FSoulsCameraOutput（来自SoulsCameraRuntimeTypes. h）
+- 排序后低优先级先处理，高优先级后处理（可覆盖低优先级结果）
+- 修改器的bOverrideCamera可完全覆盖相机
+- **这是. cpp文件，添加后需要重新Generate Visual Studio project files**
+
+【输出要求】
+输出完整的CameraStage_BlendSolve. cpp文件代码。
+
+================================================================================
+                        上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+```
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：Sub-Step 2.3.6 创建CameraStage_BlendSolve.cpp - Stage 5实现
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断，例如：完成到ApplyBlendPolicy，未完成ApplyBlendPolicyVector]
+
+【已完成内容】
+- 构造函数
+- Execute方法
+- OnPreExecute/OnPostExecute
+- 排序方法
+- 模块混合方法
+- [列出已完成的方法]
+
+【未完成内容】
+- [列出剩余方法]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存到CameraStage_BlendSolve. cpp，然后开启新对话。
+
+【编译注意】
+添加. cpp文件后需要：
+1. 右键. uproject → Generate Visual Studio project files
+2. 重新打开. sln
+
+================================================================================
+                    继续任务 - 新对话PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Phase 2 Step 2. 3 Sub-Step 2.3.6 续接任务。
+完成CameraStage_BlendSolve. cpp实现。
+
+【前置完成】
+- Phase 1 全部完成 ✅
+- Sub-Step 2.1. 1-2.1.3:  Pipeline骨架 ✅
+- Sub-Step 2.2.1-2.2.4: Stage 1-2 ✅
+- Sub-Step 2.3.1-2.3.4: Stage 3-4 ✅
+- Sub-Step 2.3.5: CameraStage_BlendSolve. h ✅
+- Sub-Step 2.3.6 部分完成：
+  - [列出已完成的方法] ✅
+
+【续接任务】
+继续完成CameraStage_BlendSolve.cpp：
+- [列出剩余方法]
+
+【目标文件】
+Source/[ProjectName]/Camera/Pipeline/CameraStage_BlendSolve.cpp
+
+【方法清单】
+- 构造函数
+- Execute() / OnPreExecute() / OnPostExecute()
+- SortOutputsByPriority() / SortModifiersByPriority()
+- BlendModuleOutputs() / BlendPositions() / BlendRotations() / BlendDistances() / BlendFOVs() / BlendSocketOffsets()
+- ApplyModifierOutputs() / ApplySingleModifier()
+- ApplyBlendPolicy() / ApplyBlendPolicyVector() / ApplyBlendPolicyRotator()
+- ResolveOverrideConflicts() / ShouldModifierOverride()
+
+【EBlendPolicy类型】
+- Override: 覆盖
+- Additive: 叠加
+- Multiplicative: 乘法
+- Blend: 混合
+- Minimum: 取最小
+- Maximum: 取最大
+
+【编译注意】
+添加.cpp文件后需要：
+1. 右键. uproject → Generate Visual Studio project files
+2. 重新打开.sln
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================
+```
+
+【交接信息要求】
+1. 交接PROMPT必须是**完全自包含**的
+2. 明确标注目标文件和前置依赖
+3. 包含完整方法清单
+4. 包含EBlendPolicy类型清单
+5. **强调这是.cpp文件，需要Generate**
+
+================================================================================

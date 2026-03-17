@@ -1,0 +1,634 @@
+Sub-Step 3.3.2 Prompt
+
+================================================================================
+任务：创建CameraModule_Rotation.cpp - R01 PlayerInput_Free实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+R01是最基础的Rotation模块，处理玩家输入控制相机旋转。
+这是自由视角控制的核心，为探索和战斗提供标准的第三人称相机操作。
+
+【当前进度】
+Phase 3 Step 3.3 Sub-Step 3.3.2 (共190个Sub-Step中的第70个)
+前置完成：3.3.1 CameraModule_Rotation.h ✅
+
+【任务目标】
+创建文件：Source/[ProjectName]/Private/Camera/Modules/CameraModule_Rotation.cpp
+本Sub-Step创建文件框架并实现R01 PlayerInput_Free模块。
+
+【⚠️ 编码格式要求 - CRITICAL】
+
+1. **文件编码：UTF-8 Without BOM（强制）**
+   - 创建文件后立即检查VS Code右下角编码
+   - 如果显示 "UTF-8 with BOM"，点击转换为 "UTF-8"
+   - 保存前再次确认
+
+2. **注释规范：所有注释必须使用英文（强制）**
+   - 禁止使用中文注释
+   - 参考标准：已完成的CameraModule_Position.cpp
+
+3. **命名替换：**
+   - 将 [ProjectName] 替换为实际项目名称
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_Rotation.cpp
+
+2. **文件结构要求：**
+
+**A. 头部Include：**
+- 版权声明：// Copyright Epic Games, Inc.   All Rights Reserved.
+- 包含头文件（按顺序）：
+  * #include "Camera/Modules/CameraModule_Rotation.h"
+  * #include "Camera/Core/SoulsCameraManager.h"
+  * #include "GameFramework/PlayerController.h" （如果需要）
+  * 其他必需的头文件（如果需要）
+
+**B. 文件整体说明注释：**
+添加多行注释说明：
+- 此文件包含9个Rotation模块的实现
+- Rotation模块计算相机旋转（Pitch/Yaw/Roll）
+- 输出通过FModuleOutput.  RotationOutput传递
+- 当前Sub-Step实现R01，其他模块将在后续Sub-Step实现
+
+**C. R01 PlayerInput_Free完整实现：**
+
+---
+
+### R01: UCameraModule_R01_PlayerInput_Free
+
+**分隔注释：**
+```cpp
+//========================================
+// R01: Player Input Free - Free camera rotation from player input
+//========================================
+```
+
+**方法1:  构造函数实现：**
+
+功能说明：
+- 初始化CurrentRotation为零旋转
+- 初始化BaseSensitivity为默认值
+
+实现要求：
+```cpp
+/**
+ * Constructor - Initialize rotation state
+ * 
+ * Sets up default values for free camera rotation. 
+ * CurrentRotation will be properly initialized when module activates.
+ */
+UCameraModule_R01_PlayerInput_Free::UCameraModule_R01_PlayerInput_Free()
+	: CurrentRotation(FRotator::ZeroRotator)
+	, BaseSensitivity(1.0f)
+{
+}
+```
+
+---
+
+**方法2: OnActivate() 实现：**
+
+功能说明：
+- 当模块激活时，初始化CurrentRotation
+- 使用前一帧的相机旋转作为起点，避免突变
+
+实现步骤：
+
+1. 调用基类OnActivate：
+```cpp
+Super::OnActivate(Context);
+```
+
+2. 初始化CurrentRotation：
+```cpp
+// Initialize to previous camera rotation to avoid sudden jumps
+CurrentRotation = Context.InputContext.  PreviousCameraRotation;
+```
+
+完整方法：
+```cpp
+/**
+ * OnActivate - Initialize rotation state when module becomes active
+ * 
+ * When R01 activates, we initialize CurrentRotation to the previous
+ * camera rotation to avoid sudden jumps.  This ensures smooth transition
+ * when switching between rotation modules.
+ * 
+ * @param Context The current pipeline execution context
+ */
+void UCameraModule_R01_PlayerInput_Free::OnActivate(const FStageExecutionContext& Context)
+{
+	Super::OnActivate(Context);
+	
+	// Initialize to previous camera rotation to avoid sudden jumps
+	// This maintains continuity when switching from another rotation module
+	CurrentRotation = Context.InputContext.PreviousCameraRotation;
+}
+```
+
+**⚠️ InputContext字段注意：**
+如果FCameraInputContext中没有PreviousCameraRotation字段，可以使用：
+```cpp
+// 替代方案1：从Output读取
+CurrentRotation = Context.Output.CameraRotation;
+
+// 替代方案2：从StateConfig读取默认值
+CurrentRotation = StateConfig.StateBase.Rotation.DefaultRotation;
+
+// 替代方案3：保持当前值（零旋转）
+CurrentRotation = FRotator::ZeroRotator;
+```
+
+---
+
+**方法3: ShouldActivate() 实现：**
+
+功能说明：
+- R01在非锁定状态下激活
+- 提供自由视角控制
+- 当有目标锁定时，由R03等模块接管
+
+实现要求：
+
+```cpp
+/**
+ * ShouldActivate - Determine if free camera input should be active
+ * 
+ * R01 activates when:
+ * - Module is enabled
+ * - No target is locked (free camera, not lock-on)
+ * - Input is not explicitly ignored (StateConfig flag)
+ * 
+ * This is the default rotation module for exploration and free combat.
+ * When a target is locked, R03 (LookAt Target) takes over with higher priority.
+ */
+bool UCameraModule_R01_PlayerInput_Free::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Don't activate when target is locked
+	// Lock-on rotation modules (R03-R05) handle that
+	if (Context.  InputContext. bHasTarget)
+	{
+		return false;
+	}
+	
+	// Check if input is explicitly ignored (cinematic states, etc.)
+	if (StateConfig.  StateBase. Flags.bIgnoreInput)
+	{
+		return false;
+	}
+	
+	// All conditions met - activate free camera control
+	return true;
+}
+```
+
+**说明：**
+- 三重条件检查：启用 + 无锁定 + 允许输入
+- 与R03互斥（R03需要bHasTarget）
+- 注释清楚说明激活条件
+
+---
+
+**方法4: Compute() 实现：**
+
+功能说明：
+- 读取玩家输入（Yaw/Pitch）
+- 应用灵敏度
+- 累积到CurrentRotation
+- 限制Pitch范围
+- 归一化Yaw
+- 输出到RotationOutput
+
+实现步骤：
+
+**完整实现：**
+```cpp
+/**
+ * Compute - Calculate camera rotation from player input
+ * 
+ * This module processes raw player input and converts it to camera rotation.
+ * 
+ * Steps:
+ * 1. Get camera input from InputContext (X=Yaw, Y=Pitch)
+ * 2. Apply sensitivity multiplier
+ * 3. Accumulate rotation deltas
+ * 4. Clamp pitch to configured limits
+ * 5. Normalize yaw to 0-360 range
+ * 6. Output the final rotation
+ * 
+ * Input Conventions:
+ * - CameraInput.X:   Horizontal input (Yaw) → Left/Right
+ * - CameraInput.Y:  Vertical input (Pitch) → Up/Down
+ * - Pitch is inverted for standard third-person controls
+ * 
+ * @param Context The current pipeline execution context
+ * @param StateConfig The current camera state configuration
+ * @param OutOutput Output structure to fill with computed values
+ * @return True if computation succeeded
+ */
+bool UCameraModule_R01_PlayerInput_Free::  Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Step 1: Get camera input from InputContext
+	// CameraInput is a 2D vector:  X=Yaw (horizontal), Y=Pitch (vertical)
+	FVector2D CameraInput = Context.InputContext.CameraInput;
+	
+	// Step 2: Get sensitivity from state config
+	// InputSensitivity is a global multiplier, BaseSensitivity is per-module
+	float InputSensitivity = StateConfig. Module.  Rotation.InputSensitivity;
+	
+	// If InputSensitivity not configured, use default
+	if (InputSensitivity <= 0.0f)
+	{
+		InputSensitivity = 1.0f;
+	}
+	
+	float TotalSensitivity = InputSensitivity * BaseSensitivity;
+	
+	// Step 3: Calculate rotation deltas from input
+	// Yaw (horizontal rotation, left-right)
+	float DeltaYaw = CameraInput.X * TotalSensitivity;
+	
+	// Pitch (vertical rotation, up-down)
+	// Multiply by -1.0 to invert (standard third-person convention)
+	// Positive input (up) → negative pitch (look up)
+	float DeltaPitch = CameraInput.Y * TotalSensitivity * -1.0f;
+	
+	// Step 4: Accumulate deltas to current rotation
+	// This maintains rotation state across frames
+	CurrentRotation. Yaw += DeltaYaw;
+	CurrentRotation. Pitch += DeltaPitch;
+	
+	// Step 5: Clamp pitch to configured limits
+	// Prevents camera from flipping over or looking straight down
+	// Typical values: MinPitch=-80°, MaxPitch=80°
+	float MinPitch = StateConfig.  StateBase.Rotation.MinPitch;
+	float MaxPitch = StateConfig. StateBase. Rotation.MaxPitch;
+	
+	// Validate pitch limits are reasonable
+	if (MinPitch >= MaxPitch)
+	{
+		// Invalid config, use default limits
+		MinPitch = -80.0f;
+		MaxPitch = 80.0f;
+	}
+	
+	CurrentRotation.Pitch = FMath::Clamp(CurrentRotation.Pitch, MinPitch, MaxPitch);
+	
+	// Step 6: Normalize yaw to 0-360 range
+	// Prevents yaw from growing infinitely large
+	// fmod handles both positive and negative values correctly
+	CurrentRotation.Yaw = FMath::  Fmod(CurrentRotation. Yaw, 360.0f);
+	if (CurrentRotation.Yaw < 0.0f)
+	{
+		CurrentRotation.  Yaw += 360.0f;
+	}
+	
+	// Step 7: Force roll to zero
+	// Third-person cameras should never roll
+	CurrentRotation. Roll = 0.0f;
+	
+	// Step 8: Fill output structure
+	OutOutput. RotationOutput = CurrentRotation;
+	OutOutput.bHasRotationOutput = true;
+	
+	return true;
+}
+```
+
+**说明：**
+- 详细的步骤注释
+- 输入约定说明（Pitch反转）
+- Pitch限制和Yaw归一化
+- Roll强制为零（第三人称标准）
+- 完整的默认值处理
+
+---
+
+**D. 其他8个模块的占位符：**
+
+为R02-R09添加分隔注释，标记为待实现：
+
+```cpp
+//========================================
+// R02: Player Input Lagged - Smoothed camera rotation
+//========================================
+
+// TODO: Will be implemented in Sub-Step 3.3.3
+// This module provides smooth, lagged rotation from player input
+
+//========================================
+// R03: LookAt Target - Hard lock-on rotation
+//========================================
+
+// TODO:  Will be implemented in Sub-Step 3.3.4
+// This module calculates rotation to face locked target
+
+//========================================
+// R04: LookAt Target Soft - Soft lock-on rotation
+//========================================
+
+// TODO: Will be implemented in Sub-Step 3.3.5
+// This module blends lock-on direction with player input
+
+//========================================
+// R05: LookAt Boss - Boss-specific look-at
+//========================================
+
+// TODO: Will be implemented in Sub-Step 3.3.6
+// This module handles rotation for boss encounters
+
+//========================================
+// R06: AutoOrient Movement - Auto-align to movement
+//========================================
+
+// TODO: Will be implemented in Sub-Step 3.3.7
+// This module gradually aligns camera behind character
+
+//========================================
+// R07: AutoOrient Delayed - Delayed auto-center
+//========================================
+
+// TODO:  Will be implemented in Sub-Step 3.3.8
+// This module auto-centers camera after input timeout
+
+//========================================
+// R08: LookAt Point - Look at fixed world point
+//========================================
+
+// TODO: Will be implemented in Sub-Step 3.3.9
+// This module calculates rotation to face a fixed point
+
+//========================================
+// R09:  Spline Rotation - Rotation along spline path
+//========================================
+
+// TODO: Will be implemented in Sub-Step 3.3.10
+// This module provides rotation for spline-based camera paths
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 每个方法前添加详细的文档注释
+   - 说明输入约定（Yaw/Pitch/Roll）
+   - 解释Pitch反转的原因
+   - 标注每个步骤
+   - 所有注释使用英文
+
+2. **格式：**
+   - 使用Tab缩进（与现有代码一致）
+   - 方法之间空两行
+   - 使用分隔注释组织代码
+
+3. **变量命名：**
+   - DeltaYaw, DeltaPitch（清晰的增量命名）
+   - TotalSensitivity（复合值命名）
+   - 遵循UE4命名约定
+
+【技术说明】
+
+**R01的核心机制：**
+
+### 1. 输入到旋转的转换
+
+**输入约定：**
+```
+CameraInput.X:  水平输入（Yaw）
+- 正值 = 向右旋转
+- 负值 = 向左旋转
+
+CameraInput.Y:  垂直输入（Pitch）
+- 正值 = 向上输入
+- 负值 = 向下输入
+
+但是！Pitch需要反转：
+- 向上输入（正值）→ 向上看（负Pitch）
+- 向下输入（负值）→ 向下看（正Pitch）
+
+这是第三人称标准控制约定
+```
+
+### 2. 旋转累积
+
+**为什么需要CurrentRotation？**
+```
+问题：如果每帧只处理DeltaRotation
+- 无法保持相机朝向
+- 每帧都会重置
+- 失去旋转的连续性
+
+解决：维护CurrentRotation状态
+- 每帧累积DeltaRotation
+- CurrentRotation += Delta
+- 保持相机朝向的连续性
+```
+
+### 3. Pitch限制
+
+**为什么需要限制Pitch？**
+```
+问题：不限制Pitch会导致：
+- Pitch=-90°:  相机直视正下方（万向锁）
+- Pitch=90°:   相机直视正上方（万向锁）
+- Pitch>90° 或 <-90°:  相机翻转（上下颠倒）
+
+解决：Clamp到合理范围
+- 典型值：-80° 到 +80°
+- 避免万向锁和翻转
+- 保持相机稳定
+
+实现：
+CurrentRotation.Pitch = Clamp(Pitch, MinPitch, MaxPitch);
+```
+
+### 4. Yaw归一化
+
+**为什么需要归一化Yaw？**
+```
+问题：不归一化Yaw会导致：
+- 持续旋转：Yaw可以增长到无限大
+- 360° = 720° = 1080° = ... 
+- 浮点精度问题
+
+解决：归一化到0-360°
+Yaw = Fmod(Yaw, 360);
+if (Yaw < 0) Yaw += 360;
+
+效果：
+- 365° → 5°
+- -10° → 350°
+- 保持语义等价，避免精度损失
+```
+
+### 5. Roll强制为零
+
+**为什么Roll必须为零？**
+```
+第三人称相机不应该Roll（倾斜）
+- Roll=0°: 水平正常
+- Roll≠0°: 倾斜（让人晕眩）
+
+特例：
+- 某些动作游戏可能在特殊时刻使用Roll
+- 但标准第三人称相机Roll=0
+
+实现：
+CurrentRotation.Roll = 0.0f;  // 强制
+```
+
+### 6. 灵敏度系统
+
+**两级灵敏度：**
+```
+BaseSensitivity (模块级):
+- 每个旋转模块可以有自己的基础灵敏度
+- R01可能是1.0（标准）
+- R02可能是0.8（更柔和）
+
+InputSensitivity (配置级):
+- 来自StateConfig
+- 玩家可调整
+- 应用到所有旋转模块
+
+TotalSensitivity = BaseSensitivity * InputSensitivity
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过（0 errors, 0 warnings）
+   - [ ] 文件编码为UTF-8 Without BOM
+   - [ ] 所有注释为英文
+
+2. **代码完整性：**
+   - [ ] 构造函数实现完整
+   - [ ] OnActivate()实现完整
+   - [ ] ShouldActivate()实现完整
+   - [ ] Compute()实现完整
+   - [ ] 所有方法签名与.  h一致
+
+3. **逻辑正确性：**
+   - [ ] CurrentRotation正确累积
+   - [ ] Pitch正确反转
+   - [ ] Pitch正确限制
+   - [ ] Yaw正确归一化
+   - [ ] Roll强制为零
+   - [ ] 输出bHasRotationOutput=true
+
+4. **字段访问：**
+   - [ ] Context.InputContext.CameraInput
+   - [ ] Context.InputContext.  PreviousCameraRotation（或替代方案）
+   - [ ] Context.InputContext.bHasTarget
+   - [ ] StateConfig.StateBase.  Flags.bIgnoreInput
+   - [ ] StateConfig.Module. Rotation.InputSensitivity
+   - [ ] StateConfig. StateBase.Rotation.MinPitch/MaxPitch
+
+【注意事项】
+
+1. **不需要Regenerate：**
+   本Sub-Step创建新的.  cpp文件。
+   **必须Regenerate！**
+   创建文件后：
+   - 保存所有文件
+   - 右键.  uproject → Generate Visual Studio project files
+   - 重新加载解决方案
+   - 然后编译
+
+2. **InputContext字段处理：**
+   ```cpp
+   // 如果CameraInput不存在，使用APlayerController获取
+   // 如果PreviousCameraRotation不存在，使用FRotator:: ZeroRotator
+   ```
+
+3. **StateConfig字段缺失处理：**
+   ```cpp
+   // 如果InputSensitivity不存在
+   float InputSensitivity = 1.0f;  // 默认值
+   
+   // 如果MinPitch/MaxPitch不存在
+   float MinPitch = -80.0f;
+   float MaxPitch = 80.0f;
+   ```
+
+4. **Pitch反转的重要性：**
+   - 这是第三人称标准
+   - 不反转会让控制反直觉
+   - 测试时特别注意
+
+5. **测试建议：**
+   编译通过后，测试：
+   - 左右旋转（Yaw）
+   - 上下旋转（Pitch）
+   - Pitch上下限
+   - 灵敏度调整
+
+【输出要求】
+
+完成修改后，请报告：
+
+```
+================================================================================
+Sub-Step 3.3. 2 完成报告
+================================================================================
+
+【修改内容】
+- 文件：CameraModule_Rotation.cpp（新建）
+- 修改位置：R01模块（构造函数、OnActivate、ShouldActivate、Compute）
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ 构造函数：初始化旋转状态
+- ✅ OnActivate：初始化CurrentRotation
+- ✅ ShouldActivate：检查激活条件
+- ✅ Compute：玩家输入 → 相机旋转
+
+【编译结果】
+- Regenerate：[已执行/未执行]
+- 编译状态：[成功/失败]
+- 错误数：[数量]
+- 警告数：[数量]
+
+【遇到的问题】
+[如果有字段路径问题，详细描述]
+
+【最终状态】
+✅ R01模块完整实现，可响应玩家输入控制相机旋转
+
+================================================================================
+```
+
+【后续步骤】
+
+R01完成后，Rotation模块进度：
+- [x] ✅ 3.3. 1:  CameraModule_Rotation.h
+- [x] ✅ 3.3.2: R01 - Player Input Free
+- [ ] ⏳ 3.3.3: R02 - Player Input Lagged（下一步）
+- [ ] ⏳ 3.3.4: R03 - LookAt Target
+- [ ] ⏳ 3.3.5: R04 - LookAt Target Soft
+- [ ] ⏳ 3.3.6: R05 - LookAt Boss
+- [ ] ⏳ 3.3.7: R06 - AutoOrient Movement
+- [ ] ⏳ 3.3.8: R07 - AutoOrient Delayed
+- [ ] ⏳ 3.3.9: R08 - LookAt Point
+- [ ] ⏳ 3.3.10: R09 - Spline Rotation
+
+完成后准备进入Sub-Step 3.3.3。
+
+================================================================================

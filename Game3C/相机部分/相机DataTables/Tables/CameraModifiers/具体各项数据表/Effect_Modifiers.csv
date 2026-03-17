@@ -1,0 +1,4 @@
+ModifierID,ModifierName,ChineseName,Category,TriggerEvent,Duration,BlendInTime,BlendOutTime,Priority,AffectsPosition,AffectsRotation,AffectsFOV,Description
+E01,Effect_LowHealth,低血量效果,Effect,血量低于阈值,持续,0.5,0.5,50,false,false,false,低血量时的视觉警告效果
+E02,Effect_StatusAilment,状态异常效果,Effect,中毒/流血/狂乱等,状态持续,0.3,0.3,60,true,true,false,状态异常时的相机和视觉效果
+E03,Effect_FocusMode,集中模式效果,Effect,进入瞄准/集中模式,模式持续,0.2,0.2,70,false,false,true,瞄准时的景深和暗角效果

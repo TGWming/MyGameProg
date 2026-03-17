@@ -1,0 +1,655 @@
+Sub-Step 3.4.7 Prompt
+
+================================================================================
+任务：在CameraModule_Distance.  cpp中添加D06 Proximity_Adjust实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+D06根据玩家与锁定目标之间的距离动态调整相机距离。
+当玩家靠近目标时相机拉近，远离时相机拉远，提供自然的战斗视角。
+
+【Pipeline中的位置】
+```
+Distance模块计算流程：
+1. D01:   BaseDistance = 400cm
+2. D02:  ×1.2 → 480cm
+3. D03: +30cm → 510cm
+4. D04: -50cm → 460cm
+5. D05: min限制 → 460cm
+6. D06: Blend(460, 380, 0.6) ← 当前（接近目标时调整）
+   → 加权混合，结果约420cm
+7. D07: Boss阶段乘数
+```
+
+【当前进度】
+Phase 3 Step 3.4 Sub-Step 3.4.7 (共190个Sub-Step中的第85个)
+前置完成：3.4.6 D05实现 ✅
+
+【任务目标】
+在CameraModule_Distance.cpp中完整实现D06模块，替换现有的占位符。
+
+【⚠️ 重要提醒】
+
+1. **编译前必做步骤：**
+   本Sub-Step只修改现有.  cpp文件，不添加新文件。
+   因此**不需要Regenerate**，可以直接编译。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   确认StateConfig和InputContext的字段路径与项目实际结构一致。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_Distance.cpp
+
+2. **定位修改位置：**
+
+在文件中找到D06的占位符实现部分：
+
+```cpp
+//========================================
+// D06: Proximity Adjust
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.4.7
+// ...   占位符代码
+```
+
+**将上述占位符代码完整替换为下方的完整实现。**
+
+---
+
+3. **D06完整实现代码：**
+
+**A. ShouldActivate() 实现：**
+
+**当前占位符代码：**
+```cpp
+bool UCameraModule_D06_Proximity_Adjust::  ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Placeholder:   Will be properly implemented in Sub-Step 3.4.7
+	return false;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * ShouldActivate - Determine if proximity-based adjustment should be active
+ * 
+ * D06 activates when:  
+ * - Module is enabled
+ * - Player has a locked target
+ * 
+ * This module creates a dynamic relationship between player-target distance
+ * and camera distance.   When player is close to target, camera pulls in;
+ * when far from target, camera pulls back.
+ * 
+ * Priority 112, uses Blend policy with dynamic weight.  
+ * Blends with other distance calculations rather than overriding. 
+ * 
+ * Use Cases:
+ * - Close combat: Camera tightens for intimate combat feel
+ * - Ranged combat: Camera pulls back for better overview
+ * - Dynamic combat: Smooth transitions as distance changes
+ */
+bool UCameraModule_D06_Proximity_Adjust:: ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if player has a locked target
+	// Proximity adjustment only makes sense with a target
+	if (! Context.InputContext. bHasTarget)
+	{
+		return false;
+	}
+	
+	// All conditions met - activate proximity adjustment
+	return true;
+}
+```
+
+**说明：**
+- 简单条件：启用 + 有锁定目标
+- 优先级112（在D02之后）
+- Blend策略（加权混合）
+
+---
+
+**B. Compute() 实现：**
+
+**当前占位符代码：**
+```cpp
+bool UCameraModule_D06_Proximity_Adjust::  Compute(...)
+{
+	// Placeholder
+	OutOutput = CreateBaseOutput();
+	OutOutput.  DistanceOutput = 400.0f;
+	OutOutput.bHasDistanceOutput = true;
+	OutOutput.  bDistanceIsMultiplier = false;
+	return true;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * Compute - Calculate camera distance based on player-target proximity
+ * 
+ * This module adjusts camera distance dynamically based on how close
+ * the player is to the locked target.   It creates a natural camera
+ * behavior that responds to combat engagement distance.
+ * 
+ * Steps:
+ * 1. Validate target exists
+ * 2. Get player-target distance
+ * 3. Define proximity ranges (close, mid, far)
+ * 4.  Calculate distance adjustment based on range
+ * 5. Apply adjustment to base distance
+ * 6. Set appropriate blend weight
+ * 7. Output with Blend policy
+ * 
+ * Proximity Ranges:
+ * - Close (<200cm): Camera pulls in (up to -50cm)
+ * - Mid (200-500cm): Slight adjustment (-20cm to 0)
+ * - Far (500-1000cm): Camera pulls back (0 to +30cm)
+ * - Very Far (>1000cm): Max pullback (+30cm)
+ * 
+ * The result is a camera that "breathes" with the combat distance,
+ * creating a more dynamic and responsive feel.
+ * 
+ * @param Context The current pipeline execution context
+ * @param StateConfig The current camera state configuration
+ * @param OutOutput Output structure to fill with computed values
+ * @return True if computation succeeded
+ */
+bool UCameraModule_D06_Proximity_Adjust::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Step 1: Validate target exists
+	if (!Context.InputContext.bHasTarget)
+	{
+		OutOutput.bHasDistanceOutput = false;
+		return false;
+	}
+	
+	// Step 2: Get player-target distance
+	float TargetDistance = Context.InputContext.TargetDistance;
+	
+	// If TargetDistance not available, calculate from positions
+	if (TargetDistance <= 0.0f)
+	{
+		FVector PlayerLocation = Context.InputContext.CharacterLocation;
+		FVector TargetLocation = Context.InputContext.TargetLocation;
+		TargetDistance = FVector::Dist(PlayerLocation, TargetLocation);
+	}
+	
+	// Step 3: Get base distance for reference
+	float BaseDistance = StateConfig. StateBase.Distance. BaseDistance;
+	if (BaseDistance <= 0.0f)
+	{
+		BaseDistance = 400.0f;  // Default:  4 meters
+	}
+	
+	// Step 4: Define proximity ranges (in centimeters)
+	// These define how player-target distance maps to camera adjustment
+	const float CloseRange = 200.0f;    // Very close combat (< 2m)
+	const float MidRange = 500.0f;      // Normal combat range (2-5m)
+	const float FarRange = 1000.0f;     // Far engagement (5-10m)
+	
+	// Step 5: Calculate distance adjustment based on proximity range
+	float DistanceAdjustment = 0.0f;
+	
+	if (TargetDistance < CloseRange)
+	{
+		// Very close combat - pull camera in significantly
+		// At 0m:  adjustment = -50cm (closest)
+		// At 2m: adjustment = 0cm (transition to mid)
+		float Ratio = TargetDistance / CloseRange;  // 0 to 1
+		float MaxCloseAdjust = -50.0f;  // Max pull-in at closest
+		DistanceAdjustment = MaxCloseAdjust * (1.0f - Ratio);
+	}
+	else if (TargetDistance < MidRange)
+	{
+		// Normal combat range - slight pull-in that fades to neutral
+		// At 2m: adjustment = -20cm
+		// At 5m: adjustment = 0cm
+		float Ratio = (TargetDistance - CloseRange) / (MidRange - CloseRange);  // 0 to 1
+		DistanceAdjustment = FMath::Lerp(-20.0f, 0.0f, Ratio);
+	}
+	else if (TargetDistance < FarRange)
+	{
+		// Far range - pull camera back for better overview
+		// At 5m:  adjustment = 0cm
+		// At 10m: adjustment = +30cm
+		float Ratio = (TargetDistance - MidRange) / (FarRange - MidRange);  // 0 to 1
+		DistanceAdjustment = FMath::Lerp(0.0f, 30.0f, Ratio);
+	}
+	else
+	{
+		// Very far (>10m) - max pullback
+		// Camera stays pulled back for distant engagement
+		DistanceAdjustment = 30.0f;
+	}
+	
+	// Step 6: Calculate final distance
+	float AdjustedDistance = BaseDistance + DistanceAdjustment;
+	
+	// Ensure adjusted distance stays within reasonable bounds
+	float MinDistance = StateConfig.StateBase. Distance.MinDistance;
+	if (MinDistance <= 0.0f)
+	{
+		MinDistance = 100.0f;
+	}
+	
+	float MaxDistance = StateConfig.StateBase.Distance.MaxDistance;
+	if (MaxDistance <= 0.0f)
+	{
+		MaxDistance = 800.0f;
+	}
+	
+	AdjustedDistance = FMath:: Clamp(AdjustedDistance, MinDistance, MaxDistance);
+	
+	// Step 7: Fill output structure
+	OutOutput. DistanceOutput = AdjustedDistance;
+	OutOutput.bHasDistanceOutput = true;
+	OutOutput. bDistanceIsMultiplier = false;  // This is an absolute value
+	
+	// Set blend weight - partial influence to allow other modules to contribute
+	// 0.6 means 60% influence, blends with other distance calculations
+	OutOutput.Weight = 0.6f;
+	
+	return true;
+}
+```
+
+**说明：**
+- 四个接近范围：Close/Mid/Far/VeryFar
+- 渐变调整（Lerp平滑过渡）
+- 近距离：拉近相机（-50cm）
+- 远距离：拉远相机（+30cm）
+- 权重0.6（部分影响）
+
+---
+
+4. **完整的D06代码块（用于复制粘贴）：**
+
+```cpp
+//========================================
+// D06: Proximity Adjust
+//========================================
+
+/**
+ * ShouldActivate - Activate when target is locked
+ */
+bool UCameraModule_D06_Proximity_Adjust:: ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if player has a locked target
+	if (!Context.InputContext.bHasTarget)
+	{
+		return false;
+	}
+	
+	return true;
+}
+
+/**
+ * Compute - Calculate camera distance based on player-target proximity
+ */
+bool UCameraModule_D06_Proximity_Adjust:: Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output
+	OutOutput = CreateBaseOutput();
+	
+	// Validate target exists
+	if (!Context.InputContext.bHasTarget)
+	{
+		OutOutput.bHasDistanceOutput = false;
+		return false;
+	}
+	
+	// Get player-target distance
+	float TargetDistance = Context.  InputContext.TargetDistance;
+	
+	// Fallback:  calculate from positions
+	if (TargetDistance <= 0.0f)
+	{
+		FVector PlayerLocation = Context.InputContext.CharacterLocation;
+		FVector TargetLocation = Context.  InputContext.TargetLocation;
+		TargetDistance = FVector::Dist(PlayerLocation, TargetLocation);
+	}
+	
+	// Get base distance
+	float BaseDistance = StateConfig.StateBase.Distance.BaseDistance;
+	if (BaseDistance <= 0.0f)
+	{
+		BaseDistance = 400.0f;
+	}
+	
+	// Define proximity ranges
+	const float CloseRange = 200.0f;    // < 2m
+	const float MidRange = 500.0f;      // 2-5m
+	const float FarRange = 1000.0f;     // 5-10m
+	
+	// Calculate adjustment based on range
+	float DistanceAdjustment = 0.0f;
+	
+	if (TargetDistance < CloseRange)
+	{
+		// Very close - pull camera in
+		float Ratio = TargetDistance / CloseRange;
+		DistanceAdjustment = -50.0f * (1.0f - Ratio);
+	}
+	else if (TargetDistance < MidRange)
+	{
+		// Normal range - slight adjustment
+		float Ratio = (TargetDistance - CloseRange) / (MidRange - CloseRange);
+		DistanceAdjustment = FMath::Lerp(-20.0f, 0.0f, Ratio);
+	}
+	else if (TargetDistance < FarRange)
+	{
+		// Far range - pull camera back
+		float Ratio = (TargetDistance - MidRange) / (FarRange - MidRange);
+		DistanceAdjustment = FMath::Lerp(0.0f, 30.0f, Ratio);
+	}
+	else
+	{
+		// Very far - max pullback
+		DistanceAdjustment = 30.0f;
+	}
+	
+	// Calculate final distance
+	float AdjustedDistance = BaseDistance + DistanceAdjustment;
+	
+	// Clamp to valid range
+	float MinDistance = StateConfig. StateBase.Distance. MinDistance;
+	if (MinDistance <= 0.0f) MinDistance = 100.0f;
+	
+	float MaxDistance = StateConfig. StateBase.Distance. MaxDistance;
+	if (MaxDistance <= 0.0f) MaxDistance = 800.0f;
+	
+	AdjustedDistance = FMath:: Clamp(AdjustedDistance, MinDistance, MaxDistance);
+	
+	// Fill output
+	OutOutput.DistanceOutput = AdjustedDistance;
+	OutOutput.bHasDistanceOutput = true;
+	OutOutput.bDistanceIsMultiplier = false;
+	OutOutput.Weight = 0.6f;  // Partial influence
+	
+	return true;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 说明四个接近范围
+   - 解释Lerp平滑过渡
+   - 说明权重的作用
+   - 所有注释英文
+
+2. **格式：**
+   - Tab缩进
+   - 清晰步骤标注
+   - 方法间空两行
+
+3. **防御性编程：**
+   - 目标距离fallback计算
+   - 所有配置值有默认值
+   - Clamp确保有效范围
+
+【技术说明】
+
+**D06的核心机制：**
+
+### 1. 接近范围设计
+
+**四个范围的划分：**
+
+```
+   0cm        200cm        500cm        1000cm        ∞
+    |----------|------------|-------------|---------->
+      Close       Mid           Far         VeryFar
+     
+    调整：
+    -50cm      -20→0cm      0→+30cm       +30cm
+    
+    相机行为：
+    拉近       逐渐中立     逐渐拉远       保持远
+```
+
+**视觉效果：**
+| 玩家-目标距离 | 相机调整 | 效果 |
+|--------------|---------|------|
+| 0-2m | -50cm to 0 | 紧凑战斗视角 |
+| 2-5m | -20cm to 0 | 适中战斗视角 |
+| 5-10m | 0 to +30cm | 开阔战斗视角 |
+| >10m | +30cm | 最大概览视野 |
+
+### 2. Lerp平滑过渡
+
+**为什么使用Lerp？**
+
+```
+不使用Lerp（阶梯式）：
+- 距离199cm:  调整-50cm
+- 距离201cm: 调整-20cm
+- 突变50→20，感觉突兀
+
+使用Lerp（渐变式）：
+- 距离100cm: 调整-25cm
+- 距离150cm: 调整-12.5cm
+- 距离200cm: 调整0cm
+- 平滑过渡，自然流畅
+
+公式：
+Ratio = (Current - RangeStart) / (RangeEnd - RangeStart)
+Adjustment = Lerp(StartValue, EndValue, Ratio)
+```
+
+### 3. Weight=0.6的意义
+
+**为什么不是1.0？**
+
+```
+Weight = 1.0（假设）：
+- D06完全控制最终距离
+- 其他模块的贡献被忽略
+- 不够灵活
+
+Weight = 0.6（实际）：
+- D06贡献60%
+- 其他模块（D01-D05）贡献40%
+- Blend策略混合
+
+Stage 5混合示例：
+D01-D05结果：450cm
+D06结果：380cm，Weight=0.6
+
+FinalDistance = (450 × 0.4 + 380 × 0.6) / (0.4 + 0.6)
+             = (180 + 228) / 1.0
+             = 408cm
+
+效果：
+- D06影响显著但不绝对
+- 保留其他模块的贡献
+- 平衡的最终结果
+```
+
+### 4. 与D04(Combat)的区别
+
+| 特性 | D04 (Combat) | D06 (Proximity) |
+|------|--------------|-----------------|
+| **触发条件** | 战斗状态 | 有锁定目标 |
+| **调整基于** | 是否战斗 | 玩家-目标距离 |
+| **调整类型** | 固定偏移 | 动态渐变 |
+| **混合策略** | Additive | Blend |
+| **典型效果** | -50cm固定 | -50cm到+30cm变化 |
+
+**配合使用：**
+```
+场景：战斗中，玩家接近目标
+
+D04: -50cm（战斗调整，固定）
+D06: -30cm（接近调整，基于距离）
+
+两者叠加/混合：
+- D04是Additive（直接加减）
+- D06是Blend（加权混合）
+
+Stage 5计算：
+1. D01-D05结果：450cm
+2. D04 Additive:  450 - 50 = 400cm
+3. D06 Blend: (400 × 0.4 + 370 × 0.6) = 382cm
+
+结果：382cm（两个模块都生效）
+```
+
+### 5. TargetDistance的fallback
+
+**为什么需要fallback计算？**
+
+```cpp
+// 正常情况
+float TargetDistance = Context. InputContext.TargetDistance;  // 由系统提供
+
+// Fallback情况
+if (TargetDistance <= 0.0f)
+{
+    // 系统未提供，手动计算
+    TargetDistance = FVector::Dist(PlayerLocation, TargetLocation);
+}
+```
+
+**原因：**
+- InputContext可能没有预计算TargetDistance
+- 某些系统只提供位置，不提供距离
+- fallback确保模块总能工作
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] ShouldActivate()完整
+   - [ ] Compute()完整
+   - [ ] 四个范围逻辑正确
+
+3. **逻辑正确性：**
+   - [ ] 检查bHasTarget
+   - [ ] TargetDistance fallback
+   - [ ] Close/Mid/Far/VeryFar范围
+   - [ ] Lerp平滑过渡
+   - [ ] Clamp最终距离
+   - [ ] Weight = 0.6
+
+4. **字段访问：**
+   - [ ] Context.InputContext.  bHasTarget
+   - [ ] Context. InputContext.  TargetDistance
+   - [ ] Context.InputContext. CharacterLocation（fallback）
+   - [ ] Context.InputContext.TargetLocation（fallback）
+
+【注意事项】
+
+1. **不需要Regenerate**
+
+2. **范围调整：**
+   ```cpp
+   // 可根据游戏需要调整
+   const float CloseRange = 200.0f;   // 可改为150或250
+   const float MidRange = 500.0f;     // 可改为400或600
+   const float FarRange = 1000.0f;    // 可改为800或1200
+   ```
+
+3. **调整幅度：**
+   ```cpp
+   // 近距离拉近幅度
+   MaxCloseAdjust = -50.0f;  // 可改为-30或-70
+   
+   // 远距离拉远幅度
+   MaxFarAdjust = 30.0f;     // 可改为20或50
+   ```
+
+4. **权重调整：**
+   ```cpp
+   // 影响强度
+   OutOutput.Weight = 0.6f;  // 0.4较弱，0.8较强
+   ```
+
+5. **测试建议：**
+   - 锁定目标，靠近 → 相机应拉近
+   - 锁定目标，远离 → 相机应拉远
+   - 不同距离测试Lerp效果
+   - 确认过渡平滑
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 3. 4. 7 完成报告
+================================================================================
+
+【修改内容】
+- 文件：CameraModule_Distance.cpp
+- 修改位置：D06模块
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ ShouldActivate：检查目标锁定
+- ✅ Compute：基于接近度的距离调整
+
+【编译结果】
+- 编译状态：[成功/失败]
+
+【最终状态】
+✅ D06完成，动态接近度距离调整
+
+================================================================================
+```
+
+【后续步骤】
+
+D06完成后：
+- [x] ✅ 3.4.5:   D04 - Combat_Adjust
+- [x] ✅ 3.4.6: D05 - Environment_Limit
+- [x] ✅ 3.4.7: D06 - Proximity_Adjust
+- [ ] ⏳ 3.4.8: D07 - Boss_Phase（最后一个！）
+
+**Distance模块完成度：6/7 (85. 7%)**
+
+**下一步：** D07 Boss_Phase（Distance模块最后一个）
+
+================================================================================

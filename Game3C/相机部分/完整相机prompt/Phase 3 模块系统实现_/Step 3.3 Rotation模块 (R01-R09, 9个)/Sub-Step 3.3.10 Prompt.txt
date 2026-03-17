@@ -1,0 +1,722 @@
+Sub-Step 3.3.10 Prompt
+
+================================================================================
+任务：在CameraModule_Rotation.cpp中添加R09 Spline_Rotation实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+R09配合P07样条路径模块，提供沿样条的旋转控制。
+这是Rotation模块系列的最后一个模块，完成后Step 3.3全部完成。
+
+【当前进度】
+Phase 3 Step 3.3 Sub-Step 3.3.10 (共190个Sub-Step中的第78个)
+前置完成：3.3.9 R08实现 ✅
+**这是Step 3.3的最后一个Sub-Step**
+
+【任务目标】
+在CameraModule_Rotation. cpp中完整实现R09模块，替换现有的占位符。
+完成后，所有9个Rotation模块（R01-R09）全部实现完毕。
+
+【⚠️ 重要说明】
+
+**R09的定位：**
+R09是样条旋转模块，与P07配合使用。由于完整的样条系统需要额外集成，
+本Sub-Step实现**智慧占位符版本**，提供：
+1. 可编译运行的基础实现
+2. 模拟样条旋转行为
+3. 清晰的TODO标记和未来实现指南
+
+【⚠️ 编码格式要求】
+
+1. **文件编码：UTF-8 Without BOM（强制）**
+2. **注释规范：所有注释必须使用英文（强制）**
+3. **命名替换：** 确认StateConfig字段路径与项目实际结构一致
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_Rotation.  cpp
+
+2. **定位修改位置：**
+
+在文件中找到R09的占位符实现部分：
+
+```cpp
+//========================================
+// R09: Spline Rotation - Rotation along spline path
+//========================================
+
+// TODO: Will be implemented in Sub-Step 3.3.10
+// ...   占位符代码
+```
+
+**将上述占位符代码完整替换为下方的完整实现。**
+
+---
+
+3. **R09完整实现代码：**
+
+**A. ShouldActivate() 实现：**
+
+**当前占位符代码：**
+```cpp
+bool UCameraModule_R09_Spline_Rotation::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Placeholder:  Will be properly implemented in Sub-Step 3.3.10
+	// Should activate when a valid spline reference exists
+	return false;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * ShouldActivate - Determine if spline rotation should be active
+ * 
+ * R09 activates when:  
+ * - Module is enabled
+ * - Current state is cinematic (splines are for scripted sequences)
+ * - (Future) A valid spline component reference exists
+ * 
+ * This module is designed to work with P07 (Spline Follow) for
+ * scripted camera paths along spline curves.
+ * 
+ * Current Implementation (Placeholder):
+ * Since full spline system is not yet integrated, we use bIsCinematic
+ * as the activation condition. When spline system is added, this will
+ * also check for a valid SplineComponent reference.
+ * 
+ * Priority 200 (highest) ensures spline-based cameras take precedence
+ * over all other rotation modules during scripted sequences.
+ */
+bool UCameraModule_R09_Spline_Rotation::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if current state is cinematic
+	// Spline rotation is typically used for cutscenes and scripted sequences
+	if (! StateConfig.StateBase.Flags. bIsCinematic)
+	{
+		return false;
+	}
+	
+	// TODO: When spline system is implemented, add check: 
+	// if (! StateConfig.Module.Rotation.  SplineComponent. IsValid())
+	// {
+	//     return false;
+	// }
+	
+	// For now, activate for all cinematic states
+	// This allows testing the module even without a spline system
+	return true;
+}
+```
+
+**说明：**
+- 检查Cinematic状态
+- TODO标记未来样条检查
+- 优先级200（最高，脚本化优先）
+
+---
+
+**B. Compute() 实现：**
+
+**当前占位符代码：**
+```cpp
+bool UCameraModule_R09_Spline_Rotation::Compute(...)
+{
+	// Placeholder
+	OutOutput = CreateBaseOutput();
+	OutOutput. RotationOutput = SplineRotation;
+	OutOutput.bHasRotationOutput = true;
+	return true;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * Compute - Calculate spline-based rotation (placeholder implementation)
+ * 
+ * CURRENT IMPLEMENTATION (Placeholder):
+ * Since the full spline system is not yet integrated, this module provides
+ * a placeholder implementation that simulates spline-like rotation behavior
+ * by looking at the character with a sinusoidal yaw offset.
+ * 
+ * This allows: 
+ * - Testing the module activation/deactivation
+ * - Verifying the pipeline integration
+ * - Demonstrating override behavior
+ * 
+ * FUTURE IMPLEMENTATION (When Spline System Available):
+ * 1. Get SplineComponent reference from StateConfig
+ * 2. Get current position along spline (from P07 or external system)
+ * 3. Calculate rotation options: 
+ *    a) Use spline tangent direction (camera looks along path)
+ *    b) Look at specific target while moving along spline
+ *    c) Use custom rotation curve defined on spline
+ * 4. Apply rotation with optional smoothing
+ * 5. Output the calculated rotation
+ * 
+ * Placeholder Behavior:
+ * - Looks at character (like other look-at modules)
+ * - Adds sinusoidal yaw offset to simulate movement
+ * - Provides predictable, testable behavior
+ * - Demonstrates Override policy
+ * 
+ * @param Context The current pipeline execution context
+ * @param StateConfig The current camera state configuration
+ * @param OutOutput Output structure to fill with computed values
+ * @return True if computation succeeded
+ */
+bool UCameraModule_R09_Spline_Rotation::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// ========================================
+	// PLACEHOLDER IMPLEMENTATION
+	// ========================================
+	// This section simulates spline rotation behavior until the real
+	// spline system is integrated.  It creates a look-at rotation with
+	// animated yaw offset.
+	
+	// Get camera focus point (from Position modules)
+	FVector CameraFocusPoint = Context.Output. FocusPoint;
+	
+	// Fallback if invalid
+	if (CameraFocusPoint.IsNearlyZero())
+	{
+		CameraFocusPoint = Context. InputContext.CharacterLocation;
+		CameraFocusPoint.Z += 100.0f;
+	}
+	
+	// Get character location as look-at target
+	FVector CharacterLocation = Context.InputContext.  CharacterLocation;
+	
+	// Calculate look direction towards character
+	FVector LookDirection = (CharacterLocation - CameraFocusPoint).GetSafeNormal();
+	
+	// Handle edge case: if camera is at character position
+	if (LookDirection.  IsNearlyZero())
+	{
+		// Use character's forward direction as fallback
+		LookDirection = Context.InputContext.CharacterRotation.Vector();
+	}
+	
+	// Convert to rotation
+	FRotator BaseLookAtRotation = LookDirection.Rotation();
+	
+	// Simulate spline rotation with sinusoidal yaw offset
+	// In real implementation, this would come from spline tangent or custom curve
+	// 
+	// Using GameTime to create animated effect (simulates camera moving along path)
+	float GameTime = Context.InputContext.GameTime;
+	
+	// Normalize time to 0-1 range (10 second cycle)
+	float SimulatedSplineT = FMath::Fmod(GameTime * 0.1f, 1.0f);
+	
+	// Calculate yaw offset using sine wave (-15° to +15°)
+	// This simulates camera panning left-right as it moves along spline
+	const float MaxYawOffset = 15.0f;
+	float YawOffset = FMath::Sin(SimulatedSplineT * PI * 2.0f) * MaxYawOffset;
+	
+	// Apply offset to base rotation
+	FRotator SimulatedSplineRotation = BaseLookAtRotation;
+	SimulatedSplineRotation.  Yaw += YawOffset;
+	
+	// Clamp pitch to configured limits
+	float MinPitch = StateConfig. StateBase.Rotation.MinPitch;
+	float MaxPitch = StateConfig.StateBase.  Rotation.MaxPitch;
+	
+	if (MinPitch >= MaxPitch)
+	{
+		MinPitch = -80.0f;
+		MaxPitch = 80.0f;
+	}
+	
+	SimulatedSplineRotation.  Pitch = FMath:: Clamp(SimulatedSplineRotation. Pitch, MinPitch, MaxPitch);
+	
+	// Force roll to zero
+	SimulatedSplineRotation. Roll = 0.0f;
+	
+	// Store in member variable (for debugging/reference)
+	SplineRotation = SimulatedSplineRotation;
+	
+	// ========================================
+	// END PLACEHOLDER IMPLEMENTATION
+	// ========================================
+	
+	// Fill output structure
+	OutOutput.RotationOutput = SplineRotation;
+	OutOutput. bHasRotationOutput = true;
+	
+	// Optional debug logging (use VeryVerbose to avoid spam)
+	UE_LOG(LogTemp, VeryVerbose, TEXT("R09 Spline Rotation:  Using placeholder (Yaw offset:   %. 1f degrees)"), YawOffset);
+	
+	return true;
+}
+```
+
+**说明：**
+- 清晰的占位符标记
+- 模拟样条行为（正弦Yaw偏移）
+- 完整的TODO和未来实现指南
+- 可运行和测试
+
+---
+
+4. **完整的R09代码块（用于复制粘贴）：**
+
+```cpp
+//========================================
+// R09: Spline Rotation - Rotation along spline path
+//========================================
+
+/**
+ * ShouldActivate - Activate for cinematic states (placeholder)
+ */
+bool UCameraModule_R09_Spline_Rotation:: ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if current state is cinematic
+	if (!  StateConfig.StateBase.Flags.bIsCinematic)
+	{
+		return false;
+	}
+	
+	// TODO: When spline system is implemented, add check:
+	// if (! StateConfig.Module.Rotation. SplineComponent.IsValid())
+	// {
+	//     return false;
+	// }
+	
+	// For now, activate for all cinematic states
+	return true;
+}
+
+/**
+ * Compute - Calculate spline rotation (placeholder:  look at character with sine offset)
+ */
+bool UCameraModule_R09_Spline_Rotation::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output
+	OutOutput = CreateBaseOutput();
+	
+	// ========================================
+	// PLACEHOLDER IMPLEMENTATION
+	// ========================================
+	
+	// Get camera focus point
+	FVector CameraFocusPoint = Context.Output.FocusPoint;
+	
+	if (CameraFocusPoint. IsNearlyZero())
+	{
+		CameraFocusPoint = Context.InputContext.  CharacterLocation;
+		CameraFocusPoint.Z += 100.0f;
+	}
+	
+	// Get character location
+	FVector CharacterLocation = Context.InputContext. CharacterLocation;
+	
+	// Calculate look direction
+	FVector LookDirection = (CharacterLocation - CameraFocusPoint).GetSafeNormal();
+	
+	if (LookDirection.IsNearlyZero())
+	{
+		LookDirection = Context.InputContext.CharacterRotation.Vector();
+	}
+	
+	// Convert to rotation
+	FRotator BaseLookAtRotation = LookDirection.Rotation();
+	
+	// Simulate spline rotation with sinusoidal yaw offset
+	float GameTime = Context.InputContext.  GameTime;
+	float SimulatedSplineT = FMath::Fmod(GameTime * 0.1f, 1.0f);
+	
+	// Calculate yaw offset (-15° to +15°)
+	const float MaxYawOffset = 15.0f;
+	float YawOffset = FMath::Sin(SimulatedSplineT * PI * 2.0f) * MaxYawOffset;
+	
+	// Apply offset
+	FRotator SimulatedSplineRotation = BaseLookAtRotation;
+	SimulatedSplineRotation.Yaw += YawOffset;
+	
+	// Clamp pitch
+	float MinPitch = StateConfig. StateBase.Rotation.MinPitch;
+	float MaxPitch = StateConfig.StateBase. Rotation.MaxPitch;
+	
+	if (MinPitch >= MaxPitch)
+	{
+		MinPitch = -80.0f;
+		MaxPitch = 80.0f;
+	}
+	
+	SimulatedSplineRotation.Pitch = FMath::Clamp(SimulatedSplineRotation.Pitch, MinPitch, MaxPitch);
+	
+	// Force roll to zero
+	SimulatedSplineRotation.Roll = 0.0f;
+	
+	// Store in member variable
+	SplineRotation = SimulatedSplineRotation;
+	
+	// ========================================
+	// END PLACEHOLDER IMPLEMENTATION
+	// ========================================
+	
+	// Fill output
+	OutOutput.RotationOutput = SplineRotation;
+	OutOutput.bHasRotationOutput = true;
+	
+	// Debug logging
+	UE_LOG(LogTemp, VeryVerbose, TEXT("R09 Spline Rotation:   Placeholder (Yaw offset:  %. 1f)"), YawOffset);
+	
+	return true;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 清晰标记占位符性质
+   - 提供未来实现指南
+   - 解释模拟行为
+   - 所有注释英文
+
+2. **格式：**
+   - Tab缩进
+   - 占位符区块清晰标注
+   - 方法间空两行
+
+3. **占位符策略：**
+   - 可运行测试
+   - 行为可预测
+   - TODO清晰
+   - 易于替换
+
+【技术说明】
+
+**R09的占位符设计：**
+
+### 1. 为什么使用占位符？
+
+**原因：**
+```
+完整样条系统需要：
+1. USplineComponent集成
+2. 样条位置跟踪
+3. 切线方向计算
+4. 自定义旋转曲线支持
+
+当前状态：
+- 样条系统尚未实现（P07也是占位符）
+- 但需要完整的模块架构
+- 提供可测试的占位符
+
+占位符方案：
+- 模拟样条旋转效果
+- 可编译运行
+- 清晰的TODO
+- 未来易于替换
+```
+
+### 2. 占位符行为分析
+
+**正弦Yaw偏移：**
+```
+公式：
+YawOffset = sin(Time * 0.1 * 2π) * 15°
+
+效果：
+T=0s:     offset=0°
+T=2. 5s:  offset=+15°（最右）
+T=5s:   offset=0°
+T=7.5s:   offset=-15°（最左）
+T=10s:   offset=0°（循环）
+
+视觉：
+- 相机缓慢左右摆动
+- 模拟沿样条路径移动
+- 周期10秒
+- 范围±15°
+```
+
+**为什么选择这个行为？**
+```
+优点：
+1. 可见效果：玩家能看到相机在动
+2. 可预测：周期性，便于测试
+3. 不干扰：幅度小（±15°），不眩晕
+4. 示例性：展示R09的作用
+
+替代方案（未采用）：
+- 固定朝向：无动态效果
+- 随机摆动：不可预测
+- 跟随角色：与其他模块重复
+```
+
+### 3. 未来真实实现
+
+**完整样条旋转示例（注释中提供）：**
+
+```cpp
+// ========================================
+// FUTURE REAL IMPLEMENTATION EXAMPLE
+// ========================================
+
+// Step 1: Get spline component from config
+USplineComponent* Spline = StateConfig.Module. Rotation.SplineComponent;
+if (!Spline || !Spline->IsValidLowLevel())
+{
+	OutOutput.bHasRotationOutput = false;
+	return false;
+}
+
+// Step 2: Get current position along spline
+// This should come from P07 or external spline position tracker
+float SplineDistance = Context.SplinePosition.CurrentDistance;
+
+// Step 3: Get rotation at spline position
+// Option A: Use spline tangent (camera looks along path)
+FVector SplineTangent = Spline->GetTangentAtDistanceAlongSpline(
+	SplineDistance, 
+	ESplineCoordinateSpace::World
+);
+FRotator SplineRotation = SplineTangent.Rotation();
+
+// Option B: Use custom rotation defined on spline
+FRotator SplineRotation = Spline->GetRotationAtDistanceAlongSpline(
+	SplineDistance, 
+	ESplineCoordinateSpace::World
+);
+
+// Option C: Look at target while moving along spline
+FVector LookAtTarget = StateConfig.Module.Rotation.LookAtPointLocation;
+FVector SplinePosition = Spline->GetLocationAtDistanceAlongSpline(
+	SplineDistance, 
+	ESplineCoordinateSpace::World
+);
+FVector LookDirection = (LookAtTarget - SplinePosition).GetSafeNormal();
+FRotator SplineRotation = LookDirection.Rotation();
+
+// Step 4: Apply smoothing (optional)
+float InterpSpeed = StateConfig.Module.Rotation.SplineRotationInterpSpeed;
+SplineRotation = FMath::RInterpTo(
+	this->SplineRotation,  // Previous
+	SplineRotation,        // Target
+	Context.DeltaTime, 
+	InterpSpeed
+);
+
+// Step 5: Clamp and output
+SplineRotation. Pitch = FMath::  Clamp(SplineRotation.Pitch, MinPitch, MaxPitch);
+SplineRotation.Roll = 0.0f;
+
+OutOutput.RotationOutput = SplineRotation;
+OutOutput.bHasRotationOutput = true;
+
+return true;
+```
+
+### 4. 与P07的配合
+
+**Position模块P07 + Rotation模块R09：**
+
+```
+完整样条相机系统：
+
+P07 (Position):
+- 沿样条移动相机位置
+- CurrentSplinePosition更新
+
+R09 (Rotation):
+- 根据样条位置计算旋转
+- 读取P07的位置信息
+- 计算对应旋转
+
+配合效果：
+- 相机沿样条路径移动（P07）
+- 相机朝向随路径变化（R09）
+- 完整的轨道相机效果
+
+用途：
+- 过场动画轨道镜头
+- 展示关卡全景
+- 脚本化相机运动
+```
+
+### 5. 优先级最高的原因
+
+**为什么R09优先级是200？**
+
+```
+优先级排序：
+- R09 (Spline): 200 ← 最高
+- R08 (LookAt Point): 180
+- R05 (Boss): 160
+- R03 (Target): 150
+- ... 
+
+原因：
+1. 样条是脚本化路径
+   - 设计师精心设计
+   - 需要精确执行
+   - 不能被其他模块干扰
+
+2. 用于Cinematic
+   - 过场动画关键
+   - 需要完全控制
+   - Override策略
+
+3. 最高优先级确保
+   - 样条激活时压制所有
+   - 提供可预测行为
+   - 符合设计意图
+
+效果：
+- Cinematic + 样条 → R09完全控制
+- 不受输入/锁定模块影响
+- 精确的镜头控制
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] ShouldActivate()完整
+   - [ ] Compute()完整
+   - [ ] 占位符清晰标记
+
+3. **逻辑正确性：**
+   - [ ] 检查Cinematic状态
+   - [ ] 占位符行为正确
+   - [ ] Pitch限制和Roll=0正确
+   - [ ] 输出bHasRotationOutput=true
+
+【注意事项】
+
+1. **不需要Regenerate**
+
+2. **GameTime字段：**
+   ```cpp
+   // 如果InputContext没有GameTime
+   // 方案1：使用World时间
+   float GameTime = Context.World->GetTimeSeconds();
+   
+   // 方案2：使用固定值（测试）
+   float GameTime = 0.0f;  // 静态效果
+   ```
+
+3. **占位符调整：**
+   ```cpp
+   // 可调参数：
+   const float MaxYawOffset = 15.0f;  // 摆动幅度
+   float SimulatedSplineT = FMath::Fmod(GameTime * 0.1f, 1.0f);  // 速度
+   
+   // 更快：0.2f（5秒周期）
+   // 更慢：0.05f（20秒周期）
+   ```
+
+4. **未来替换：**
+   - 占位符区块清晰标记
+   - 直接替换整个区块
+   - 保留外层结构
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 3. 3. 10 完成报告
+================================================================================
+
+【修改内容】
+- 文件：CameraModule_Rotation.cpp
+- 修改位置：R09模块
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ ShouldActivate:   检查Cinematic
+- ✅ Compute:   占位符样条旋转
+
+【编译结果】
+- 编译状态：[成功/失败]
+
+【最终状态】
+✅ R09完成（占位符），Rotation模块系列全部完成！
+
+================================================================================
+```
+
+【🎉 Step 3.3 完成庆祝】
+
+**Rotation模块系列全部完成！**
+
+完成后，Rotation模块最终状态：
+- [x] ✅ R01:  Player Input Free（自由输入）
+- [x] ✅ R02: Player Input Lagged（平滑输入）
+- [x] ✅ R03: LookAt Target（硬锁定）
+- [x] ✅ R04: LookAt Target Soft（软锁定）
+- [x] ✅ R05: LookAt Boss（Boss战）
+- [x] ✅ R06: AutoOrient Movement（移动对齐）
+- [x] ✅ R07: AutoOrient Delayed（延迟回中）
+- [x] ✅ R08: LookAt Point（固定点）
+- [x] ✅ R09: Spline Rotation（样条路径，占位符）
+
+**Rotation模块完成度：9/9 (100%)** 🎊
+
+**模块分类总结：**
+
+| 分类 | 模块 | 用途 |
+|------|------|------|
+| **玩家输入** | R01, R02 | 探索、自由视角 |
+| **目标锁定** | R03, R04, R05 | 战斗、Boss战 |
+| **自动旋转** | R06, R07 | 辅助、便利 |
+| **脚本化** | R08, R09 | 过场、样条 |
+
+**Phase 3 总进度：**
+- [x] ✅ Step 3.1:  模块基础设施（4个文件）
+- [x] ✅ Step 3.2:  Position模块（8个模块）
+- [x] ✅ Step 3.3: Rotation模块（9个模块）
+- [ ] ⏳ Step 3.4:  Distance模块（7个模块）
+- [ ] ⏳ Step 3.5: FOV模块（6个模块）
+- [ ] ⏳ Step 3.6: Offset模块（5个模块）
+- [ ] ⏳ Step 3.7: Constraint模块（4个模块）
+
+**已完成模块：17/39 (43.6%)**
+
+**下一步：**
+- Step 3.4: Distance模块（距离控制）
+- 7个Distance模块：D01-D07
+
+**准备好进入Distance模块了吗？** 🚀
+
+完成R09后告诉我："Rotation完成，准备Distance"
+
+================================================================================

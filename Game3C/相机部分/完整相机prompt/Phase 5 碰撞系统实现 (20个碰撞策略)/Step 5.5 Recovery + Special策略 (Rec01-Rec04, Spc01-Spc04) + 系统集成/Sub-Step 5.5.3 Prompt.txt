@@ -1,0 +1,580 @@
+Sub-Step 5.5. 3 Prompt
+
+================================================================================
+任务：在CameraCollision_Recovery.  cpp中实现RC02 + RC03
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.    27 C++项目。
+- RC02通过平滑插值恢复相机距离
+- RC03通过分步方式恢复相机距离
+
+【当前进度】
+Phase 5 Step 5.  5 Sub-Step 5.5.3 (共190个Sub-Step中的第170个)
+前置完成：
+- 5.5.1:  CameraCollision_Recovery.h ✅
+- 5.5.2: RecoveryBase + RC01实现 ✅
+
+【任务目标】
+在CameraCollision_Recovery.   cpp中替换RC02和RC03的placeholder为完整实现。
+
+【⚠️ 重要提醒】
+
+1. **本Sub-Step是更新现有文件，不创建新文件**
+   因此**不需要Regenerate**，直接编译即可。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **方法签名（与头文件一致）：**
+   - ShouldExecute:   1个参数
+   - Execute:  3个参数
+
+4. **Recovery策略特点：**
+   - RC02: 平滑插值，可选Ease-Out曲线
+   - RC03: 分步恢复，可在步内平滑
+
+【具体要求】
+
+**文件路径：** `Source/MyProject/Private/Camera/Collision/CameraCollision_Recovery.cpp`
+
+**找到RC02和RC03的placeholder代码，替换为以下实现：**
+
+---
+
+### RC02: SmoothRecovery 完整实现
+
+```cpp
+//========================================
+// RC02: Smooth Recovery Implementation
+//========================================
+
+/**
+ * Constructor - Configure smooth recovery parameters
+ * 
+ * Smooth recovery uses continuous interpolation: 
+ * - Natural feeling recovery
+ * - Optional ease-out for deceleration at end
+ * - Most commonly used recovery type
+ */
+UCameraCollision_RC02_SmoothRecovery::UCameraCollision_RC02_SmoothRecovery()
+    : SmoothRecoverySpeed(10.0f)
+    , bUseEaseOut(true)
+    , EaseOutExponent(2.0f)
+    , InterpAlpha(0.0f)
+{
+    Priority = 105;
+    BaseRecoverySpeed = 10.0f;
+}
+
+bool UCameraCollision_RC02_SmoothRecovery:: ShouldExecute(const FStageExecutionContext& Context) const
+{
+    return bIsEnabled && (bIsRecovering || bWasInCollision);
+}
+
+bool UCameraCollision_RC02_SmoothRecovery::Execute(
+    const FStageExecutionContext& Context,
+    const FCollisionDetectionResult& DetectionResult,
+    FCollisionResponseOutput& OutResponse)
+{
+    bool bCurrentlyInCollision = DetectionResult.bCollisionDetected;
+    
+    // Track collision state
+    if (bCurrentlyInCollision)
+    {
+        // In collision - track state but don't recover
+        bWasInCollision = true;
+        CurrentRecoveryDistance = Context.Output.Distance;
+        InterpAlpha = 0.0f;
+        
+        if (bIsRecovering)
+        {
+            // Collision during recovery - reset
+            bIsRecovering = false;
+            RecoveryProgress = 0.0f;
+        }
+        
+        SetActive(false);
+        return false;
+    }
+    
+    // Not in collision
+    if (!bWasInCollision && !bIsRecovering)
+    {
+        SetActive(false);
+        return false;
+    }
+    
+    // Begin recovery if not already
+    if (!bIsRecovering)
+    {
+        float CurrentDistance = Context. Output.Distance;
+        float TargetDistance = DetectionResult. DesiredDistance > 0.0f ? 
+            DetectionResult.DesiredDistance : CurrentDistance + 100.0f;
+        
+        if (FMath::Abs(TargetDistance - CurrentDistance) > CompletionTolerance)
+        {
+            BeginRecovery(CurrentDistance, TargetDistance);
+            InterpAlpha = 0.0f;
+        }
+        else
+        {
+            // Already at target
+            bWasInCollision = false;
+            SetActive(false);
+            return false;
+        }
+    }
+    
+    SetActive(true);
+    
+    // Calculate interpolation
+    float CurrentDistance = Context.Output.Distance;
+    float TargetDistance = RecoveryTargetDistance;
+    float DistanceDelta = TargetDistance - CurrentDistance;
+    
+    // Check if recovery is complete
+    if (FMath::Abs(DistanceDelta) <= CompletionTolerance)
+    {
+        EndRecovery();
+        bWasInCollision = false;
+        InterpAlpha = 0.0f;
+        SetActive(false);
+        return false;
+    }
+    
+    // Update interpolation alpha
+    InterpAlpha += CachedDeltaTime * SmoothRecoverySpeed / 
+        FMath::Max(1.0f, FMath:: Abs(RecoveryTargetDistance - RecoveryStartDistance));
+    InterpAlpha = FMath::Clamp(InterpAlpha, 0.0f, 1.0f);
+    
+    // Apply ease-out if enabled
+    float EffectiveAlpha = InterpAlpha;
+    if (bUseEaseOut)
+    {
+        // Ease-out:  1 - (1 - t)^exponent
+        EffectiveAlpha = 1.0f - FMath::Pow(1.0f - InterpAlpha, EaseOutExponent);
+    }
+    
+    // Calculate target position for this frame
+    float InterpolatedDistance = FMath::Lerp(RecoveryStartDistance, RecoveryTargetDistance, EffectiveAlpha);
+    float RecoveryAmount = InterpolatedDistance - CurrentDistance;
+    
+    // Ensure we don't overshoot
+    RecoveryAmount = FMath::Min(RecoveryAmount, FMath::Abs(DistanceDelta));
+    
+    // Verify recovery path is clear
+    FVector FocusPoint = Context.Output.FocusPoint;
+    FVector CameraDirection = -Context.Output. Rotation.Vector();
+    FVector TargetCameraPos = FocusPoint + CameraDirection * (CurrentDistance + RecoveryAmount);
+    
+    FCollisionQueryParams Params = GetDefaultTraceParams();
+    
+    FHitResult Hit;
+    bool bBlocked = LineTrace(FocusPoint, TargetCameraPos, Hit, Params);
+    
+    if (bBlocked && Hit.Distance < CurrentDistance + RecoveryAmount)
+    {
+        // Path blocked - limit recovery
+        float SafeRecoveryAmount = FMath:: Max(0.0f, Hit.Distance - CurrentDistance - ProbeRadius);
+        RecoveryAmount = SafeRecoveryAmount;
+        
+        if (RecoveryAmount <= 0.0f)
+        {
+            UE_LOG(LogTemp, VeryVerbose, TEXT("RC02 SmoothRecovery: Path blocked, waiting"));
+            return false;
+        }
+    }
+    
+    // Update state
+    CurrentRecoveryDistance = CurrentDistance + RecoveryAmount;
+    UpdateRecoveryProgress(CachedDeltaTime, SmoothRecoverySpeed);
+    
+    // Build response
+    OutResponse.Reset();
+    OutResponse. StrategyType = GetStrategyType();
+    OutResponse.Category = GetStrategyCategory();
+    OutResponse. DistanceAdjustment = RecoveryAmount;
+    OutResponse.Weight = BlendWeight;
+    OutResponse.Priority = GetPriority();
+    OutResponse.bIsActive = true;
+    OutResponse.ActiveDuration = RecoveryTime;
+    
+    UE_LOG(LogTemp, Verbose, TEXT("RC02 SmoothRecovery:  Recovering +%. 2f (alpha:  %.2f, progress: %.0f%%)"),
+        RecoveryAmount, EffectiveAlpha, RecoveryProgress * 100.0f);
+    
+    return true;
+}
+
+void UCameraCollision_RC02_SmoothRecovery::Update(float DeltaTime, const FStageExecutionContext& Context)
+{
+    Super::Update(DeltaTime, Context);
+}
+
+void UCameraCollision_RC02_SmoothRecovery::Reset()
+{
+    Super::Reset();
+    InterpAlpha = 0.0f;
+}
+```
+
+---
+
+### RC03: StepRecovery 完整实现
+
+```cpp
+//========================================
+// RC03: Step Recovery Implementation
+//========================================
+
+/**
+ * Constructor - Configure step recovery parameters
+ * 
+ * Step recovery moves in discrete steps:
+ * - Predictable, controlled recovery
+ * - Good for stylized camera behavior
+ * - Optional smoothing within each step
+ */
+UCameraCollision_RC03_StepRecovery::UCameraCollision_RC03_StepRecovery()
+    : StepDistance(20.0f)
+    , StepInterval(0.1f)
+    , bSmoothWithinStep(true)
+    , MaxSteps(0)
+    , CurrentStep(0)
+    , TotalSteps(0)
+    , TimeSinceLastStep(0.0f)
+    , StepStartDistance(0.0f)
+    , StepTargetDistance(0.0f)
+{
+    Priority = 110;
+    BaseRecoverySpeed = 15.0f;
+}
+
+bool UCameraCollision_RC03_StepRecovery::ShouldExecute(const FStageExecutionContext& Context) const
+{
+    return bIsEnabled && (bIsRecovering || bWasInCollision);
+}
+
+bool UCameraCollision_RC03_StepRecovery::Execute(
+    const FStageExecutionContext& Context,
+    const FCollisionDetectionResult& DetectionResult,
+    FCollisionResponseOutput& OutResponse)
+{
+    bool bCurrentlyInCollision = DetectionResult.bCollisionDetected;
+    
+    // Track collision state
+    if (bCurrentlyInCollision)
+    {
+        // In collision - reset recovery
+        bWasInCollision = true;
+        CurrentRecoveryDistance = Context.Output.Distance;
+        
+        if (bIsRecovering)
+        {
+            bIsRecovering = false;
+            CurrentStep = 0;
+            TotalSteps = 0;
+            TimeSinceLastStep = 0.0f;
+        }
+        
+        SetActive(false);
+        return false;
+    }
+    
+    // Not in collision
+    if (! bWasInCollision && !bIsRecovering)
+    {
+        SetActive(false);
+        return false;
+    }
+    
+    // Begin recovery if not already
+    if (!bIsRecovering)
+    {
+        float CurrentDistance = Context.Output. Distance;
+        float TargetDistance = DetectionResult. DesiredDistance > 0.0f ? 
+            DetectionResult.DesiredDistance : CurrentDistance + 100.0f;
+        
+        float TotalDistance = FMath::Abs(TargetDistance - CurrentDistance);
+        
+        if (TotalDistance > CompletionTolerance)
+        {
+            BeginRecovery(CurrentDistance, TargetDistance);
+            
+            // Calculate total steps needed
+            TotalSteps = FMath::CeilToInt(TotalDistance / StepDistance);
+            if (MaxSteps > 0)
+            {
+                TotalSteps = FMath::Min(TotalSteps, MaxSteps);
+            }
+            
+            CurrentStep = 0;
+            TimeSinceLastStep = StepInterval; // Start first step immediately
+            StepStartDistance = CurrentDistance;
+            StepTargetDistance = CurrentDistance + StepDistance;
+            StepTargetDistance = FMath::Min(StepTargetDistance, TargetDistance);
+            
+            UE_LOG(LogTemp, Verbose, TEXT("RC03 StepRecovery: Starting recovery, %d steps planned"),
+                TotalSteps);
+        }
+        else
+        {
+            bWasInCollision = false;
+            SetActive(false);
+            return false;
+        }
+    }
+    
+    SetActive(true);
+    
+    // Update step timer
+    TimeSinceLastStep += CachedDeltaTime;
+    
+    float CurrentDistance = Context. Output.Distance;
+    float FinalTargetDistance = RecoveryTargetDistance;
+    
+    // Check if all steps complete
+    if (CurrentStep >= TotalSteps || 
+        FMath::Abs(FinalTargetDistance - CurrentDistance) <= CompletionTolerance)
+    {
+        EndRecovery();
+        bWasInCollision = false;
+        CurrentStep = 0;
+        TotalSteps = 0;
+        TimeSinceLastStep = 0.0f;
+        SetActive(false);
+        return false;
+    }
+    
+    // Check if it's time for next step
+    if (TimeSinceLastStep >= StepInterval)
+    {
+        // Start new step
+        TimeSinceLastStep = 0.0f;
+        CurrentStep++;
+        StepStartDistance = CurrentDistance;
+        StepTargetDistance = CurrentDistance + StepDistance;
+        StepTargetDistance = FMath::Min(StepTargetDistance, FinalTargetDistance);
+        
+        UE_LOG(LogTemp, VeryVerbose, TEXT("RC03 StepRecovery: Starting step %d/%d"),
+            CurrentStep, TotalSteps);
+    }
+    
+    // Calculate recovery amount for this frame
+    float RecoveryAmount = 0.0f;
+    
+    if (bSmoothWithinStep)
+    {
+        // Smooth interpolation within the step
+        float StepProgress = TimeSinceLastStep / StepInterval;
+        StepProgress = FMath::Clamp(StepProgress, 0.0f, 1.0f);
+        
+        float StepInterpolatedDistance = FMath::Lerp(StepStartDistance, StepTargetDistance, StepProgress);
+        RecoveryAmount = StepInterpolatedDistance - CurrentDistance;
+    }
+    else
+    {
+        // Instant step at the start of each interval
+        if (TimeSinceLastStep < CachedDeltaTime * 1.5f)
+        {
+            RecoveryAmount = StepTargetDistance - CurrentDistance;
+        }
+    }
+    
+    // Clamp recovery amount
+    RecoveryAmount = FMath::Max(0.0f, RecoveryAmount);
+    RecoveryAmount = FMath::Min(RecoveryAmount, FMath:: Abs(FinalTargetDistance - CurrentDistance));
+    
+    if (RecoveryAmount <= 0.0f)
+    {
+        return false;
+    }
+    
+    // Verify recovery path is clear
+    FVector FocusPoint = Context. Output.FocusPoint;
+    FVector CameraDirection = -Context.Output. Rotation.Vector();
+    FVector TargetCameraPos = FocusPoint + CameraDirection * (CurrentDistance + RecoveryAmount);
+    
+    FCollisionQueryParams Params = GetDefaultTraceParams();
+    
+    FHitResult Hit;
+    bool bBlocked = LineTrace(FocusPoint, TargetCameraPos, Hit, Params);
+    
+    if (bBlocked && Hit.Distance < CurrentDistance + RecoveryAmount)
+    {
+        // Path blocked - limit recovery
+        float SafeRecoveryAmount = FMath::Max(0.0f, Hit. Distance - CurrentDistance - ProbeRadius);
+        RecoveryAmount = SafeRecoveryAmount;
+        
+        if (RecoveryAmount <= 0.0f)
+        {
+            UE_LOG(LogTemp, VeryVerbose, TEXT("RC03 StepRecovery:  Path blocked at step %d"), CurrentStep);
+            return false;
+        }
+    }
+    
+    // Update state
+    CurrentRecoveryDistance = CurrentDistance + RecoveryAmount;
+    RecoveryProgress = static_cast<float>(CurrentStep) / static_cast<float>(FMath::Max(1, TotalSteps));
+    RecoveryTime += CachedDeltaTime;
+    
+    // Build response
+    OutResponse. Reset();
+    OutResponse.StrategyType = GetStrategyType();
+    OutResponse.Category = GetStrategyCategory();
+    OutResponse. DistanceAdjustment = RecoveryAmount;
+    OutResponse.Weight = BlendWeight;
+    OutResponse.Priority = GetPriority();
+    OutResponse. bIsActive = true;
+    OutResponse.ActiveDuration = RecoveryTime;
+    
+    UE_LOG(LogTemp, Verbose, TEXT("RC03 StepRecovery: Step %d/%d, recovering +%.2f"),
+        CurrentStep, TotalSteps, RecoveryAmount);
+    
+    return true;
+}
+
+void UCameraCollision_RC03_StepRecovery:: Update(float DeltaTime, const FStageExecutionContext& Context)
+{
+    Super::Update(DeltaTime, Context);
+}
+
+void UCameraCollision_RC03_StepRecovery::Reset()
+{
+    Super::Reset();
+    
+    CurrentStep = 0;
+    TotalSteps = 0;
+    TimeSinceLastStep = 0.0f;
+    StepStartDistance = 0.0f;
+    StepTargetDistance = 0.0f;
+}
+```
+
+---
+
+【代码设计说明】
+
+### 1. RC02 SmoothRecovery 特性
+
+```
+插值算法：
+├── InterpAlpha：0→1 随时间增长
+├── 增长速度：SmoothRecoverySpeed / 总距离
+├── EaseOut选项：1 - (1-t)^exponent
+└── 最终距离：Lerp(Start, Target, EffectiveAlpha)
+
+执行流程：
+├── 1. 检测碰撞状态
+├── 2. 初始化恢复（如果需要）
+├── 3. 更新InterpAlpha
+├── 4. 应用EaseOut曲线
+├── 5. 计算本帧目标距离
+├── 6. 验证路径
+├── 7. 构建Response
+└── 8. 返回
+```
+
+### 2. RC03 StepRecovery 特性
+
+```
+分步算法：
+├── TotalSteps = ceil(总距离 / StepDistance)
+├── StepInterval：每步之间的时间间隔
+├── bSmoothWithinStep：步内是否平滑
+└── MaxSteps：最大步数限制
+
+执行流程：
+├── 1. 检测碰撞状态
+├── 2. 初始化恢复（计算步数）
+├── 3. 更新步计时器
+├── 4. 检查是否开始新步
+├── 5. 计算步内恢复量
+│   ├── 平滑：Lerp(StepStart, StepTarget, progress)
+│   └── 瞬时：直接跳到StepTarget
+├── 6. 验证路径
+├── 7. 构建Response
+└── 8. 返回
+```
+
+### 3. RC02 vs RC03 对比
+
+| 特性 | RC02 Smooth | RC03 Step |
+|------|-------------|-----------|
+| 恢复方式 | 连续插值 | 离散步进 |
+| 视觉效果 | 平滑流畅 | 阶梯/脉冲 |
+| 优先级 | 105 | 110 |
+| 适用场景 | 通用 | 风格化 |
+| 速度控制 | 统一速度 | 步距+间隔 |
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过（0 errors）
+   - [ ] 无链接错误
+
+2. **代码完整性：**
+   - [ ] RC02 SmoothRecovery完整实现
+   - [ ] RC02 EaseOut曲线正确
+   - [ ] RC03 StepRecovery完整实现
+   - [ ] RC03 步内平滑正确
+
+3. **功能验证：**
+   - [ ] RC02可平滑恢复
+   - [ ] RC03可分步恢复
+   - [ ] 路径验证正常
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 5.5.3 完成报告
+================================================================================
+
+【更新的文件】
+- 文件：CameraCollision_Recovery.cpp
+- 修改：替换RC02和RC03的placeholder为完整实现
+
+【实现的内容】
+
+RC02 SmoothRecovery：
+- ✅ Execute() - 完整平滑插值实现
+- ✅ Update()
+- ✅ Reset()
+- ✅ EaseOut曲线支持
+- ✅ 路径验证
+
+RC03 StepRecovery：
+- ✅ Execute() - 完整分步恢复实现
+- ✅ Update()
+- ✅ Reset()
+- ✅ 步内平滑选项
+- ✅ 最大步数限制
+- ✅ 路径验证
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【最终状态】
+✅ RC02 + RC03实现完成
+✅ Recovery策略全部完成 (3/3)
+
+================================================================================
+```
+
+【后续步骤】
+
+5. 5.3完成后：
+- [x] ✅ 5.5.1: CameraCollision_Recovery.h
+- [x] ✅ 5.5.2: RecoveryBase + RC01
+- [x] ✅ 5.5.3: RC02 + RC03（当前）
+- [ ] ⏳ 5.5.4: Special策略头文件
+- [ ] ⏳ 5.5.5: Special策略实现
+- [ ] ⏳ 5.5.6: 注册所有策略
+
+**Phase 5.5进度：3/6**
+
+================================================================================

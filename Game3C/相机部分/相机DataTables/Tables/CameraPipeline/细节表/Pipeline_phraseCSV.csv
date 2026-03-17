@@ -1,0 +1,9 @@
+StageID,StageName,ChineseName,Layer,ExecutionOrder,Description,CanSkip,SkipCondition,EstimatedCostPercent
+1,InputContextGather,输入上下文收集,InputLayer,1,收集当前帧所有相机计算需要的输入数据,false,无,5
+2,StateMachineUpdate,状态机更新,DecisionLayer,2,评估期望状态并管理状态转换,false,无,5
+3,ModuleComputeStack,模块计算栈,ComputeLayer,3,遍历执行所有激活的计算模块,false,无,35
+4,ModifierApply,修改器应用,ComputeLayer,4,更新并应用所有激活的临时修改器,true,无激活修改器,10
+5,BlendAndSolveConflicts,混合与冲突解决,ComputeLayer,5,合并模块输出并解决冲突,false,无,15
+6,CollisionResolver,碰撞解析,SafetyLayer,6,碰撞检测与位置修正,true,禁用碰撞检测,15
+7,PostProcessEffects,后处理效果,OutputLayer,7,应用最终后处理效果和平滑,true,无后处理配置,10
+8,RenderApply,渲染应用,OutputLayer,8,将结果应用到SpringArm和Camera组件,false,无,5

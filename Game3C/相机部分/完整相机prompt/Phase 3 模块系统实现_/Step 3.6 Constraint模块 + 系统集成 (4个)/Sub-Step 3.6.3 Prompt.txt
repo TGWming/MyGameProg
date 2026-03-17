@@ -1,0 +1,451 @@
+Sub-Step 3.7.3 Prompt
+
+================================================================================
+任务：在CameraModule_Constraint.cpp中添加C02 Distance_Clamp实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+C02负责限制相机距离（臂长）在配置的范围内。
+这确保相机不会离角色太近（穿模）或太远（看不清）。
+
+【Pipeline中的位置】
+```
+Stage 3 - Module Compute (Constraint部分):
+├─ C01: Pitch Clamp (Override, 200) ✅ 已完成
+├─ C02: Distance Clamp (Override, 200) ← 当前
+│   → 限制距离在 MinDistance 到 MaxDistance 范围内
+├─ C03: FOV Clamp (Override, 200)
+└─ C04: Visibility Ensure (Blend, 210)
+
+距离限制的重要性：
+- 防止相机进入角色模型内部
+- 防止相机离角色太远导致看不清
+- 是碰撞检测后的最终保障
+```
+
+【当前进度】
+Phase 3 Step 3.7 Sub-Step 3.7.3 (共190个Sub-Step中的第102个)
+前置完成：3.7.2 C01实现 ✅
+
+【任务目标】
+在CameraModule_Constraint.cpp中完整实现C02模块，替换现有的占位符。
+
+【⚠️ 重要提醒】
+
+1. **编译前必做步骤：**
+   本Sub-Step只修改现有. cpp文件，不添加新文件。
+   因此**不需要Regenerate**，可以直接编译。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   确认StateConfig的字段路径与项目实际结构一致。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_Constraint.cpp
+
+2. **定位修改位置：**
+
+在文件中找到C02的占位符实现部分：
+
+```cpp
+//========================================
+// C02: Distance Clamp
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.7.3
+// Enforces camera arm length limits
+... 占位符代码
+```
+
+**将上述占位符代码完整替换为下方的完整实现。**
+
+---
+
+3. **C02完整实现代码：**
+
+**A. ShouldActivate() 实现：**
+
+```cpp
+/**
+ * ShouldActivate - Distance clamp is always active
+ * 
+ * C02 is a safety constraint that should always be active. 
+ * It ensures the camera distance never exceeds configured limits,
+ * regardless of what other modules have calculated.
+ * 
+ * Priority 200 (constraint level), uses Override policy. 
+ */
+bool UCameraModule_C02_Distance_Clamp::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Distance clamp is always active as a safety constraint
+	// Only check if module is enabled
+	return bIsEnabled;
+}
+```
+
+---
+
+**B. Compute() 实现：**
+
+```cpp
+/**
+ * Compute - Clamp camera distance to configured limits
+ * 
+ * This module reads the current accumulated distance from the context
+ * and clamps it to the configured min/max values.
+ * 
+ * Steps:
+ * 1. Get current distance from context output
+ * 2. Get distance limits from state config
+ * 3. Apply default limits if not configured
+ * 4. Validate min/max relationship
+ * 5. Clamp distance to valid range
+ * 6. Output the clamped distance
+ * 
+ * Distance Units:  Centimeters (UE4 standard)
+ * 
+ * Typical Limits:
+ * - MinDistance: 100-200cm (prevent clipping into character)
+ * - MaxDistance: 800-1500cm (prevent losing sight of character)
+ * 
+ * Important Considerations:
+ * - MinDistance should account for character collision capsule
+ * - MaxDistance should consider gameplay visibility needs
+ * - After collision detection, distance might be reduced further
+ * 
+ * @param Context The current pipeline execution context
+ * @param StateConfig The current camera state configuration
+ * @param OutOutput Output structure to fill with computed values
+ * @return True if computation succeeded
+ */
+bool UCameraModule_C02_Distance_Clamp::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Step 1: Get current distance from context output
+	// This is the accumulated distance from all previous modules
+	float CurrentDistance = Context.Output.Distance;
+	
+	// Step 2: Get distance limits from state config
+	float MinDistance = StateConfig.StateBase.Distance. MinDistance;
+	float MaxDistance = StateConfig.StateBase.Distance.MaxDistance;
+	
+	// Step 3: Apply default limits if not configured
+	// MinDistance should be positive and reasonable
+	if (MinDistance <= 0.0f)
+	{
+		MinDistance = 100.0f;  // Default:  1 meter minimum
+	}
+	
+	// MaxDistance should be positive and greater than MinDistance
+	if (MaxDistance <= 0.0f)
+	{
+		MaxDistance = 1000.0f;  // Default: 10 meters maximum
+	}
+	
+	// Step 4: Validate min/max relationship
+	// Ensure min < max (swap if inverted)
+	if (MinDistance > MaxDistance)
+	{
+		float Temp = MinDistance;
+		MinDistance = MaxDistance;
+		MaxDistance = Temp;
+	}
+	
+	// Also ensure there's at least some valid range
+	if (MaxDistance - MinDistance < 10.0f)
+	{
+		// If range is too small, expand it
+		MaxDistance = MinDistance + 100.0f;
+	}
+	
+	// Step 5: Clamp distance to valid range
+	float ClampedDistance = FMath::Clamp(CurrentDistance, MinDistance, MaxDistance);
+	
+	// Step 6: Fill output structure
+	OutOutput. DistanceOutput = ClampedDistance;
+	OutOutput.bHasDistanceOutput = true;
+	
+	return true;
+}
+```
+
+---
+
+4. **完整的C02代码块（用于复制粘贴）：**
+
+```cpp
+//========================================
+// C02: Distance Clamp - Enforces camera arm length limits
+//========================================
+
+/**
+ * ShouldActivate - Distance clamp is always active
+ */
+bool UCameraModule_C02_Distance_Clamp::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Distance clamp is always active as a safety constraint
+	return bIsEnabled;
+}
+
+/**
+ * Compute - Clamp camera distance to configured limits
+ */
+bool UCameraModule_C02_Distance_Clamp:: Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output
+	OutOutput = CreateBaseOutput();
+	
+	// Get current distance from context output
+	float CurrentDistance = Context.Output.Distance;
+	
+	// Get distance limits from state config
+	float MinDistance = StateConfig.StateBase.Distance. MinDistance;
+	float MaxDistance = StateConfig.StateBase.Distance.MaxDistance;
+	
+	// Apply default limits if not configured
+	if (MinDistance <= 0.0f)
+	{
+		MinDistance = 100.0f;  // Default: 1 meter minimum
+	}
+	
+	if (MaxDistance <= 0.0f)
+	{
+		MaxDistance = 1000.0f;  // Default: 10 meters maximum
+	}
+	
+	// Validate min/max relationship
+	if (MinDistance > MaxDistance)
+	{
+		float Temp = MinDistance;
+		MinDistance = MaxDistance;
+		MaxDistance = Temp;
+	}
+	
+	// Ensure minimum valid range
+	if (MaxDistance - MinDistance < 10.0f)
+	{
+		MaxDistance = MinDistance + 100.0f;
+	}
+	
+	// Clamp distance
+	float ClampedDistance = FMath::Clamp(CurrentDistance, MinDistance, MaxDistance);
+	
+	// Fill output
+	OutOutput.DistanceOutput = ClampedDistance;
+	OutOutput.bHasDistanceOutput = true;
+	
+	return true;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 说明距离单位（厘米）
+   - 解释典型限制值
+   - 描述与碰撞检测的关系
+   - 所有注释英文
+
+2. **格式：**
+   - Tab缩进
+   - 清晰步骤标注
+   - 方法间空两行
+
+3. **防御性编程：**
+   - 默认值处理
+   - Min/Max验证和交换
+   - 最小有效范围保证
+
+【技术说明】
+
+**C02的核心机制：**
+
+### 1. 距离限制的重要性
+
+```
+距离限制场景：
+
+距离太近（< MinDistance）：
+┌─────────────────┐
+│   Character     │
+│      ●──●       │  ← 相机在角色内部！
+│                 │
+└─────────────────┘
+问题：相机穿透角色模型，看到内部
+
+距离太远（> MaxDistance）：
+                                    Camera
+                                       ●
+Character                              
+    ●────────────────────────────────→ 
+问题：角色太小，看不清动作
+
+正常距离：
+Character          Camera
+    ●──────────────→●
+        300-500cm
+```
+
+### 2. 与Distance模块的关系
+
+```
+Distance模块（D01-D07）：
+- 计算目标距离
+- 基于状态、战斗、Boss等
+- 输出期望距离
+
+C02 Distance Clamp：
+- 不计算新距离
+- 只验证和限制
+- 确保在合理范围内
+
+执行顺序：
+D01 → D02 → ...  → D07 → C02
+         计算            限制
+```
+
+### 3. 与碰撞检测的关系
+
+```
+通常的处理流程：
+
+1. Distance模块计算目标距离：400cm
+2. C02限制在[100, 1000]：400cm（不变）
+3. 碰撞检测发现障碍物在250cm处
+4. 最终距离：250cm（被碰撞压缩）
+
+C02的作用：
+- 在碰撞检测之前确保基础距离合理
+- 防止极端距离值进入碰撞检测
+- 是第一道防线
+```
+
+### 4. 默认值的选择
+
+```cpp
+// MinDistance = 100cm
+// 原因：
+// - 大多数角色碰撞胶囊半径 < 50cm
+// - 留100cm余量确保相机在角色外
+// - 第三人称游戏的最小舒适距离
+
+// MaxDistance = 1000cm
+// 原因：
+// - 10米是典型第三人称最大距离
+// - 超过10米角色太小难以操作
+// - Boss战可能需要更大值（通过配置）
+```
+
+### 5. bDistanceIsMultiplier的移除
+
+原始PROMPT中有`OutOutput.bDistanceIsMultiplier = false;`，但在修改版中移除：
+```cpp
+// 移除原因：
+// 1. Constraint模块输出的是绝对距离值
+// 2. bDistanceIsMultiplier主要用于Additive策略
+// 3. Override策略直接使用输出值
+// 4. 如果FModuleOutput中有该字段，根据实际需要决定是否设置
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] ShouldActivate()完整
+   - [ ] Compute()完整
+   - [ ] 所有方法签名与. h一致
+
+3. **逻辑正确性：**
+   - [ ] 从Context.Output.Distance读取
+   - [ ] 默认MinDistance = 100cm
+   - [ ] 默认MaxDistance = 1000cm
+   - [ ] Min/Max验证和交换
+   - [ ] 最小范围保证（10cm）
+
+4. **字段访问：**
+   - [ ] Context.Output.Distance
+   - [ ] StateConfig.StateBase.Distance. MinDistance
+   - [ ] StateConfig.StateBase.Distance.MaxDistance
+
+【注意事项】
+
+1. **不需要Regenerate**
+
+2. **字段缺失处理：**
+   ```cpp
+   // 如果MinDistance/MaxDistance字段不存在
+   float MinDistance = 100.0f;   // 默认值
+   float MaxDistance = 1000.0f;  // 默认值
+   ```
+
+3. **UE_LOG已移除：**
+   原始PROMPT中的UE_LOG已移除，减少运行时日志。如需调试，可自行添加。
+
+4. **测试建议：**
+   - 设置Distance = 50 → 应被限制为100（或MinDistance）
+   - 设置Distance = 2000 → 应被限制为1000（或MaxDistance）
+   - 设置Distance = 500 → 应保持不变
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 3.7.3 完成报告
+================================================================================
+
+【修改内容】
+- 文件：CameraModule_Constraint.cpp
+- 修改位置：C02模块
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ ShouldActivate：始终激活
+- ✅ Compute：距离限制在MinDistance到MaxDistance
+
+【编译结果】
+- 编译状态：[成功/失败]
+
+【最终状态】
+✅ C02完成，相机距离限制
+
+================================================================================
+```
+
+【后续步骤】
+
+C02完成后，Constraint模块进度：
+- [x] ✅ 3.7.1:  CameraModule_Constraint.h
+- [x] ✅ 3.7.2: C01 - Pitch Clamp
+- [x] ✅ 3.7.3: C02 - Distance Clamp
+- [ ] ⏳ 3.7.4: C03 - FOV Clamp（下一步）
+- [ ] ⏳ 3.7.5: C04 - Visibility Ensure
+- [ ] ⏳ 3.7.6: 系统集成与验证
+
+**Constraint模块完成度：2/4 (50%)**
+
+**Phase 3进度：41/43模块 = 95.3%**
+
+================================================================================

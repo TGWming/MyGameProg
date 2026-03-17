@@ -1,0 +1,548 @@
+================================================================================
+  UE4.27 类魂项目 · 核心开发决策文档
+  版本：v1.0
+  创建日期：2026-03-12
+  
+  本文档汇总所有已确认的架构决策、技术路线、开发顺序与细节约定。
+  每次新开 Chat 时，AI 读取本文档即可恢复完整上下文。
+================================================================================
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第一章 · 架构路线决策（已确认）
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1.1 总体架构路线
+────────────────
+  ✅ 采用：Montage 驱动路线（文档C 路线）
+  ❌ 不采用：SM 全量 90 State 路线（文档 3.txt 路线）
+
+  依据：
+  - 黑魂3、血源诅咒、匹诺曹均采用 Montage 驱动路线
+  - State Machine 只负责 Locomotion 基底（Idle/Move/Jump/Dead）
+  - 一切动作（攻击/翻滚/受击/交互/死亡）走 Montage + FullBody Slot 覆盖
+  - SM 全量 90 State 维护成本过高，且无成功商业案例
+
+1.2 State Machine 职责范围
+──────────────────────────
+  State Machine 只管以下内容（约 7-8 个 State）：
+
+  ┌──────────────────────────────────────────────────────┐
+  │  State Machine（完整版）                               │
+  │                                                       │
+  │  ┌────────┐     ┌──────────┐     ┌─────────┐        │
+  │  │  Idle  │ ←─→ │ Movement │ ←─→ │ Sprint  │        │
+  │  └───┬────┘     └──────────┘     └─────────┘        │
+  │      │                                                │
+  │      ↓ bIsFalling == true                             │
+  │                                                       │
+  │  ┌────────────┐     ┌────────┐     ┌────────┐       │
+  │  │ JumpStart  │ ──→ │ InAir  │ ──→ │  Land  │       │
+  │  │ (播一次)    │     │(循环)  │     │(播一次) │       │
+  │  └────────────┘     └────────┘     └───┬────┘       │
+  │                                         │             │
+  │                                         ↓ 回到        │
+  │                                      Idle/Movement    │
+  │                                                       │
+  │  ┌────────┐                                           │
+  │  │  Dead  │  ← 终态                                   │
+  │  └────────┘                                           │
+  │                                                       │
+  └──────────────────────────────────────────────────────┘
+
+  State Machine 不管的事：
+  - 攻击（走 Montage）
+  - 翻滚/后撤步（走 Montage）
+  - 受击（走 Montage）
+  - 喝药/捡东西/开门等交互（走 Montage）
+  - 死亡动画本身（走 Montage，SM 的 Dead State 只提供最后一帧静态 Pose）
+
+1.3 Montage 覆盖机制
+────────────────────
+  AnimGraph 连接结构：
+
+  [State Machine] → [Additive Slot] → [FullBody Slot] → [Output Pose]
+
+  - State Machine 持续输出基础 Pose（Idle/Move/Fall 等）
+  - 当 Montage 在 FullBody Slot 播放时，自动覆盖 SM 输出（带 BlendIn/BlendOut）
+  - Montage 结束后，SM 输出重新显现
+  - Montage 的 Blend 与 SM 的 State 过渡使用同一套底层混合算法，效果一致
+
+1.4 连段机制
+────────────
+  ✅ 采用：JumpToSection（同一 Montage 内跳 Section）
+  ❌ 不采用：每段连招播放独立 Montage
+
+  示例：
+  一把武器的轻击连段 = 一个 Montage 文件，内含 3 个 Section：
+  ┌──────────┬──────────┬──────────┐
+  │ Combo_01 │ Combo_02 │ Combo_03 │
+  └──────────┴──────────┴──────────┘
+
+  玩家按第一次攻击 → Montage_Play() 从 Combo_01 开始
+  玩家在窗口内按第二次 → JumpToSection("Combo_02")
+  玩家在窗口内按第三次 → JumpToSection("Combo_03")
+
+1.5 输入缓存机制
+────────────────
+  ✅ 接受玩家输入但缓存，等窗口开了再执行
+  ❌ 不禁止玩家输入
+
+  流程：
+  - 玩家按键 → 代码收到输入
+  - 当前在做动作且窗口没开 → 存入 BufferedAction
+  - 缓存有保质期（默认 0.2 秒），过期清除
+  - 窗口开了 → 检查缓存 → 有就立刻执行
+  - 缓存只保留最后一个输入，不是队列
+
+1.6 窗口优先级机制
+──────────────────
+  不同优先级的动作，在 Montage 上放不同的 Notify 窗口。
+  窗口越早打开 = 优先级越高。
+
+  示例（一个轻击 Montage 的时间轴）：
+
+  0.0                                              1.0
+   |                                                 |
+   ├── ANS_DodgeCancelWindow ═══════════════════╗    |
+   |                                            ║    |
+   ├────── ANS_TransformWindow ═══════════╗     ║    |
+   |                                      ║     ║    |
+   ├────────── ANS_ComboWindow ═════╗     ║     ║    |
+   |                                ║     ║     ║    |
+   |                                ╚═════╩═��═══╝    |
+   |                                                 |
+
+  翻滚取消：最早开（优先级最高）
+  变形斩/战技：中间
+  普通连段：最晚开（优先级最低）
+
+  每种窗口对应一个 Bool：
+  - bCanCombo（普通连段窗口）
+  - bCanTransform（变形斩窗口）
+  - bCanDodgeCancel（翻滚取消窗口）
+  等等，根据游戏设计需求添加。
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第二章 · 动画资源分类与使用方式
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+2.1 三种动画资源的区别
+──────────────────────
+
+  ┌─────────────────────┬──────────────────────┬──────────────────────┐
+  │  Animation Sequence │     BlendSpace       │      Montage         │
+  ├─────────────────────┼──────────────────────┼────────��─────────────┤
+  │  一段固定的动画      │  多段动画根据参数混合  │  一段动画，由代码调用  │
+  │                     │                      │  播放                 │
+  ├─────────────────────┼──────────────────────┼──────────────────────┤
+  │  放在 SM 的 State   │  放在 SM 的 State    │  不在 SM 里           │
+  │  里面               │  里面                │  通过 Slot 盖上去     │
+  ├─────────────────────┼──────────────────────┼──────────────────────┤
+  │  站着、起跳、空中、  │  走路/跑步（根据速度  │  攻击/翻滚/喝药/受击  │
+  │  落地、冲刺         │  方向连续变化）       │  （代码说播就播）      │
+  └─────────────────────┴──────────────────────┴──────────────────────┘
+
+2.2 判断标准：什么动作用什么
+──────────────���─────────────
+
+  ┌───────────────────────────────────┬─────────────────┐
+  │ 情况                              │ 用什么           │
+  ├───────────────────────────────────┼─────────────────┤
+  │ 持续存在，根据参数无级变化         │ SM + BlendSpace │
+  │ （走路、跑步、锁定移动）           │                 │
+  ├───────────────────────────────────┼─────────────────┤
+  │ 时间不固定，需要循环等待条件       │ SM + Anim Seq   │
+  │ （空中循环、举盾持续中）           │                 │
+  ├───────────────────────────────────┼─────────────────┤
+  │ 时间固定，播一次就完，有游戏逻辑   │ Montage         │
+  │ （攻击、翻滚、喝药、受击、交互）   │                 │
+  └───────────────────────────────────┴─────────────────┘
+
+2.3 各模块动画资源清单
+──────────────────────
+
+  ── Locomotion（State Machine 内）──
+
+  BlendSpace（2个）：
+  ├── BS_Locomotion_FreeMove_2D
+  │   横轴：Direction（-180 到 180）
+  │   纵轴：Speed（0 到 600）
+  │   包含：Walk_F/B/L/R/FL/FR/BL/BR + Run_F/B/L/R/FL/FR/BL/BR + Idle
+  │   用途：非锁定探索移动
+  │
+  └── BS_Locomotion_LockOn_2D
+      横轴：RightAxis（-1 到 1）
+      纵轴：ForwardAxis（-1 到 1）
+      包含：Strafe_F/B/L/R/FL/FR/BL/BR + Idle
+      用途：锁定战斗移动（面朝敌人八方向平移）
+
+  锁定 Forward 说明：
+  - 锁定状态下朝敌人方向跑，可复用非锁定的 Run_F 动画
+  - 真正需要专门 Strafe 动画的是 L/R/B/FL/FR/BL/BR
+  - P0 阶段直接复用，后期打磨可做微调版（稍低重心、警戒姿态）
+
+  Animation Sequence（单独动画）：
+  ├── AS_Idle（站着）
+  ├── AS_Idle_Combat（战斗站姿）
+  ├── AS_Sprint_Forward（冲刺）
+  └── AS_TurnInPlace_L / AS_TurnInPlace_R（原地转身，可选）
+
+  ── 跳跃（State Machine 内）──
+
+  Animation Sequence：
+  ├── AS_JumpStart（起跳，播一次）
+  ├── AS_FallLoop（下落循环）
+  └── AS_Land（落地，播一次）
+
+  说明：
+  - 跳跃放 SM 不用 Montage，因为空中阶段持续时间不固定
+  - 不需要 BlendSpace，每个阶段就一个固定动画
+
+  ── 翻滚（Montage）──
+
+  Montage（9个）：
+  ├── AM_Roll_F / AM_Roll_B / AM_Roll_L / AM_Roll_R
+  ├── AM_Roll_FL / AM_Roll_FR / AM_Roll_BL / AM_Roll_BR
+  └── AM_Backstep
+
+  说明：
+  - 翻滚放 Montage 不放 SM，因为时间固定、有无敌帧/精力消耗/Root Motion
+  - 每个翻滚 Montage 上的 Notify：
+    ├── ANS_IFrame（无敌帧窗口）
+    └── AN_ActionEnd（动作结束）
+
+  ── 战斗攻击（Montage）──
+
+  每种武器约 4 个 Montage：
+  ├── AM_[Weapon]_LightCombo（轻击连段，内含 3 个 Section）
+  ├── AM_[Weapon]_Heavy（重击）
+  ├── AM_[Weapon]_RunAttack（冲刺攻击）
+  └── AM_[Weapon]_JumpAttack（跳跃攻击）
+
+  5 种武器 × 4 种攻击 = 约 20 个 Montage 文件
+
+  每个攻击 Montage 上的 Notify：
+  ├── AN_EnableHitbox（开启攻击判定）
+  ├── AN_DisableHitbox（关闭攻击判定）
+  ├── ANS_ComboWindow（普通连段窗口）
+  ├── ANS_DodgeCancelWindow（翻滚取消窗口，可选）
+  ├── ANS_TransformWindow（变形斩/战技窗口，可选）
+  ├── AN_PlaySFX（音效触发）
+  └── AN_ActionEnd（动作结束）
+
+  ── 受击（Montage）──
+
+  Montage：
+  ├── AM_HitReact_F / AM_HitReact_B / AM_HitReact_L / AM_HitReact_R
+  ├── AM_HitReact_Heavy
+  ├── AM_Knockdown
+  └── AM_GetUp
+
+  每个受击 Montage 上的 Notify：
+  └── AN_ActionEnd（动作结束，恢复状态）
+
+  ── 死亡（Montage）──
+
+  Montage：
+  ├── AM_Death_F（前倒）
+  └── AM_Death_B（后倒）
+
+  ── 交互（Montage）──
+
+  Montage：
+  ├── AM_PickUp（捡东西）
+  ├── AM_OpenDoor（开门）
+  ├── AM_DrinkEstus（喝药）
+  └── 其他需要的交互
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第三章 · 变量体系（已确认采用精简版）
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+3.1 枚举（Enum）
+────────────────
+  CharacterStateTypes.h 集中定义：
+
+  ECharacterMainState：Normal / Combat / Interaction / Climb / HitReact
+                       Execution / Dead / Disabled / Cinematic
+
+  ELocomotionState：Idle / Start / Move / Stop / Pivot / TurnInPlace
+                    JumpStart / InAir / Land / LadderMove
+
+  EGait：Walk / Run / Sprint
+
+  EMovementStyle：FreeMove / LockOnStrafe / CautiousWalk / Ladder
+
+  ERotationMode：OrientToMovement / OrientToTarget / ManualControl
+
+  EOverlayState：Unarmed / OneHandedWeapon / TwoHandedWeapon
+                 Firearm / Torch / Special
+
+  EActionState：None / LightAttack / HeavyAttack / ChargedAttack
+                Dodge / StepBack / Guard / Parry / UseItem
+                Interact / Execution / Skill / Heal
+
+  EHitReactState：None / LightHit / MediumHit / HeavyHit
+                  Stagger / Knockdown / GetUp / Death
+
+3.2 C++ 代码每帧输出的变量（给 AnimBP 读取）
+─────────────────────────────────────────────
+  状态枚举（8个）：
+  - MainState, LocomotionState, Gait, MovementStyle
+  - RotationMode, OverlayState, ActionState, HitReactState
+
+  浮点值（4个）：
+  - fSpeed, fDirection, fForwardAxis, fRightAxis
+
+  布尔值（6个 AnimBP 用）：
+  - bShouldMove, bIsFalling, bIsDead
+  - bIsInHitReact, bIsInCombat, bIsLockedOn
+
+  总计约 18 个变量。
+  对比 SM 全量方案的 74+ 变量，大幅精简。
+  
+3.3 CombatComponent 内部变量
+────────────────────────────
+  动作状态：
+  - bIsPerformingAction（是否正在执行动作）
+  - CurrentActionData（当前动作数据指针）
+  - CurrentMontage（当前播放的 Montage）
+
+  连段：
+  - ComboIndex（当前第几段，0=未开始）
+  - MaxComboCount（最大连段数，默认 3）
+  - bCanChain（连段窗口是否打开，由 Notify 设置）
+
+  输入缓存：
+  - BufferedAction（缓存的动作类型）
+  - BufferTimer（缓存剩余时间）
+  - InputBufferDuration（缓存有效时长，默认 0.2 秒）
+  - bIsBufferActive（缓存是否激活）
+
+  防御状态：
+  - bIsInvincible（无敌帧中，由 Notify 设置）
+  - bHasSuperArmor（霸体中，由 Notify 设置）
+
+  窗口（可按需扩展）：
+  - bCanDodgeCancel（翻滚取消窗口）
+  - bCanTransform（变形斩窗口）
+  - 等等
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第四章 · C++ 类体系（已确认）
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+4.1 需要创建的 C++ 文件（12 个 .h + 12 个 .cpp）
+──────────────────────────────────────────────────
+  1.  CharacterStateTypes.h      ← 所有状态枚举
+  2.  ActionTypes.h               ← EActionType + FActionData 结构体
+  3.  SoulsCharacterBase.h        ← 角色基类
+  4.  CombatComponent.h           ← 战斗核心组件
+  5.  SoulsAnimInstance.h         ← AnimBP 的 C++ 父类
+  6.  AnimNotify_ActionEnd.h      ← 瞬时通知：动作结束
+  7.  AnimNotify_EnableHitbox.h   ← 瞬时通知：开启攻击判定
+  8.  AnimNotify_DisableHitbox.h  ← 瞬时通知：关闭攻击判定
+  9.  AnimNotify_PlaySFX.h        ← 瞬时通知：播放音效
+  10. AnimNotifyState_ComboWindow.h    ← 状态通知：连段窗口
+  11. AnimNotifyState_IFrame.h         ← 状态通知：无敌帧
+  12. AnimNotifyState_SuperArmor.h     ← 状态通知：霸体
+
+4.2 依赖关系
+────────────
+  枚举 → 数据结构 → 组件 → 角色 → 动画实例
+                       ↑
+                   Notify 回调
+
+4.3 继承结构
+────────────
+  ACharacter (UE4)
+       └── ASoulsCharacterBase
+                ├── APlayerCharacter
+                ├── AEnemyCharacterBase
+                │   ├── AGruntEnemy
+                │   ├── AEliteEnemy
+                │   └── ABossEnemy
+                └── （NPC 等）
+
+  UAnimInstance (UE4)
+       └── USoulsAnimInstance
+                ├── ABP_Player (蓝图)
+                ├── ABP_EnemyBase (蓝图)
+                └── ABP_Boss (蓝图)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第五章 · 开发顺序（已确认）
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+5.1 阶段一：准备动画素材
+────────────────────────
+  - 确认所有动画文件已导入 UE4 项目
+  - 按模块分类：Locomotion / Jump / Roll / Attack / HitReact / Death / Interaction
+  - 不需要做最终微调，先有素材能用就行
+
+5.2 阶段二：搭建 AnimBP 框架
+────────────────────────────
+  1. 创建 BlendSpace 资产
+     ├── BS_Locomotion_FreeMove_2D（放入走/跑动画，设好轴）
+     └── BS_Locomotion_LockOn_2D（放入八方向 Strafe 动画，设好轴）
+
+  2. 创建 AnimBP，搭建 State Machine
+     ├── Idle State（放 Idle 动画）
+     ├── Movement State（放 BS，用 bIsLockedOn 选哪个 BS）
+     ├── Sprint State（放 Sprint 动画）
+     ├── JumpStart State（放起跳动画）
+     ├── InAir State（放下落循环动画）
+     ├── Land State（放落地动画）
+     ├── Dead State（放死亡最后一帧 Pose）
+     └── 画好过渡箭头和条件（先用临时变量）
+
+  3. 在 AnimGraph 里连好：
+     State Machine → Slot FullBody → Output Pose
+
+5.3 阶段三：创建 Montage 并布置 Notify
+───────────────────────────────────────
+  1. 把翻滚/攻击/受击/死亡/交互动画创建为 Montage
+  2. 攻击连段 Montage 内划分 Section（Combo_01 / Combo_02 / Combo_03）
+  3. 在每个 Montage 上布置 Notify
+     ├── 攻击：EnableHitbox / DisableHitbox / ComboWindow / ActionEnd
+     ├── 翻滚：IFrame / ActionEnd
+     ├── 受击：ActionEnd
+     └── 交互：ActionEnd
+  4. 确认每个 Montage 的 Slot 设为 DefaultGroup.FullBody
+
+5.4 阶段四：C++ 编码（通过 IDE Agent 执行）
+────────────────────────────────────────────
+  按依赖顺序创建：
+  1. CharacterStateTypes.h（纯枚举）
+  2. ActionTypes.h（EActionType + FActionData）
+  3. CombatComponent.h/.cpp（核心战斗逻辑）
+  4. SoulsCharacterBase.h/.cpp（角色基类）
+  5. SoulsAnimInstance.h/.cpp（动画实例）
+  6. 所有 AnimNotify 类（6个）
+  7. 接入 AnimBP → 测试基础功能
+
+5.5 阶段五：调参与打磨
+──────────────────────
+  - Notify 窗口时间微调（连段手感）
+  - BlendIn / BlendOut 时间微调
+  - 输入缓存时长调参
+  - Root Motion 验证
+  - 各种边界情况测试
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第六章 · Notify 完整清单与用途
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+6.1 瞬时 Notify（触发一次）
+───────────────────────────
+  AN_ActionEnd        → CombatComponent::OnActionEnd()，重置动作状态
+  AN_EnableHitbox     → 开启攻击碰撞判定
+  AN_DisableHitbox    → 关闭攻击碰撞判定
+  AN_PlaySFX          → 广播音效事件（参数：SoundID, VolumeMultiplier）
+
+6.2 状态 Notify（有 Begin 和 End）
+──────────────────────────────────
+  ANS_ComboWindow     → Begin: bCanChain=true + 检查缓存
+                        End:   bCanChain=false
+  ANS_IFrame          → Begin: bIsInvincible=true
+                        End:   bIsInvincible=false
+  ANS_SuperArmor      → Begin: bHasSuperArmor=true
+                        End:   bHasSuperArmor=false
+
+6.3 可扩展的窗口 Notify（按需添加）
+───────────────────────────────────
+  ANS_DodgeCancelWindow    → bCanDodgeCancel=true/false
+  ANS_TransformWindow      → bCanTransform=true/false
+  ANS_SkillCancelWindow    → bCanSkillCancel=true/false
+  ANS_ParryWindow          → bCanParry=true/false
+
+6.4 Notify 获取组件的通用模式
+─────────────────���───────────
+  MeshComponent → GetOwner() → Cast to ASoulsCharacterBase
+  → GetCombatComponent()
+  → 调用对应方法
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第七�� · 关键设计原则备忘
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+7.1 Montage Blend 原则
+──────────────────────
+  - Montage 不是硬切，有 BlendIn 和 BlendOut
+  - 魂like 游戏 BlendIn 通常很短（0.05~0.15秒）= 干脆利落
+  - BlendOut 稍长（0.15~0.3秒）= 平滑回到移动
+  - 可通过 Blend Curve 自定义混合曲线
+
+7.2 Root Motion 原则
+────────────────────
+  - 攻击/翻滚/后撤步使用 Root Motion（位移由动画驱动）
+  - BlendSpace 中的动画不含 Root Motion
+  - AnimBP Root Motion Mode = Root Motion From Montages Only
+
+7.3 状态管理原则
+────────────────
+  - 用枚举互斥表达当前状态（EActionState），不用 44 个独立 Bool
+  - 枚举天然防止非法组合（不可能同时 bIsAttacking && bIsDodging）
+  - 状态变量声明在 Character 基类中（AnimBP 直接读取，无需获取 Component）
+
+7.4 常见陷阱
+────────────
+  - 不在 AnimBP Event Graph 中写复杂逻辑（逻辑在 C++）
+  - AN_ActionEnd 必须在 Montage BlendOut 之前触发（避免���烁）
+  - Notify 中做空指针检查（MeshComponent->GetOwner() 可能为 null）
+  - JumpToSection 后确认 Section 名拼写正确
+  - 确保 Character Tick 在 AnimBP Update 之前执行
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第八章 · 文档索引（仓库内其他文件）
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  
+  仓库：TGWming/-
+
+  参考文档（历史记录，部分内容已被本文档的决策覆盖）：
+  1. C++类总览与依赖关系完整图.txt        ← 选项C，C++ 架构详细设计思路
+  2. 动画系统架构总设计纲领.txt            ← 选项A，总设计纲领
+  3. P0 阶段具体执行手册.txt               ← 选项B，P0 执行手册
+  4. 理论验证阶段完整版.txt                ← 早期理论验证
+  5. 黑魂3玩家角色动画系统 — 全资料深度综合分析报告.txt
+  6. 黑魂3玩家角色动画系统 — 最终确认版完整设计表.txt ← SM 全量方案（已决定不采用）
+  7. Claude自身梳理黑魂3玩家角色的动作系统.txt
+  8. 总纲：两套设计体系的核心哲学差异.txt  ← Montage 路线 vs SM 路线对比分析
+  9. 实现动画所需要准备的具体事项清单：.txt
+  
+  注意：
+  - 文件 6（最终确认版完整设计表）的 90 State + 44 Bool 方案已确认不采用
+  - 该文件仍保留作为资源清单和命名规范参考
+  - 本文档（核心开发决策文档）为最终权威决策文档
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第九章 · 当前进度与下一步
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  当前阶段：准备期（阶段一 ~ 阶段三）
+  
+  ☐ 阶段一：准备动画素材
+  ☐ 阶段二：搭建 AnimBP 框架（BlendSpace + State Machine）
+  ☐ 阶段三：创建 Montage 并布置 Notify
+  ☐ 阶段四：C++ 编码（通过 IDE Agent）
+  ☐ 阶段五：调参与打磨
+
+  下一步行动：
+  → 开始准备动画素材，按模块分类导入 UE4 项目
+  → 完成阶段一到三后，开始与 Copilot/IDE Agent 进行 C++ 编码
+
+
+================================================================================
+  文档结束
+  
+  版本：v1.0
+  创建：2026-03-12
+  本文档为项目最终权威决策文档。
+  新开 Chat 时读取此文档即可恢复完整上下文。
+================================================================================

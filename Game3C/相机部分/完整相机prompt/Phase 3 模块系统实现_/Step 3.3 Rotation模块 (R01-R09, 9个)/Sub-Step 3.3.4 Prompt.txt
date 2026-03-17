@@ -1,0 +1,739 @@
+Sub-Step 3.3.4 Prompt
+
+================================================================================
+任务：在CameraModule_Rotation.cpp中添加R03 LookAt_Target实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+R03实现硬锁定（Hard Lock-On），相机始终直接面向锁定的目标。
+这是类魂游戏核心战斗机制之一，提供精确的目标跟踪。
+
+【当前进度】
+Phase 3 Step 3.3 Sub-Step 3.3.4 (共190个Sub-Step中的第72个)
+前置完成：3.3.3 R02实现 ✅
+
+【任务目标】
+在CameraModule_Rotation.cpp中完整实现R03模块，替换现有的占位符。
+
+【⚠️ 重要提醒】
+
+1. **编译前必做步骤：**
+   本Sub-Step只修改现有. cpp文件，不添加新文件。
+   因此**不需要Regenerate**，可以直接编译。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   确认StateConfig和InputContext的字段路径与项目实际结构一致。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_Rotation. cpp
+
+2. **定位修改位置：**
+
+在文件中找到R03的占位符实现部分：
+
+```cpp
+//========================================
+// R03: LookAt Target - Hard lock-on rotation
+//========================================
+
+// TODO: Will be implemented in Sub-Step 3.3.4
+// ...  占位符代码
+```
+
+**将上述占位符代码完整替换为下方的完整实现。**
+
+---
+
+3. **R03完整实现代码：**
+
+**A. ShouldActivate() 实现：**
+
+**当前占位符代码：**
+```cpp
+bool UCameraModule_R03_LookAt_Target::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Placeholder:  Will be properly implemented in Sub-Step 3.3.4
+	// Should activate when target is locked
+	return false;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * ShouldActivate - Determine if hard lock-on rotation should be active
+ * 
+ * R03 activates when:
+ * - Module is enabled
+ * - Player has a locked-on target
+ * - Target is NOT a boss (boss uses R05 with different parameters)
+ * - Current state requires target tracking (bRequiresTarget flag)
+ * 
+ * R03 is the core lock-on module for standard combat. 
+ * It has higher priority (150) than input modules (100), so it
+ * overrides player input when a target is locked.
+ * 
+ * Use Cases:
+ * - Dark Souls style lock-on combat
+ * - Precise target tracking during fights
+ * - Keeping enemies centered in view
+ */
+bool UCameraModule_R03_LookAt_Target::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if player has a locked target
+	// This is the primary activation condition
+	if (!Context. InputContext.bHasTarget)
+	{
+		return false;
+	}
+	
+	// Don't activate for boss targets (R05 handles those)
+	// Boss targets need different camera behavior
+	if (Context.InputContext.bTargetIsBoss)
+	{
+		return false;
+	}
+	
+	// Check if current state requires target tracking
+	// Some states may have targets but don't want lock-on camera
+	if (! StateConfig.StateBase.Flags. bRequiresTarget)
+	{
+		return false;
+	}
+	
+	// All conditions met - activate hard lock-on
+	return true;
+}
+```
+
+**说明：**
+- 四重条件检查：启用 + 有目标 + 非Boss + 需要跟踪
+- 与R01/R02互斥（bHasTarget）
+- 与R05互斥（bTargetIsBoss）
+- 优先级150高于输入模块100
+
+**⚠️ StateConfig字段注意：**
+如果没有bRequiresTarget字段，可以简化：
+```cpp
+// 简化版本（仅检查有目标且非Boss）
+bool UCameraModule_R03_LookAt_Target::ShouldActivate(... ) const
+{
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	if (!Context.InputContext.bHasTarget)
+	{
+		return false;
+	}
+	
+	if (Context.InputContext.bTargetIsBoss)
+	{
+		return false;
+	}
+	
+	return true;  // 有非Boss目标就激活
+}
+```
+
+---
+
+**B. Compute() 实现：**
+
+**当前占位符代码：**
+```cpp
+bool UCameraModule_R03_LookAt_Target::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Placeholder: Will be properly implemented in Sub-Step 3.3.4
+	OutOutput = CreateBaseOutput();
+	OutOutput. RotationOutput = Context.InputContext.PreviousCameraRotation;
+	OutOutput.bHasRotationOutput = true;
+	return true;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * Compute - Calculate rotation to face locked target
+ * 
+ * This module calculates the rotation needed to make the camera face
+ * the locked target directly.  It's a "hard" lock, meaning the camera
+ * always points exactly at the target, ignoring player input.
+ * 
+ * Steps:
+ * 1. Validate target exists
+ * 2. Get camera focus point (from Position modules)
+ * 3. Get target location (from InputContext)
+ * 4. Apply height offset to target (look at upper body, not feet)
+ * 5. Calculate look direction vector
+ * 6. Convert to rotation
+ * 7. Clamp pitch to limits
+ * 8. Output the calculated rotation
+ * 
+ * Key Design:
+ * - Camera focus point is calculated by Position modules (P01-P08)
+ * - We calculate rotation FROM focus point TO target
+ * - This ensures correct look-at even with complex position logic
+ * 
+ * Height Offset:
+ * - Without offset: camera looks at target's feet (awkward)
+ * - With offset: camera looks at target's center/head (natural)
+ * - Offset scales with target size (larger enemies = higher offset)
+ * 
+ * @param Context The current pipeline execution context
+ * @param StateConfig The current camera state configuration
+ * @param OutOutput Output structure to fill with computed values
+ * @return True if computation succeeded
+ */
+bool UCameraModule_R03_LookAt_Target::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Step 1: Validate that we have a locked target
+	// Safety check - ShouldActivate should prevent this, but double-check
+	if (!Context.InputContext.bHasTarget)
+	{
+		// No target - cannot compute look-at rotation
+		OutOutput.bHasRotationOutput = false;
+		return false;
+	}
+	
+	// Step 2: Get camera focus point
+	// This is calculated by Position modules in Stage 3
+	// It represents where the camera is positioned/looking from
+	FVector CameraFocusPoint = Context.Output.FocusPoint;
+	
+	// If FocusPoint is zero/invalid, use fallback
+	if (CameraFocusPoint.IsNearlyZero())
+	{
+		// Fallback:  use character location as focus point
+		CameraFocusPoint = Context.InputContext.CharacterLocation;
+		
+		// Add standard height offset for typical camera position
+		CameraFocusPoint. Z += 100.0f;  // 1 meter above character
+	}
+	
+	// Step 3: Get target location from InputContext
+	FVector TargetLocation = Context. InputContext.TargetLocation;
+	
+	// Step 4: Apply height offset to target
+	// This makes the camera look at the target's center/upper body
+	// rather than their feet, which looks more natural
+	
+	// Get target size (typically capsule radius or bounding sphere radius)
+	float TargetSize = Context.InputContext.TargetSize;
+	
+	// If TargetSize not available, use default humanoid height
+	if (TargetSize <= 0.0f)
+	{
+		TargetSize = 100.0f;  // Default: 1 meter (typical character)
+	}
+	
+	// Height offset: 30% of target size
+	// This typically aims at chest/head level for humanoids
+	// Example: TargetSize=100cm → Offset=30cm (chest level)
+	float TargetHeightOffset = TargetSize * 0.3f;
+	
+	// Clamp offset to reasonable range (don't look too high)
+	TargetHeightOffset = FMath::Clamp(TargetHeightOffset, 20.0f, 100.0f);
+	
+	// Apply height offset to target location
+	TargetLocation.Z += TargetHeightOffset;
+	
+	// Step 5: Calculate look direction vector
+	// Direction FROM camera focus point TO adjusted target location
+	FVector LookDirection = TargetLocation - CameraFocusPoint;
+	
+	// Normalize to unit vector (GetSafeNormal handles zero-length safely)
+	LookDirection = LookDirection.GetSafeNormal();
+	
+	// Handle edge case: if direction is zero (camera at target position)
+	if (LookDirection.IsNearlyZero())
+	{
+		// Fallback: look forward
+		LookDirection = FVector::ForwardVector;
+	}
+	
+	// Step 6: Convert direction vector to rotation
+	// Rotation() method converts a direction vector to FRotator
+	FRotator LookAtRotation = LookDirection.Rotation();
+	
+	// Step 7: Clamp pitch to configured limits
+	// Same as input modules, prevent extreme up/down angles
+	float MinPitch = StateConfig.StateBase.Rotation.MinPitch;
+	float MaxPitch = StateConfig.StateBase.Rotation.MaxPitch;
+	
+	// Validate pitch limits are reasonable
+	if (MinPitch >= MaxPitch)
+	{
+		// Invalid config, use default limits
+		MinPitch = -80.0f;
+		MaxPitch = 80.0f;
+	}
+	
+	LookAtRotation. Pitch = FMath:: Clamp(LookAtRotation.Pitch, MinPitch, MaxPitch);
+	
+	// Step 8: Force roll to zero
+	// Third-person cameras should never roll
+	LookAtRotation. Roll = 0.0f;
+	
+	// Step 9: Fill output structure
+	OutOutput.RotationOutput = LookAtRotation;
+	OutOutput.bHasRotationOutput = true;
+	
+	return true;
+}
+```
+
+**说明：**
+- 从FocusPoint计算朝向（依赖Position模块）
+- 目标高度偏移（避免看向脚部）
+- 使用GetSafeNormal（防止除零）
+- Pitch限制（与输入模块一致）
+- Roll强制为零
+
+---
+
+4. **完整的R03代码块（用于复制粘贴）：**
+
+如果AGENT需要完整的代码块，提供以下版本：
+
+```cpp
+//========================================
+// R03: LookAt Target - Hard lock-on rotation
+//========================================
+
+/**
+ * ShouldActivate - Activate when locked onto non-boss target
+ */
+bool UCameraModule_R03_LookAt_Target::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (! bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if player has a locked target
+	if (!Context.InputContext.bHasTarget)
+	{
+		return false;
+	}
+	
+	// Don't activate for boss targets (R05 handles those)
+	if (Context.InputContext.bTargetIsBoss)
+	{
+		return false;
+	}
+	
+	// Check if current state requires target tracking
+	if (!StateConfig.StateBase.Flags.bRequiresTarget)
+	{
+		return false;
+	}
+	
+	return true;
+}
+
+/**
+ * Compute - Calculate rotation to face locked target
+ */
+bool UCameraModule_R03_LookAt_Target::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output
+	OutOutput = CreateBaseOutput();
+	
+	// Validate target exists
+	if (!Context.InputContext.bHasTarget)
+	{
+		OutOutput.bHasRotationOutput = false;
+		return false;
+	}
+	
+	// Get camera focus point (from Position modules)
+	FVector CameraFocusPoint = Context.Output.FocusPoint;
+	
+	// Fallback if FocusPoint is invalid
+	if (CameraFocusPoint. IsNearlyZero())
+	{
+		CameraFocusPoint = Context.InputContext. CharacterLocation;
+		CameraFocusPoint.Z += 100.0f;  // Standard height offset
+	}
+	
+	// Get target location
+	FVector TargetLocation = Context.InputContext.TargetLocation;
+	
+	// Apply height offset to target (look at upper body, not feet)
+	float TargetSize = Context.InputContext.TargetSize;
+	if (TargetSize <= 0.0f)
+	{
+		TargetSize = 100.0f;  // Default humanoid size
+	}
+	
+	float TargetHeightOffset = TargetSize * 0.3f;
+	TargetHeightOffset = FMath:: Clamp(TargetHeightOffset, 20.0f, 100.0f);
+	TargetLocation.Z += TargetHeightOffset;
+	
+	// Calculate look direction
+	FVector LookDirection = (TargetLocation - CameraFocusPoint).GetSafeNormal();
+	
+	// Handle edge case: zero direction
+	if (LookDirection.IsNearlyZero())
+	{
+		LookDirection = FVector::ForwardVector;
+	}
+	
+	// Convert to rotation
+	FRotator LookAtRotation = LookDirection. Rotation();
+	
+	// Clamp pitch
+	float MinPitch = StateConfig.StateBase.Rotation.MinPitch;
+	float MaxPitch = StateConfig.StateBase. Rotation.MaxPitch;
+	if (MinPitch >= MaxPitch)
+	{
+		MinPitch = -80.0f;
+		MaxPitch = 80.0f;
+	}
+	LookAtRotation. Pitch = FMath::Clamp(LookAtRotation. Pitch, MinPitch, MaxPitch);
+	
+	// Force roll to zero
+	LookAtRotation.Roll = 0.0f;
+	
+	// Fill output
+	OutOutput. RotationOutput = LookAtRotation;
+	OutOutput. bHasRotationOutput = true;
+	
+	return true;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 每个方法前添加详细的文档注释
+   - 说明高度偏移的原因
+   - 解释FocusPoint的来源
+   - 所有注释使用英文
+
+2. **格式：**
+   - 使用Tab缩进（与现有代码一致）
+   - 方法之间空两行
+   - 步骤清晰标注
+
+3. **安全处理：**
+   - GetSafeNormal()防止除零
+   - IsNearlyZero()检查有效性
+   - 提供合理的Fallback
+
+【技术说明】
+
+**R03的核心机制：**
+
+### 1. Look-At计算原理
+
+**数学基础：**
+```
+给定：
+- 相机焦点位置：CameraFocusPoint (Fc)
+- 目标位置：TargetLocation (Tl)
+
+计算：
+- 朝向向量：LookDirection = Tl - Fc
+- 归一化：LookDirection = LookDirection. Normalize()
+- 转换为旋转：LookAtRotation = LookDirection. Rotation()
+
+示例：
+Fc = (0, 0, 200)       // 相机在角色上方2米
+Tl = (100, 0, 150)     // 目标在前方1米，略低
+
+LookDirection = (100, 0, -50) - (0, 0, 0) = (100, 0, -50)
+Normalize → (0.894, 0, -0.447)
+Rotation() → Yaw≈0°, Pitch≈-26.5°
+
+结果：相机向前下方26.5°看（朝向目标）
+```
+
+### 2. 高度偏移的重要性
+
+**为什么需要TargetHeightOffset？**
+
+```
+场景：玩家锁定人形敌人
+
+不加高度偏移：
+TargetLocation = 敌人位置 (例如 100, 200, 0)
+→ 这是敌人脚底位置
+→ 相机看向敌人脚部（awkward！）
+
+加高度偏移（30%）：
+TargetSize = 100cm（人形敌人高度）
+TargetHeightOffset = 100 * 0.3 = 30cm
+TargetLocation.Z += 30
+→ 相机看向敌人腰部/胸部（natural！）
+```
+
+**不同偏移比例的效果：**
+
+| 偏移比例 | 效果 | 适用场景 |
+|---------|------|---------|
+| 0% | 看脚部 | 不推荐 |
+| 20% | 看腿部 | 不自然 |
+| 30% | 看胸部 | ✅ 推荐（人形） |
+| 50% | 看头部 | 较高视角 |
+| 100% | 看头顶 | 巨型敌人 |
+
+### 3. 与Position模块的配合
+
+**Pipeline流程：**
+```
+Stage 3 (Module Compute):
+
+1. Position模块执行（P01-P08）
+   → 计算FocusPoint
+   → 存储到Context.Output.FocusPoint
+
+2. Rotation模块执行（R01-R09）
+   → R03读取Context.Output.FocusPoint
+   → 从FocusPoint看向Target
+   → 输出RotationOutput
+
+关键：
+- Position决定"从哪里看"（FocusPoint）
+- Rotation决定"看向哪里"（RotationOutput）
+- 两者分离，灵活组合
+```
+
+**示例场景：**
+```
+场景：P04 (Orbit Lock-On) + R03 (LookAt Target)
+
+P04计算：
+FocusPoint = 玩家和目标的中点
+
+R03计算：
+从FocusPoint看向Target
+→ 相机焦点在中点
+→ 相机朝向指向目标
+→ 效果：保持双方可见，同时面向目标
+```
+
+### 4. 优先级和互斥关系
+
+**与其他模块的关系：**
+
+| 模块 | 优先级 | 激活条件 | 与R03关系 |
+|------|--------|---------|----------|
+| R01 | 100 | 无目标 | 互斥（bHasTarget） |
+| R02 | 100 | 无目标+Lag | 互斥（bHasTarget） |
+| **R03** | **150** | **有非Boss目标** | **核心** |
+| R04 | 140 | 有目标+Soft | 可能共存（Blend） |
+| R05 | 160 | 有Boss目标 | 互斥（bTargetIsBoss） |
+
+**激活决策树：**
+```
+有目标？
+├─ 否 → R01或R02激活
+└─ 是
+   └─ Boss？
+      ├─ 是 → R05激活
+      └─ 否 → R03激活
+```
+
+### 5. GetSafeNormal的作用
+
+**为什么使用GetSafeNormal？**
+
+```cpp
+// 问题：零长度向量
+FVector Direction = TargetLocation - CameraFocusPoint;
+Direction. Normalize();  // ❌ 如果长度为0，会除零崩溃
+
+// 解决：安全归一化
+FVector Direction = (TargetLocation - CameraFocusPoint).GetSafeNormal();
+// ✅ 如果长度为0，返回(0,0,0)而不崩溃
+
+// 边缘情况：相机和目标在同一位置
+CameraFocusPoint = (100, 200, 150)
+TargetLocation = (100, 200, 150)
+Direction = (0, 0, 0)
+GetSafeNormal() → (0, 0, 0)
+
+// 处理边缘情况
+if (Direction.IsNearlyZero())
+{
+	Direction = FVector::ForwardVector;  // Fallback
+}
+```
+
+### 6. FVector. Rotation()方法
+
+**自动转换方向到旋转：**
+
+```cpp
+// UE4内置方法：将方向向量转换为FRotator
+FVector Direction = FVector(1, 0, 0);  // 向前
+FRotator Rot = Direction.Rotation();
+// → Yaw=0°, Pitch=0°, Roll=0°
+
+FVector Direction = FVector(0, 1, 0);  // 向右
+FRotator Rot = Direction.Rotation();
+// → Yaw=90°, Pitch=0°, Roll=0°
+
+FVector Direction = FVector(1, 0, 1);  // 向前上
+FRotator Rot = Direction.Rotation();
+// → Yaw=0°, Pitch=45°, Roll=0°
+
+✅ 自动处理Pitch和Yaw计算
+✅ Roll始终为0（方向向量无Roll信息）
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过（0 errors, 0 warnings）
+   - [ ] 文件编码为UTF-8 Without BOM
+   - [ ] 所有注释为英文
+
+2. **代码完整性：**
+   - [ ] ShouldActivate()实现完整
+   - [ ] Compute()实现完整
+   - [ ] 所有方法签名与. h一致
+
+3. **逻辑正确性：**
+   - [ ] 从FocusPoint计算朝向
+   - [ ] 应用高度偏移
+   - [ ] 使用GetSafeNormal安全归一化
+   - [ ] 处理边缘情况（零向量）
+   - [ ] Pitch限制正确
+   - [ ] Roll强制为零
+   - [ ] 输出bHasRotationOutput=true
+
+4. **字段访问：**
+   - [ ] Context.Output.FocusPoint
+   - [ ] Context.InputContext.bHasTarget
+   - [ ] Context.InputContext. TargetLocation
+   - [ ] Context.InputContext.TargetSize
+   - [ ] Context.InputContext. bTargetIsBoss
+   - [ ] StateConfig.StateBase.Flags. bRequiresTarget
+
+【注意事项】
+
+1. **不需要Regenerate：**
+   本Sub-Step只修改现有. cpp文件内容，不添加新文件。
+   保存后可以直接编译，无需Regenerate。
+
+2. **FocusPoint处理：**
+   ```cpp
+   // 如果Context.Output.FocusPoint不存在或为零
+   FVector CameraFocusPoint = Context. InputContext.CharacterLocation;
+   CameraFocusPoint.Z += 100.0f;  // 标准高度
+   ```
+
+3. **高度偏移调整：**
+   ```cpp
+   // 30%适合人形敌人
+   // 可根据实际效果调整：
+   // - 20%:  看腿部（较低）
+   // - 40%: 看头部（较高）
+   // - 50%: 看头顶（巨型）
+   ```
+
+4. **bRequiresTarget字段：**
+   ```cpp
+   // 如果不存在，简化为：
+   // 只要有非Boss目标就激活
+   return bIsEnabled && 
+          Context.InputContext.bHasTarget && 
+          ! Context.InputContext.bTargetIsBoss;
+   ```
+
+5. **测试建议：**
+   编译通过后，测试：
+   - 锁定普通敌人
+   - 锁定不同尺寸的敌人
+   - 相机和目标同位置的边缘情况
+   - Pitch限制是否正确
+
+【输出要求】
+
+完成修改后，请报告：
+
+```
+================================================================================
+Sub-Step 3.3. 4 完成报告
+================================================================================
+
+【修改内容】
+- 文件：CameraModule_Rotation.cpp
+- 修改位置：R03模块（ShouldActivate、Compute）
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ ShouldActivate：检查锁定目标（非Boss）
+- ✅ Compute：Look-At计算 + 高度偏移
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误数：[数量]
+- 警告数：[数量]
+
+【遇到的问题】
+[如果有字段路径问题，详细描述]
+
+【最终状态】
+✅ R03模块完整实现，相机可精确跟踪锁定目标
+
+================================================================================
+```
+
+【后续步骤】
+
+R03完成后，Rotation模块进度：
+- [x] ✅ 3.3.1:  CameraModule_Rotation.h
+- [x] ✅ 3.3.2: R01 - Player Input Free
+- [x] ✅ 3.3.3: R02 - Player Input Lagged
+- [x] ✅ 3.3.4: R03 - LookAt Target
+- [ ] ⏳ 3.3.5: R04 - LookAt Target Soft（下一步）
+- [ ] ⏳ 3.3.6: R05 - LookAt Boss
+- [ ] ⏳ 3.3.7: R06 - AutoOrient Movement
+- [ ] ⏳ 3.3.8: R07 - AutoOrient Delayed
+- [ ] ⏳ 3.3.9: R08 - LookAt Point
+- [ ] ⏳ 3.3.10: R09 - Spline Rotation
+
+**Rotation模块完成度：3/9 (33.3%)**
+
+完成后准备进入Sub-Step 3.3.5（R04: LookAt Target Soft - 软锁定）。
+
+================================================================================

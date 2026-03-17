@@ -1,0 +1,10 @@
+ModuleID,ModuleName,ChineseName,Category,Description,BlendPolicy,Priority,ActiveStates,InputParams,OutputParams
+R01,PlayerInput_Free,玩家自由输入,Rotation,直接响应玩家的视角输入无自动校正,Override,100,Explore/Combat,PlayerYawInput/PlayerPitchInput/Sensitivity,RotationOverride
+R02,PlayerInput_Lagged,惯性输入响应,Rotation,带惯性的玩家输入响应,Override,100,Explore,PlayerInput/RotationLagSpeed,RotationOverride
+R03,LookAt_Target,看向目标,Rotation,计算看向锁定目标的旋转,Override,110,LockOn/LockOn_Multi,TargetLocation/CameraLocation,RotationOverride
+R04,LookAt_Target_Soft,软锁定看向,Rotation,看向目标但允许玩家微调,Override,110,LockOn,TargetLocation/PlayerInput/SoftLockStrength,RotationOverride
+R05,LookAt_Boss,Boss看向,Rotation,看向Boss时的特殊处理考虑体型,Override,120,Boss_Medium/Boss_Large/Boss_Huge,BossLocation/BossSize/LookAtOffset,RotationOverride
+R06,AutoOrient_Movement,移动方向自动朝向,Rotation,相机自动朝向角色移动方向,Additive,50,Sprint/Mount,CharacterVelocity/AutoOrientSpeed,RotationOffset
+R07,AutoOrient_Delayed,延迟自动回中,Rotation,长时间无输入后自动回到角色背后,Additive,40,Explore,TimeSinceLastInput/AutoCorrectDelay/AutoCorrectSpeed,RotationOffset
+R08,LookAt_Point,看向固定点,Rotation,过场时看向场景中的指定点,Override,200,Cinematic/AreaReveal,LookAtPoint,RotationOverride
+R09,Spline_Rotation,样条旋转,Rotation,沿样条曲线的切线方向旋转,Override,200,Cinematic,SplineComponent/SplineProgress,RotationOverride

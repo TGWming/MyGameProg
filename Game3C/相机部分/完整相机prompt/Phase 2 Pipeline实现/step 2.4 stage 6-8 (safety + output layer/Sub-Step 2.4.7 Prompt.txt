@@ -1,0 +1,404 @@
+================================================================================
+任务：更新SoulsCameraManager - 初始化Pipeline并注册所有Stage
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4. 27 C++项目。
+更新CameraManager以创建和使用Pipeline。
+
+【当前进度】
+Phase 2 Step 2.4 Sub-Step 2.4.7 (共190个Sub-Step中的第55个)
+**这是Phase 2的最后一个Sub-Step，集成所有8个Stage到Manager**
+
+前置完成：
+- Phase 1 全部完成 ✅
+- Sub-Step 2.1.1-2.1.3:  Pipeline骨架 ✅
+- Sub-Step 2.2.1-2.2.4: Stage 1-2 ✅
+- Sub-Step 2.3.1-2.3.6: Stage 3-5 ✅
+- Sub-Step 2.4.1-2.4.6: Stage 6-8 ✅
+- **所有8个Stage已完成！** ✅
+
+【任务目标】
+更新两个文件：
+1. `Source/[ProjectName]/Camera/Core/SoulsCameraManager. h` - 添加新方法声明
+2. `Source/[ProjectName]/Camera/Core/SoulsCameraManager.cpp` - 添加Pipeline创建、Stage注册和执行逻辑
+
+**这是修改现有文件，不是创建新文件。**
+
+【具体要求】
+
+## 1. 更新SoulsCameraManager.h
+
+在`protected:`区域添加新方法声明：
+
+```cpp
+protected:
+    //========================================
+    // Pipeline & Stage Creation Pipeline和Stage创建
+    //========================================
+
+    /** 
+     * Create and register all pipeline stages
+     * 创建并注册所有Pipeline Stage
+     */
+    void CreateAndRegisterStages();
+
+    /**
+     * Create a single stage and register it
+     * 创建单个Stage并注册
+     * @param StageIndex Stage index (1-8)
+     * @return True if registration successful
+     */
+    template<typename TStage>
+    bool CreateAndRegisterStage(int32 StageIndex);
+```
+
+## 2. 更新SoulsCameraManager. cpp
+
+### 2.1 添加#include（在文件顶部，现有include之后）：
+
+```cpp
+// Pipeline includes
+#include "Camera/Pipeline/SoulsCameraPipeline.h"
+#include "Camera/Pipeline/ICameraStage.h"
+
+// Stage includes
+#include "Camera/Pipeline/CameraStage_InputGather. h"
+#include "Camera/Pipeline/CameraStage_StateMachine.h"
+#include "Camera/Pipeline/CameraStage_ModuleCompute.h"
+#include "Camera/Pipeline/CameraStage_ModifierApply.h"
+#include "Camera/Pipeline/CameraStage_BlendSolve. h"
+#include "Camera/Pipeline/CameraStage_CollisionResolve.h"
+#include "Camera/Pipeline/CameraStage_PostProcess.h"
+#include "Camera/Pipeline/CameraStage_RenderApply.h"
+```
+
+### 2.2 更新CreateSubSystems()函数：
+
+```cpp
+void USoulsCameraManager::CreateSubSystems()
+{
+    UE_LOG(LogSoulsCamera, Log, TEXT("CreateSubSystems: Creating camera sub-systems... "));
+
+    // Create State Machine
+    StateMachine = NewObject<USoulsCameraStateMachine>(this);
+    if (StateMachine)
+    {
+        StateMachine->Initialize(this);
+        UE_LOG(LogSoulsCamera, Log, TEXT("CreateSubSystems: StateMachine created"));
+    }
+
+    // Create Pipeline
+    Pipeline = NewObject<USoulsCameraPipeline>(this);
+    if (Pipeline)
+    {
+        Pipeline->Initialize(this);
+        UE_LOG(LogSoulsCamera, Log, TEXT("CreateSubSystems: Pipeline created"));
+    }
+
+    // Create and register all 8 stages
+    CreateAndRegisterStages();
+
+    // TODO Phase 3: Create ModuleRegistry
+    // ModuleRegistry = NewObject<UCameraModuleRegistry>(this);
+
+    // TODO Phase 4: Create ModifierManager
+    // ModifierManager = NewObject<UCameraModifierManager>(this);
+
+    // TODO Phase 5: Create CollisionResolver
+    // CollisionResolver = NewObject<UCameraCollisionResolver>(this);
+
+    UE_LOG(LogSoulsCamera, Log, TEXT("CreateSubSystems: All sub-systems created successfully"));
+}
+```
+
+### 2.3 添加新函数CreateAndRegisterStages()：
+
+```cpp
+void USoulsCameraManager::CreateAndRegisterStages()
+{
+    if (!Pipeline)
+    {
+        UE_LOG(LogSoulsCamera, Error, TEXT("CreateAndRegisterStages: Pipeline is null"));
+        return;
+    }
+
+    UE_LOG(LogSoulsCamera, Log, TEXT("CreateAndRegisterStages: Registering 8 stages..."));
+
+    // Stage 1: Input Gather (INPUT LAYER)
+    UCameraStage_InputGather* Stage1 = NewObject<UCameraStage_InputGather>(this);
+    if (Stage1)
+    {
+        Pipeline->RegisterStage(1, TScriptInterface<ICameraStage>(Stage1));
+    }
+
+    // Stage 2: State Machine (DECISION LAYER)
+    UCameraStage_StateMachine* Stage2 = NewObject<UCameraStage_StateMachine>(this);
+    if (Stage2)
+    {
+        Stage2->SetStateMachine(StateMachine);
+        Pipeline->RegisterStage(2, TScriptInterface<ICameraStage>(Stage2));
+    }
+
+    // Stage 3: Module Compute (COMPUTE LAYER)
+    UCameraStage_ModuleCompute* Stage3 = NewObject<UCameraStage_ModuleCompute>(this);
+    if (Stage3)
+    {
+        // TODO Phase 3: Stage3->SetModuleRegistry(ModuleRegistry);
+        Pipeline->RegisterStage(3, TScriptInterface<ICameraStage>(Stage3));
+    }
+
+    // Stage 4: Modifier Apply (COMPUTE LAYER - Skippable)
+    UCameraStage_ModifierApply* Stage4 = NewObject<UCameraStage_ModifierApply>(this);
+    if (Stage4)
+    {
+        // TODO Phase 4: Stage4->SetModifierManager(ModifierManager);
+        Pipeline->RegisterStage(4, TScriptInterface<ICameraStage>(Stage4));
+    }
+
+    // Stage 5: Blend & Solve (COMPUTE LAYER)
+    UCameraStage_BlendSolve* Stage5 = NewObject<UCameraStage_BlendSolve>(this);
+    if (Stage5)
+    {
+        Pipeline->RegisterStage(5, TScriptInterface<ICameraStage>(Stage5));
+    }
+
+    // Stage 6: Collision Resolve (SAFETY LAYER - Skippable)
+    UCameraStage_CollisionResolve* Stage6 = NewObject<UCameraStage_CollisionResolve>(this);
+    if (Stage6)
+    {
+        // TODO Phase 5: Stage6->SetCollisionResolver(CollisionResolver);
+        Pipeline->RegisterStage(6, TScriptInterface<ICameraStage>(Stage6));
+    }
+
+    // Stage 7: Post Process (OUTPUT LAYER - Skippable)
+    UCameraStage_PostProcess* Stage7 = NewObject<UCameraStage_PostProcess>(this);
+    if (Stage7)
+    {
+        // TODO:  Stage7->SetGlobalConfig(GlobalConfig);
+        Pipeline->RegisterStage(7, TScriptInterface<ICameraStage>(Stage7));
+    }
+
+    // Stage 8: Render Apply (OUTPUT LAYER)
+    UCameraStage_RenderApply* Stage8 = NewObject<UCameraStage_RenderApply>(this);
+    if (Stage8)
+    {
+        Pipeline->RegisterStage(8, TScriptInterface<ICameraStage>(Stage8));
+    }
+
+    // Verify all required stages are registered
+    if (Pipeline->AreAllStagesRegistered())
+    {
+        UE_LOG(LogSoulsCamera, Log, TEXT("CreateAndRegisterStages: All 8 stages registered successfully"));
+    }
+    else
+    {
+        UE_LOG(LogSoulsCamera, Warning, TEXT("CreateAndRegisterStages:  Not all required stages registered"));
+    }
+}
+```
+
+### 2.4 更新TickComponent()函数：
+
+```cpp
+void USoulsCameraManager:: TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+    Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+    if (!bIsInitialized)
+    {
+        return;
+    }
+
+    // Skip if paused (unless configured to update while paused)
+    if (GetWorld() && GetWorld()->IsPaused())
+    {
+        return;
+    }
+
+    // Gather input context for Stage 1
+    GatherInputContext(DeltaTime);
+
+    // Execute the full 8-stage pipeline
+    if (Pipeline)
+    {
+        CurrentOutput = Pipeline->Execute(DeltaTime, CurrentInputContext);
+    }
+
+    // Note: Output is now applied by Stage 8 (RenderApply)
+    // No need to call ApplyOutput() here anymore
+    
+    // Debug visualization (if enabled)
+#if WITH_EDITOR
+    if (bShowDebugInfo)
+    {
+        DrawDebugInfo();
+    }
+#endif
+}
+```
+
+### 2.5 可选：添加Debug绘制函数（如果尚未存在）：
+
+```cpp
+#if WITH_EDITOR
+void USoulsCameraManager::DrawDebugInfo()
+{
+    if (!GetWorld())
+    {
+        return;
+    }
+
+    // Draw current state name
+    if (GEngine)
+    {
+        FString DebugText = FString::Printf(
+            TEXT("Camera State: %s\nDistance: %.1f\nFOV: %.1f\nCollision: %s"),
+            *CurrentOutput.CurrentStateName. ToString(),
+            CurrentOutput.Distance,
+            CurrentOutput.FOV,
+            CurrentOutput.bCollisionAdjusted ? TEXT("Yes") : TEXT("No")
+        );
+        GEngine->AddOnScreenDebugMessage(-1, 0.0f, FColor:: Green, DebugText);
+    }
+}
+#endif
+```
+
+【Phase 2完成验证清单】
+
+```
+Phase 2: Pipeline系统 ✅
+├── Step 2.1: Pipeline骨架与Stage接口 ✅
+│   ├── Sub-Step 2.1.1: ICameraStage. h ✅
+│   ├── Sub-Step 2.1.2: SoulsCameraPipeline.h ✅
+│   └── Sub-Step 2.1.3: SoulsCameraPipeline.cpp ✅
+├── Step 2.2: Stage 1-2 ✅
+│   ├── Sub-Step 2.2.1: CameraStage_InputGather.h ✅
+│   ├── Sub-Step 2.2.2: CameraStage_InputGather.cpp ✅
+│   ├── Sub-Step 2.2.3: CameraStage_StateMachine.h ✅
+│   └── Sub-Step 2.2.4: CameraStage_StateMachine. cpp ✅
+├── Step 2.3: Stage 3-5 ✅
+│   ├── Sub-Step 2.3.1: CameraStage_ModuleCompute.h ✅
+│   ├── Sub-Step 2.3.2: CameraStage_ModuleCompute.cpp ✅
+│   ├── Sub-Step 2.3.3: CameraStage_ModifierApply.h ✅
+│   ├── Sub-Step 2.3.4: CameraStage_ModifierApply.cpp ✅
+│   ├── Sub-Step 2.3.5: CameraStage_BlendSolve.h ✅
+│   └── Sub-Step 2.3.6: CameraStage_BlendSolve.cpp ✅
+└── Step 2.4: Stage 6-8与集成 ✅
+    ├── Sub-Step 2.4.1: CameraStage_CollisionResolve.h ✅
+    ├── Sub-Step 2.4.2: CameraStage_CollisionResolve.cpp ✅
+    ├── Sub-Step 2.4.3: CameraStage_PostProcess.h ✅
+    ├── Sub-Step 2.4.4: CameraStage_PostProcess. cpp ✅
+    ├── Sub-Step 2.4.5: CameraStage_RenderApply.h ✅
+    ├── Sub-Step 2.4.6: CameraStage_RenderApply.cpp ✅
+    └── Sub-Step 2.4.7: 更新SoulsCameraManager (当前) ✅
+```
+
+【验证标准】
+- 编译通过
+- 运行时Pipeline正确执行8个Stage
+- 日志显示"All 8 stages registered successfully"
+- 相机跟随角色工作
+- 基本碰撞检测工作
+
+【注意事项】
+- 这是**修改现有文件**，不是创建新文件
+- 注意保留原有代码，只添加/修改指定部分
+- 确保Pipeline成员变量已在.  h中声明（Phase 1应已添加）
+- **修改.  cpp文件后需要重新编译**
+
+【输出要求】
+输出需要修改/添加的代码部分，标明在原文件中的位置。
+
+================================================================================
+                        上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+```
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：Sub-Step 2.4.7 更新SoulsCameraManager - Phase 2集成
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断，例如：完成. h更新，未完成.cpp更新]
+
+【已完成内容】
+- [列出已完成的修改]
+
+【未完成内容】
+- [列出剩余修改]
+
+【已生成代码保存提示】
+请保存已生成的代码，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Phase 2 Step 2.4 Sub-Step 2.4.7 续接任务。
+完成SoulsCameraManager更新，集成Pipeline和8个Stage。
+**这是Phase 2的最后一个Sub-Step。**
+
+【前置完成】
+- Phase 1 全部完成 ✅
+- Phase 2 Stage 1-8 全部完成 ✅
+- Sub-Step 2.4.7 部分完成：
+  - [列出已完成的修改] ✅
+
+【续接任务】
+继续更新SoulsCameraManager：
+- [列出剩余修改]
+
+【目标文件】
+- Source/[ProjectName]/Camera/Core/SoulsCameraManager.h
+- Source/[ProjectName]/Camera/Core/SoulsCameraManager. cpp
+
+【修改清单】
+. h文件：
+- 添加CreateAndRegisterStages()声明
+
+.cpp文件：
+- 添加Pipeline和Stage的#include
+- 更新CreateSubSystems()
+- 添加CreateAndRegisterStages()
+- 更新TickComponent()
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================
+```
+
+【交接信息要求】
+1. 交接PROMPT必须是**完全自包含**的
+2. 明确标注这是Phase 2的最后一个Sub-Step
+3. 包含完整修改清单
+4. 分别列出. h和. cpp的修改
+
+================================================================================

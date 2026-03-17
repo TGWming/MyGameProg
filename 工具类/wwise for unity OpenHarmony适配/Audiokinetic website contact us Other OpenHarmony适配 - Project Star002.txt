@@ -1,0 +1,11 @@
+Audiokinetic website contact us Other OpenHarmony适配 - Project Star002
+
+感谢联系，已经为您开通了OpenHarmony授权，可以在Launcher中下载SDK了，Unity引擎需要自行接入。
+
+但团结引擎的Wwise离线集成文件可能可以用于Unity引擎的接入参考，因此也提供给您。
+
+团结引擎Wwise离线集成文件
+下载地址：https://files.audiokinetic.com/web/client/login
+账号：tuanjiefiles
+密码：yhz2nqz-JWF4evd2ycb
+请选择对应版本的文件下载，未来新版本会同步更新，请注意保存信息

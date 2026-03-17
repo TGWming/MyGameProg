@@ -1,0 +1,603 @@
+Sub-Step 3.2.6 Prompt
+
+================================================================================
+任务：在CameraModule_Position.cpp中添加P05 Orbit_Boss实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+P05为Boss战提供更宽的轨道视角，专门处理大型Boss敌人的相机定位。
+与P04相比，P05使用更偏向玩家的焦点和更大的轨道半径，以容纳Boss的庞大体型。
+
+【当前进度】
+Phase 3 Step 3.2 Sub-Step 3.2.6 (共190个Sub-Step中的第65个)
+前置完成：3.2.5 P04实现 ✅
+
+【任务目标】
+在CameraModule_Position.cpp中完整实现P05模块，替换现有的stub占位符。
+
+【⚠️ 重要提醒】
+
+1. **编译前必做步骤：**
+   本Sub-Step只修改现有.cpp文件，不添加新文件。
+   因此**不需要Regenerate**，可以直接编译。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   确认StateConfig和InputContext的字段路径与项目实际结构一致。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_Position. cpp
+
+2. **定位修改位置：**
+
+在文件中找到P05的stub实现部分：
+
+```cpp
+//========================================
+// P05: Orbit Boss - Special boss fight orbit
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.2.6
+// ...   stub代码
+```
+
+**将上述stub代码完整替换为下方的完整实现。**
+
+---
+
+3. **P05完整实现代码：**
+
+**A. ShouldActivate()方法（需要完整实现）：**
+
+**当前stub代码：**
+```cpp
+bool UCameraModule_P05_Orbit_Boss::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Stub - only activates during boss encounters
+	return false;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * ShouldActivate - Determine if boss orbit should be active
+ * 
+ * P05 activates when:
+ * - Module is enabled
+ * - Player has a locked-on target
+ * - Target IS a boss (this is the key difference from P04)
+ * 
+ * Boss encounters require special camera handling due to:
+ * - Larger enemy models (need wider framing)
+ * - More dramatic attacks (need more screen space)
+ * - Epic scale of combat (need cinematic positioning)
+ * 
+ * P05 uses different parameters than P04 to accommodate these needs.
+ */
+bool UCameraModule_P05_Orbit_Boss::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if player has a locked target
+	if (!Context.InputContext.bHasTarget)
+	{
+		return false;
+	}
+	
+	// ONLY activate for boss targets
+	// bTargetIsBoss flag indicates if locked target is a boss enemy
+	if (! Context.InputContext.bTargetIsBoss)
+	{
+		return false;
+	}
+	
+	// All conditions met - activate boss orbit
+	return true;
+}
+```
+
+**说明：**
+- 与P04的唯一区别：需要`bTargetIsBoss == true`
+- 清晰的注释说明Boss战的特殊需求
+- P04和P05互斥（一个需要非Boss，一个需要Boss）
+
+**⚠️ InputContext字段注意：**
+如果FCameraInputContext中没有bTargetIsBoss字段，可以使用备用方案：
+```cpp
+// 备用方案1：检查StateConfig中的Boss标志
+if (!StateConfig.bIsBossFight)
+{
+	return false;
+}
+
+// 备用方案2：检查目标尺寸
+if (Context. InputContext.TargetSize < 200.0f)  // Boss通常>200cm
+{
+	return false;
+}
+```
+
+---
+
+**B. Compute()方法（需要完整实现）：**
+
+**当前stub代码：**
+```cpp
+bool UCameraModule_P05_Orbit_Boss::Compute(...)
+{
+	OutOutput = CreateBaseOutput();
+	OutOutput.bHasPositionOutput = false;
+	return false;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * Compute - Calculate orbit position for boss fight camera
+ * 
+ * Boss fights require different camera positioning than regular combat:
+ * - Wider orbit to capture large boss models
+ * - More player-centric focus (Boss can be partially off-screen)
+ * - Dynamic height adjustment based on boss size
+ * - Larger orbit offset to provide better framing
+ * 
+ * Steps:
+ * 1. Validate boss target exists
+ * 2. Get player, target locations and target size
+ * 3. Calculate weighted midpoint (more biased toward player)
+ * 4. Apply enhanced vertical offset (bosses are taller)
+ * 5. Add dynamic height based on boss size
+ * 6. Apply larger orbit radius for wider framing
+ * 7. Output the calculated focus point
+ * 
+ * Key Differences from P04:
+ * - MidPointBias:   0.2 vs 0.5 (more toward player)
+ * - OrbitOffset:  80cm vs 50cm (wider orbit)
+ * - Height Offset: Dynamic based on boss size
+ * - BossPhaseScale:  Adjusts positioning per boss phase
+ */
+bool UCameraModule_P05_Orbit_Boss::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Step 1: Validate that we have a locked boss target
+	// Safety check - ShouldActivate should prevent this, but double-check
+	if (!Context.InputContext.bHasTarget)
+	{
+		// No target - cannot compute boss orbit position
+		OutOutput.bHasPositionOutput = false;
+		return false;
+	}
+	
+	// Step 2: Get player and boss world locations
+	FVector PlayerLocation = Context.InputContext.CharacterLocation;
+	FVector TargetLocation = Context.InputContext.TargetLocation;
+	
+	// Get boss size for dynamic adjustments
+	// TargetSize is typically the boss's capsule radius or bounding sphere radius
+	float TargetSize = Context.InputContext.TargetSize;
+	
+	// If TargetSize not available, use default boss size
+	if (TargetSize <= 0.0f)
+	{
+		TargetSize = 150.0f;  // Default:  150cm radius (typical boss size)
+	}
+	
+	// Step 3: Calculate weighted midpoint with strong bias toward player
+	// Boss battles use MidPointBias = 0.2 (much closer to player)
+	// This keeps the player centered while still showing the boss
+	// 
+	// Comparison: 
+	// - Regular combat (P04): 0.5 (equal)
+	// - Boss combat (P05): 0.2 (player-centric)
+	const float BossMidPointBias = 0.2f;
+	
+	FVector FocusPoint = FMath::Lerp(PlayerLocation, TargetLocation, BossMidPointBias);
+	
+	// Step 4: Apply standard focus offset for base height
+	FVector FocusOffset = StateConfig. StateBase.Offset.FocusOffset;
+	float VerticalOffset = StateConfig. StateBase.Offset.VerticalOffset;
+	FocusOffset.Z += VerticalOffset;
+	
+	// Step 5: Add dynamic height offset based on boss size
+	// Larger bosses need higher camera focus to capture their upper body/head
+	// Scale factor:  0.2 means 20% of boss size is added as height
+	// Clamped to max 100cm to prevent excessive height for giant bosses
+	float BossHeightOffset = FMath::Clamp(TargetSize * 0.2f, 0.0f, 100.0f);
+	FocusOffset.Z += BossHeightOffset;
+	
+	// Apply total vertical offset
+	FocusPoint += FocusOffset;
+	
+	// Step 6: Get boss phase distance scale
+	// BossPhaseDistanceScale adjusts camera behavior during different boss phases
+	// - Phase 1 (start): 1.0 (normal distance)
+	// - Phase 2 (enraged): 1.2 (pull back slightly)
+	// - Phase 3 (final): 1.5 (pull back more for epic finale)
+	float BossPhaseScale = StateConfig.Module.Distance.BossPhaseDistanceScale;
+	
+	// If BossPhaseDistanceScale not configured, use default
+	if (BossPhaseScale <= 0.0f)
+	{
+		BossPhaseScale = 1.0f;  // Default: no scaling
+	}
+	
+	// Step 7: Apply larger orbit offset for boss fights
+	// Calculate direction from boss to player
+	FVector ToPlayer = (PlayerLocation - TargetLocation).GetSafeNormal();
+	
+	// Boss orbit offset: 80cm (vs 50cm for regular combat)
+	// This wider orbit ensures: 
+	// - Player has good visibility
+	// - Boss attacks are visible from better angle
+	// - More dramatic framing
+	const float BaseBossOrbitOffset = 80.0f;
+	float OrbitOffset = BaseBossOrbitOffset * BossPhaseScale;
+	
+	// Apply orbit offset along the player direction
+	FocusPoint += ToPlayer * OrbitOffset;
+	
+	// Step 8: Fill output structure
+	OutOutput.PositionOffset = FocusPoint;
+	OutOutput.bHasPositionOutput = true;
+	
+	return true;
+}
+```
+
+**说明：**
+- **更偏向玩家**：MidPointBias=0.2（vs P04的0.5）
+- **更大轨道**：OrbitOffset=80cm（vs P04的50cm）
+- **动态高度**：基于Boss尺寸自动调整
+- **阶段缩放**：支持Boss不同阶段的相机调整
+- **安全处理**：所有参数都有默认值
+
+---
+
+4. **完整的P05代码块（用于复制粘贴）：**
+
+如果AGENT需要完整的代码块，提供以下版本：
+
+```cpp
+//========================================
+// P05: Orbit Boss - Special boss fight orbit
+//========================================
+
+/**
+ * ShouldActivate - Activate when locked onto a boss target
+ */
+bool UCameraModule_P05_Orbit_Boss::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (! bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if player has a locked target
+	if (!Context.InputContext.bHasTarget)
+	{
+		return false;
+	}
+	
+	// ONLY activate for boss targets
+	if (!Context.InputContext.bTargetIsBoss)
+	{
+		return false;
+	}
+	
+	return true;
+}
+
+/**
+ * Compute - Calculate orbit position for boss fight camera
+ */
+bool UCameraModule_P05_Orbit_Boss::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output
+	OutOutput = CreateBaseOutput();
+	
+	// Validate boss target exists
+	if (!Context. InputContext.bHasTarget)
+	{
+		OutOutput.bHasPositionOutput = false;
+		return false;
+	}
+	
+	// Get player and boss locations
+	FVector PlayerLocation = Context.InputContext.CharacterLocation;
+	FVector TargetLocation = Context.InputContext.TargetLocation;
+	
+	// Get boss size (default 150cm if not available)
+	float TargetSize = Context.InputContext.TargetSize;
+	if (TargetSize <= 0.0f)
+	{
+		TargetSize = 150.0f;
+	}
+	
+	// Calculate weighted midpoint (0.2 = strong bias toward player)
+	const float BossMidPointBias = 0.2f;
+	FVector FocusPoint = FMath::Lerp(PlayerLocation, TargetLocation, BossMidPointBias);
+	
+	// Apply standard focus offset
+	FVector FocusOffset = StateConfig.StateBase.Offset.FocusOffset;
+	float VerticalOffset = StateConfig.StateBase.Offset. VerticalOffset;
+	FocusOffset.Z += VerticalOffset;
+	
+	// Add dynamic height based on boss size (20% of size, max 100cm)
+	float BossHeightOffset = FMath::Clamp(TargetSize * 0.2f, 0.0f, 100.0f);
+	FocusOffset.Z += BossHeightOffset;
+	
+	FocusPoint += FocusOffset;
+	
+	// Get boss phase distance scale (default 1.0)
+	float BossPhaseScale = StateConfig.Module.Distance. BossPhaseDistanceScale;
+	if (BossPhaseScale <= 0.0f)
+	{
+		BossPhaseScale = 1.0f;
+	}
+	
+	// Apply larger orbit offset (80cm base, scaled by phase)
+	FVector ToPlayer = (PlayerLocation - TargetLocation).GetSafeNormal();
+	const float BaseBossOrbitOffset = 80.0f;
+	float OrbitOffset = BaseBossOrbitOffset * BossPhaseScale;
+	FocusPoint += ToPlayer * OrbitOffset;
+	
+	// Fill output
+	OutOutput.PositionOffset = FocusPoint;
+	OutOutput.bHasPositionOutput = true;
+	
+	return true;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 每个方法前添加多行文档注释
+   - 说明与P04的区别
+   - 关键参数添加注释
+   - 所有注释使用英文
+
+2. **格式：**
+   - 使用Tab缩进（与现有代码一致）
+   - 方法之间空两行
+   - 常量命名清晰（BaseBossOrbitOffset）
+
+3. **可维护性：**
+   - 使用const常量而非魔法数字
+   - 注释说明每个常量的作用
+   - 提供合理的默认值
+
+【技术说明】
+
+**P05与P04的核心区别：**
+
+| 参数 | P04 (Regular Lock-On) | P05 (Boss) | 原因 |
+|------|----------------------|-----------|------|
+| **MidPointBias** | 0.5（中点） | 0.2（偏玩家） | Boss太大，需要更关注玩家 |
+| **OrbitOffset** | 50cm | 80cm | 更宽的轨道容纳Boss |
+| **Height Offset** | 固定 | 动态（基于Boss尺寸） | Boss高度差异大 |
+| **Phase Scale** | 无 | 支持 | Boss战有阶段变化 |
+
+### 1.  MidPointBias对比
+
+```
+场景：玩家在(0, 0, 0)，Boss在(0, 0, 1000)
+
+P04 (MidPointBias=0.5):
+FocusPoint = Lerp(Player, Boss, 0.5) = (0, 0, 500)
+效果：正中间，两者平衡
+
+P05 (MidPointBias=0.2):
+FocusPoint = Lerp(Player, Boss, 0.2) = (0, 0, 200)
+效果：更靠近玩家，玩家占据画面中心
+```
+
+**为什么Boss需要偏向玩家？**
+- Boss体型巨大，即使在边缘也能看清
+- 玩家需要更好的视角躲避Boss攻击
+- 玩家是战斗的主体，应该占据中心位置
+
+### 2. 动态高度调整
+
+```
+小型Boss (TargetSize=100cm):
+BossHeightOffset = 100 * 0.2 = 20cm
+效果：轻微上抬
+
+中型Boss (TargetSize=200cm):
+BossHeightOffset = 200 * 0.2 = 40cm
+效果：适度上抬
+
+巨型Boss (TargetSize=800cm):
+BossHeightOffset = Clamp(800 * 0.2, 0, 100) = 100cm
+效果：最大上抬（防止过度）
+```
+
+### 3. Boss阶段缩放
+
+```
+BossPhaseDistanceScale的作用：
+
+第一阶段（正常）：
+BossPhaseScale = 1.0
+OrbitOffset = 80 * 1.0 = 80cm
+效果：标准Boss轨道
+
+第二阶段（狂暴）：
+BossPhaseScale = 1.2
+OrbitOffset = 80 * 1.2 = 96cm
+效果：稍微拉远，看清狂暴攻击
+
+第三阶段（终结）：
+BossPhaseScale = 1.5
+OrbitOffset = 80 * 1.5 = 120cm
+效果：更远的史诗视角
+```
+
+### 4. 实际应用案例
+
+**案例1：人形Boss（Dark Souls风格）**
+```
+TargetSize:  120cm
+MidPointBias:  0.2
+OrbitOffset: 80cm
+BossHeightOffset: 24cm
+
+效果：
+- 玩家在画面中心偏下
+- Boss上半身清晰可见
+- 适合近距离战斗
+```
+
+**案例2：巨型Boss（Monster Hunter风格）**
+```
+TargetSize: 600cm
+MidPointBias:  0.2
+OrbitOffset: 80cm
+BossHeightOffset: 100cm (clamped)
+
+效果：
+- 玩家在画面底部
+- Boss躯干和头部可见
+- 展现Boss的庞大规模
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过（0 errors, 0 warnings）
+   - [ ] 文件编码为UTF-8 Without BOM
+   - [ ] 所有注释为英文
+
+2. **代码完整性：**
+   - [ ] ShouldActivate()实现完整
+   - [ ] Compute()实现完整
+   - [ ] 所有方法签名与. h一致
+
+3. **逻辑正确性：**
+   - [ ] 仅在有Boss目标时激活
+   - [ ] 安全检查目标存在
+   - [ ] MidPointBias = 0.2（偏玩家）
+   - [ ] OrbitOffset = 80cm（更宽）
+   - [ ] 动态高度计算正确
+   - [ ] 默认值处理完善
+   - [ ] 输出bHasPositionOutput=true
+
+4. **字段访问：**
+   - [ ] Context.InputContext.bHasTarget
+   - [ ] Context.InputContext.bTargetIsBoss
+   - [ ] Context.InputContext.TargetLocation
+   - [ ] Context.InputContext.TargetSize
+   - [ ] StateConfig.Module.Distance.BossPhaseDistanceScale
+
+【注意事项】
+
+1. **不需要Regenerate：**
+   本Sub-Step只修改现有. cpp文件内容，不添加新文件。
+   保存后可以直接编译，无需Regenerate。
+
+2. **StateConfig字段缺失处理：**
+   如果StateConfig中没有BossPhaseDistanceScale字段：
+   ```cpp
+   // 使用固定默认值
+   float BossPhaseScale = 1.0f;
+   ```
+
+3. **InputContext字段缺失处理：**
+   ```cpp
+   // 如果没有TargetSize：
+   float TargetSize = 150.0f;  // 固定默认Boss尺寸
+   
+   // 如果没有bTargetIsBoss：
+   // 使用StateConfig. bIsBossFight或其他标志判断
+   ```
+
+4. **常量值的选择：**
+   ```cpp
+   BossMidPointBias = 0.2f;      // 经验值，可调整0.1-0.3
+   BaseBossOrbitOffset = 80.0f;  // 经验值，可调整60-100cm
+   BossHeightOffset max = 100cm; // 防止过度抬高
+   ```
+
+5. **测试建议：**
+   编译通过后，可以通过调整参数测试效果：
+   - BossMidPointBias = 0.1 → 更关注玩家
+   - BossMidPointBias = 0.3 → 更平衡
+   - BossPhaseScale = 1.5 → 更远的视角
+   - TargetSize = 300 → 测试大型Boss
+
+【输出要求】
+
+完成修改后，请报告：
+
+```
+================================================================================
+Sub-Step 3. 2. 6 完成报告
+================================================================================
+
+【修改内容】
+- 文件：CameraModule_Position.cpp
+- 修改位置：P05模块（ShouldActivate、Compute）
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ ShouldActivate：检查Boss目标
+- ✅ Compute：Boss轨道 + 动态高度
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误数：[数量]
+- 警告数：[数量]
+
+【遇到的问题】
+[如果有字段路径问题，详细描述]
+
+【最终状态】
+✅ P05模块完整实现，为Boss战提供专门的相机定位
+
+================================================================================
+```
+
+【后续步骤】
+
+P05完成后，Position模块进度：
+- [x] ✅ P01:  Follow Target
+- [x] ✅ P02: Follow Target Lagged
+- [x] ✅ P03: Follow Target Predictive
+- [x] ✅ P04: Orbit Lock-On
+- [x] ✅ P05: Orbit Boss
+- [ ] ⏳ P06: Fixed Point (Sub-Step 3.2.7)
+- [ ] ⏳ P07: Spline Follow (Sub-Step 3.2.8)
+- [ ] ⏳ P08: MidPoint Two Target (Sub-Step 3.2.9)
+
+完成后准备进入Sub-Step 3.2.7（P06: Fixed Point - 相对简单的固定点模块）。
+
+================================================================================

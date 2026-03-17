@@ -1,0 +1,440 @@
+Sub-Step 5.2.3 Prompt
+
+================================================================================
+任务：在CameraCollision_Detection.  cpp中实现Det02 SphereTrace和Det03 MultiRayTrace
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4. 27 C++项目。
+- Det02使用球体扫描检测碰撞，比射线更能处理薄几何体
+- Det03使用多条射线检测，提供更好的覆盖范围
+
+【当前进度】
+Phase 5 Step 5. 2 Sub-Step 5. 2.3 (共190个Sub-Step中的第155个)
+前置完成：
+- 5. 2.1:  CameraCollision_Detection.h ✅
+- 5.2.2: DetectionBase + Det01实现 ✅
+
+【任务目标】
+在CameraCollision_Detection.   cpp中替换Det02和Det03的placeholder为完整实现。
+
+【⚠️ 重要提醒】
+
+1. **本Sub-Step是更新现有文件，不创建新文件**
+   因此**不需要Regenerate**，直接编译即可。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **Execute方法签名：**
+   与头文件保持一致（3个参数，无StateConfig）：
+   ```cpp
+   virtual bool Execute(
+       const FStageExecutionContext& Context,
+       const FCollisionDetectionResult& DetectionResult,
+       FCollisionResponseOutput& OutResponse
+   ) override;
+   ```
+
+4. **使用基类成员而非StateConfig：**
+   - `MinDistance` 替代 `StateConfig.Collision.  Detection. MinCameraDistance`
+   - `ProbeRadius` 替代 `StateConfig.Collision. Detection.CameraProbeRadius`
+   - `SafetyMargin` 替代 `StateConfig. Collision. Detection. CollisionPadding`
+
+【具体要求】
+
+**文件路径：** `Source/MyProject/Private/Camera/Collision/CameraCollision_Detection.  cpp`
+
+**找到Det02和Det03的placeholder代码，替换为以下实现：**
+
+---
+
+### Det02: SphereTrace 完整实现
+
+```cpp
+//========================================
+// Det02: Sphere Trace Implementation
+//========================================
+
+/**
+ * Constructor - Configure sphere trace detection parameters
+ * 
+ * Sphere trace is the preferred detection method: 
+ * - Catches thin geometry that line traces miss
+ * - Provides accurate "safe" positions
+ * - Matches UE4 SpringArm's default behavior
+ */
+UCameraCollision_Det02_SphereTrace::UCameraCollision_Det02_SphereTrace()
+    : SweepRadius(12.0f)
+    , MinSweepRadius(4.0f)
+    , bAdaptiveRadius(true)
+{
+    // Highest priority - preferred detection method
+    Priority = 120;
+    ProbeRadius = 12.0f;
+    SafetyMargin = 5.0f;
+}
+
+bool UCameraCollision_Det02_SphereTrace::Execute(
+    const FStageExecutionContext& Context,
+    const FCollisionDetectionResult& DetectionResult,
+    FCollisionResponseOutput& OutResponse)
+{
+    // Calculate trace endpoints
+    FVector TraceStart, TraceEnd;
+    CalculateTraceEndpoints(Context, TraceStart, TraceEnd);
+    
+    // Determine sweep radius
+    float CurrentRadius = SweepRadius;
+    
+    // Adaptive radius:  reduce radius when close to obstacles
+    if (bAdaptiveRadius && DetectionResult.  bCollisionDetected)
+    {
+        // If previous frame had collision, try smaller radius
+        float DistanceRatio = DetectionResult. SafeDistance / FMath::Max(1.0f, Context.Output.Distance);
+        CurrentRadius = FMath:: Lerp(MinSweepRadius, SweepRadius, DistanceRatio);
+    }
+    
+    CurrentRadius = FMath::Max(CurrentRadius, MinSweepRadius);
+    
+    // Setup trace parameters
+    FCollisionQueryParams Params = GetDefaultTraceParams();
+    
+    // Perform sphere sweep
+    FHitResult Hit;
+    bool bHit = SphereTrace(TraceStart, TraceEnd, CurrentRadius, Hit, Params);
+    
+    // Debug visualization
+#if ENABLE_DRAW_DEBUG
+    if (bDrawDebugTraces)
+    {
+        UWorld* World = GetWorld();
+        if (World)
+        {
+            FColor TraceColor = bHit ? FColor::Red : FColor::Green;
+            
+            // Draw capsule representing the sweep
+            DrawDebugCapsule(World, 
+                (TraceStart + TraceEnd) * 0.5f,
+                (TraceEnd - TraceStart).Size() * 0.5f,
+                CurrentRadius,
+                FQuat::FindBetweenNormals(FVector:: UpVector, (TraceEnd - TraceStart).GetSafeNormal()),
+                TraceColor, false, 0.0f, 0, 1.0f);
+            
+            if (bHit)
+            {
+                DrawDebugSphere(World, Hit.ImpactPoint, CurrentRadius, 12, FColor::Red, false, 0.0f, 0, 1.0f);
+                DrawDebugDirectionalArrow(World, Hit.ImpactPoint, 
+                    Hit.ImpactPoint + Hit.ImpactNormal * 30.0f, 10.0f, FColor::Blue, false, 0.0f, 0, 1.0f);
+            }
+        }
+    }
+#endif
+    
+    if (bHit)
+    {
+        // Modify detection result
+        FCollisionDetectionResult& MutableResult = const_cast<FCollisionDetectionResult&>(DetectionResult);
+        
+        // Fill basic hit info
+        MutableResult.  bCollisionDetected = true;
+        MutableResult.HitResult = Hit;
+        MutableResult.CollisionNormal = Hit.ImpactNormal;
+        MutableResult.CollisionDistance = Hit.Distance;
+        
+        // Calculate safe distance (account for sphere radius)
+        float SafeOffset = CurrentRadius + SafetyMargin;
+        MutableResult.SafeDistance = FMath::Max(MinDistance, Hit.Distance - SafeOffset);
+        
+        // Calculate safe location
+        FVector Direction = (TraceEnd - TraceStart).GetSafeNormal();
+        MutableResult. SafeLocation = TraceStart + Direction * MutableResult.SafeDistance;
+        
+        // Store desired values
+        MutableResult. DesiredDistance = Context.Output.Distance;
+        MutableResult.DesiredLocation = TraceEnd;
+        
+        // Calculate adjustment ratio
+        float TotalAdjustableDistance = Context.Output.Distance - MinDistance;
+        if (TotalAdjustableDistance > 0.0f)
+        {
+            float AdjustmentNeeded = Context.Output.Distance - MutableResult.SafeDistance;
+            MutableResult.AdjustmentRatio = FMath::Clamp(AdjustmentNeeded / TotalAdjustableDistance, 0.0f, 1.0f);
+        }
+        
+        UE_LOG(LogTemp, Verbose, TEXT("Det02 SphereTrace:  Hit at %.1f (radius=%.1f), safe=%.1f, ratio=%.2f"),
+            Hit.Distance, CurrentRadius, MutableResult. SafeDistance, MutableResult.AdjustmentRatio);
+        
+        SetActive(true);
+        return true;
+    }
+    
+    SetActive(false);
+    return false;
+}
+```
+
+---
+
+### Det03: MultiRayTrace 完整实现
+
+```cpp
+//========================================
+// Det03: Multi-Ray Trace Implementation
+//========================================
+
+/**
+ * Constructor - Configure multi-ray trace detection parameters
+ * 
+ * Multi-ray trace provides the best coverage: 
+ * - Multiple rays in a cone pattern
+ * - Catches obstacles that single traces miss
+ * - Higher performance cost
+ */
+UCameraCollision_Det03_MultiRayTrace::UCameraCollision_Det03_MultiRayTrace()
+    : NumRays(5)
+    , SpreadAngle(15.0f)
+    , CenterRayWeight(0.6f)
+    , bUseClosestHit(true)
+{
+    // Medium priority
+    Priority = 110;
+    SafetyMargin = 10.0f;
+}
+
+bool UCameraCollision_Det03_MultiRayTrace::Execute(
+    const FStageExecutionContext& Context,
+    const FCollisionDetectionResult& DetectionResult,
+    FCollisionResponseOutput& OutResponse)
+{
+    // Calculate trace endpoints
+    FVector TraceStart, TraceEnd;
+    CalculateTraceEndpoints(Context, TraceStart, TraceEnd);
+    
+    FVector MainDirection = (TraceEnd - TraceStart).GetSafeNormal();
+    float TraceDistance = (TraceEnd - TraceStart).Size();
+    
+    // Setup trace parameters
+    FCollisionQueryParams Params = GetDefaultTraceParams();
+    
+    // Perform multi-ray trace using base class helper
+    TArray<FHitResult> Hits;
+    int32 HitCount = ConeTrace(TraceStart, MainDirection, TraceDistance, SpreadAngle, NumRays, Hits, Params);
+    
+    // Debug visualization
+#if ENABLE_DRAW_DEBUG
+    if (bDrawDebugTraces)
+    {
+        UWorld* World = GetWorld();
+        if (World)
+        {
+            // Draw all rays
+            for (int32 i = 0; i < NumRays; ++i)
+            {
+                float Angle = (static_cast<float>(i) / FMath::Max(1, NumRays - 1)) * SpreadAngle;
+                FVector RayEnd = TraceStart + MainDirection. RotateAngleAxis(Angle, FVector:: UpVector) * TraceDistance;
+                
+                bool bRayHit = i < Hits.Num() && Hits[i].bBlockingHit;
+                FColor RayColor = bRayHit ? FColor::Red : FColor::Green;
+                DrawDebugLine(World, TraceStart, RayEnd, RayColor, false, 0.0f, 0, 0.5f);
+            }
+            
+            // Draw hit points
+            for (const FHitResult& Hit : Hits)
+            {
+                if (Hit. bBlockingHit)
+                {
+                    DrawDebugSphere(World, Hit.ImpactPoint, 4. 0f, 6, FColor::Red, false, 0.0f, 0, 1.0f);
+                }
+            }
+        }
+    }
+#endif
+    
+    if (HitCount == 0)
+    {
+        SetActive(false);
+        return false;
+    }
+    
+    // Process hits
+    FHitResult BestHit;
+    
+    if (bUseClosestHit)
+    {
+        // Find closest hit
+        float ClosestDistance = FLT_MAX;
+        for (const FHitResult& Hit :  Hits)
+        {
+            if (Hit.bBlockingHit && Hit.Distance < ClosestDistance)
+            {
+                ClosestDistance = Hit.Distance;
+                BestHit = Hit;
+            }
+        }
+    }
+    else
+    {
+        // Weighted average of all hits
+        float TotalWeight = 0.0f;
+        float WeightedDistance = 0.0f;
+        FVector WeightedNormal = FVector:: ZeroVector;
+        
+        for (int32 i = 0; i < Hits.Num(); ++i)
+        {
+            const FHitResult& Hit = Hits[i];
+            if (! Hit.bBlockingHit)
+            {
+                continue;
+            }
+            
+            // Center ray gets more weight
+            float Weight = (i == 0) ? CenterRayWeight : (1.0f - CenterRayWeight) / FMath::Max(1, NumRays - 1);
+            TotalWeight += Weight;
+            WeightedDistance += Hit.Distance * Weight;
+            WeightedNormal += Hit. ImpactNormal * Weight;
+        }
+        
+        if (TotalWeight > 0.0f)
+        {
+            // Use first hit as base, modify distance
+            BestHit = Hits[0];
+            BestHit.Distance = WeightedDistance / TotalWeight;
+            BestHit.ImpactNormal = (WeightedNormal / TotalWeight).GetSafeNormal();
+        }
+    }
+    
+    if (! BestHit. bBlockingHit)
+    {
+        SetActive(false);
+        return false;
+    }
+    
+    // Modify detection result
+    FCollisionDetectionResult& MutableResult = const_cast<FCollisionDetectionResult&>(DetectionResult);
+    
+    // Store all hits for potential use by other strategies
+    MutableResult.AllHits = Hits;
+    
+    // Fill detection result using best hit
+    FillDetectionResult(Context, BestHit, MutableResult);
+    
+    UE_LOG(LogTemp, Verbose, TEXT("Det03 MultiRayTrace:  %d/%d rays hit, best=%.1f, safe=%.1f"),
+        HitCount, NumRays, BestHit. Distance, MutableResult.SafeDistance);
+    
+    SetActive(true);
+    return true;
+}
+```
+
+---
+
+【代码设计说明】
+
+### 1. Det02 SphereTrace 特性
+
+```
+自适应半径算法：
+├── 正常情况：使用SweepRadius (12cm)
+├── 碰撞后：根据SafeDistance/Distance比例缩小
+│   └── CurrentRadius = Lerp(MinSweepRadius, SweepRadius, DistanceRatio)
+└── 最小保证：MinSweepRadius (4cm)
+
+安全距离计算：
+├── SafeOffset = CurrentRadius + SafetyMargin
+└── SafeDistance = Max(MinDistance, HitDistance - SafeOffset)
+```
+
+### 2. Det03 MultiRayTrace 特性
+
+```
+射线分布：
+├── 使用基类ConeTrace()方法
+├── 中心射线 + 周围射线
+└── 螺旋分布在锥形范围内
+
+命中处理模式：
+├── bUseClosestHit = true：使用最近的命中点
+└── bUseClosestHit = false：加权平均
+    ├── 中心射线权重：CenterRayWeight (0.6)
+    └── 其他射线权重：(1 - CenterRayWeight) / (NumRays - 1)
+```
+
+### 3. 与Det01的差异
+
+| 特性 | Det01 | Det02 | Det03 |
+|------|-------|-------|-------|
+| 检测方法 | 单射线 | 球体扫描 | 多射线 |
+| 性能 | 最快 | 中等 | 较慢 |
+| 覆盖范围 | 最小 | 中等 | 最大 |
+| 薄几何体 | 可能穿透 | 不会穿透 | 不会穿透 |
+| 优先级 | 100 | 120 | 110 |
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过（0 errors）
+   - [ ] 无链接错误
+
+2. **代码完整性：**
+   - [ ] Det02 SphereTrace完整实现
+   - [ ] Det03 MultiRayTrace完整实现
+   - [ ] 自适应半径功能
+   - [ ] 加权平均/最近命中选项
+   - [ ] 调试可视化
+
+3. **功能验证：**
+   - [ ] Det02可执行SphereTrace
+   - [ ] Det03可执行多射线检测
+   - [ ] 命中时正确填充DetectionResult
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 5.2.3 完成报告
+================================================================================
+
+【更新的文件】
+- 文件：CameraCollision_Detection.  cpp
+- 修改：替换Det02和Det03的placeholder为完整实现
+
+【实现的内容】
+
+Det02 SphereTrace：
+- ✅ Execute() - 完整球体扫描实现
+- ✅ 自适应半径功能
+- ✅ 考虑球体半径的安全距离计算
+- ✅ 调试可视化
+
+Det03 MultiRayTrace：
+- ✅ Execute() - 完整多射线实现
+- ✅ bUseClosestHit选项
+- ✅ 加权平均算法
+- ✅ AllHits数组填充
+- ✅ 调试可视化
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【最终状态】
+✅ Det02 + Det03实现完成
+⏳ Det04待实现
+
+================================================================================
+```
+
+【后续步骤】
+
+5. 2. 3完成后：
+- [x] ✅ 5.2.1: CameraCollision_Detection.h
+- [x] ✅ 5.2.2: DetectionBase + Det01
+- [x] ✅ 5.2.3: Det02 + Det03（当前）
+- [ ] ⏳ 5.2.4: Det04实现 + 注册
+
+**Phase 5.2进度：3/4**
+
+================================================================================

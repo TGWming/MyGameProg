@@ -1,0 +1,207 @@
+Sub-Step 4.6.4 Prompt
+
+================================================================================
+任务：在CameraModifier_Special.cpp中添加X03 FinalBlow实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+X03是击杀重要敌人时的戏剧性相机效果。
+
+【当前进度】
+Phase 4 Step 4.6 Sub-Step 4.6.4 (共190个Sub-Step中的第145个)
+前置完成：4.6.3 X02实现
+
+【任务目标】
+在CameraModifier_Special.cpp中添加X03实现。
+
+【具体要求】
+
+在X02实现之后添加：
+
+//========================================
+// X03: Final Blow
+//========================================
+
+UCameraModifier_X03_FinalBlow::UCameraModifier_X03_FinalBlow()
+    : EnemyLocation(FVector::ZeroVector)
+    , PlayerLocation(FVector::ZeroVector)
+    , BlowDirection(FVector::ForwardVector)
+    , ZoomAmount(80.0f)
+    , DramaticTimeDilation(0.3f)
+    , bIsBossKill(false)
+    , OrbitSpeed(30.0f)
+    , CurrentOrbitAngle(0.0f)
+{
+}
+
+void UCameraModifier_X03_FinalBlow::OnTriggered(const FModifierTriggerData& TriggerData)
+{
+    // Get positions
+    if (TriggerData.SourceActor. IsValid())
+    {
+        PlayerLocation = TriggerData. SourceActor->GetActorLocation();
+    }
+
+    if (TriggerData.TargetActor.IsValid())
+    {
+        EnemyLocation = TriggerData.TargetActor->GetActorLocation();
+    }
+    else
+    {
+        EnemyLocation = TriggerData.SourceLocation;
+    }
+
+    // Calculate blow direction
+    BlowDirection = (EnemyLocation - PlayerLocation).GetSafeNormal();
+    BlowDirection.Z = 0.0f;
+    BlowDirection.Normalize();
+
+    // Check if boss kill (from custom tag or high intensity)
+    bIsBossKill = (TriggerData.CustomTag == FName("Boss") || TriggerData.Intensity >= 2.0f);
+
+    if (bIsBossKill)
+    {
+        // Boss kill - extra dramatic
+        ZoomAmount = 120.0f;
+        DramaticTimeDilation = 0.2f;
+        ActiveDuration = 2.5f;
+        OrbitSpeed = 20.0f;
+    }
+    else
+    {
+        // Normal significant enemy kill
+        float IntensityScale = FMath::Clamp(TriggerData.Intensity, 0.8f, 1.5f);
+        ZoomAmount = 80.0f * IntensityScale;
+        DramaticTimeDilation = 0.3f;
+        ActiveDuration = 1.5f * IntensityScale;
+        OrbitSpeed = 30.0f;
+    }
+
+    // Initialize orbit angle
+    CurrentOrbitAngle = FMath:: Atan2(BlowDirection.Y, BlowDirection.X) * (180.0f / PI);
+    CurrentOrbitAngle += 90.0f; // Start from side
+
+    UE_LOG(LogTemp, Verbose, TEXT("X03 FinalBlow: %s kill, zoom %.0f, duration %.2f"),
+        bIsBossKill ? TEXT("Boss") : TEXT("Normal"), ZoomAmount, ActiveDuration);
+}
+
+void UCameraModifier_X03_FinalBlow::ComputeEffect(float DeltaTime, const FStageExecutionContext& Context)
+{
+    float EffectiveWeight = CurrentWeight * CurrentIntensity;
+    float NormalizedTime = StateTime / ActiveDuration;
+
+    // Three phases: 
+    // Phase 1 (0-20%): Impact - zoom in, time freeze
+    // Phase 2 (20-70%): Hold/Orbit - dramatic view of kill
+    // Phase 3 (70-100%): Release - return to normal
+
+    float ZoomCurve = 0.0f;
+    float TimeCurve = 1.0f;
+    float VignetteCurve = 0.0f;
+
+    if (NormalizedTime < 0.2f)
+    {
+        // Phase 1: Impact
+        float PhaseTime = NormalizedTime / 0.2f;
+        
+        // Snap zoom
+        ZoomCurve = FMath::InterpEaseOut(0.0f, 1.0f, PhaseTime, 3.0f);
+        
+        // Strong time slow
+        TimeCurve = FMath:: Lerp(0.1f, DramaticTimeDilation, PhaseTime);
+        
+        // Vignette builds
+        VignetteCurve = PhaseTime;
+    }
+    else if (NormalizedTime < 0.7f)
+    {
+        // Phase 2: Hold/Orbit
+        float PhaseTime = (NormalizedTime - 0.2f) / 0.5f;
+        
+        // Hold zoom with slight movement
+        ZoomCurve = 1.0f - FMath:: Sin(PhaseTime * PI) * 0.1f;
+        
+        // Gradual time return
+        TimeCurve = FMath:: Lerp(DramaticTimeDilation, 0.6f, PhaseTime);
+        
+        // Orbit around action
+        CurrentOrbitAngle += OrbitSpeed * DeltaTime / FMath::Max(0.3f, TimeCurve);
+        
+        // Hold vignette
+        VignetteCurve = 1.0f;
+    }
+    else
+    {
+        // Phase 3: Release
+        float PhaseTime = (NormalizedTime - 0.7f) / 0.3f;
+        
+        // Zoom out
+        ZoomCurve = FMath::InterpEaseIn(1.0f, 0.0f, PhaseTime, 2.0f);
+        
+        // Return to normal time
+        TimeCurve = FMath::Lerp(0.6f, 1.0f, PhaseTime);
+        
+        // Fade vignette
+        VignetteCurve = 1.0f - PhaseTime;
+    }
+
+    // Apply time dilation
+    TimeDilationEffect = TimeCurve;
+
+    // Calculate camera position (orbit around kill point)
+    FVector ActionCenter = (PlayerLocation + EnemyLocation) * 0.5f;
+    float AngleRad = FMath::DegreesToRadians(CurrentOrbitAngle);
+    float OrbitRadius = 250.0f - ZoomCurve * 100.0f; // Closer when zoomed
+    
+    FVector OrbitOffset;
+    OrbitOffset.X = FMath::Cos(AngleRad) * OrbitRadius;
+    OrbitOffset.Y = FMath::Sin(AngleRad) * OrbitRadius;
+    OrbitOffset.Z = 100.0f + ZoomCurve * 50.0f;
+
+    FVector DesiredCameraPos = ActionCenter + OrbitOffset;
+    
+    // Apply as offset from current focus
+    PositionEffect = (DesiredCameraPos - Context.Output.FocusPoint) * ZoomCurve * EffectiveWeight * 0.5f;
+
+    // Distance zoom
+    DistanceEffect = -ZoomAmount * ZoomCurve * EffectiveWeight;
+
+    // FOV tightening for focus
+    FOVEffect = -10.0f * ZoomCurve * EffectiveWeight;
+
+    // Strong vignette
+    VignetteEffect = 0.3f * VignetteCurve * EffectiveWeight;
+
+    // Slight desaturation during slow-mo, color returns with action
+    float DesatAmount = (1.0f - TimeCurve) * 0.2f;
+    if (bIsBossKill)
+    {
+        // Gold tint for boss kill
+        ColorTintEffect = FLinearColor(
+            1.0f + VignetteCurve * 0.1f,
+            1.0f + VignetteCurve * 0.05f,
+            1.0f - VignetteCurve * 0.05f - DesatAmount,
+            1.0f
+        );
+    }
+    else
+    {
+        // Slight contrast boost
+        float ContrastBoost = VignetteCurve * 0.05f;
+        ColorTintEffect = FLinearColor(
+            1.0f + ContrastBoost - DesatAmount * 0.5f,
+            1.0f + ContrastBoost - DesatAmount * 0.5f,
+            1.0f + ContrastBoost - DesatAmount * 0.5f,
+            1.0f
+        );
+    }
+}
+
+【验证标准】
+- 编译通过
+- X03可触发击杀戏剧效果
+
+【输出要求】
+输出X03的完整实现代码。
+================================================================================

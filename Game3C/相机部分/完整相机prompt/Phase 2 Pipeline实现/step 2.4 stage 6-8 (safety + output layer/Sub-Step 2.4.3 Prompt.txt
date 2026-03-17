@@ -1,0 +1,386 @@
+================================================================================
+任务：创建CameraStage_PostProcess. h - Stage 7类声明
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Stage 7负责最终调整和后处理效果（可跳过）。
+
+【当前进度】
+Phase 2 Step 2.4 Sub-Step 2.4.3 (共190个Sub-Step中的第51个)
+**实现8个Stage中的第七个（输出层，第三个可跳过的Stage）**
+
+前置完成：
+- Phase 1 全部完成 ✅
+- Sub-Step 2.1. 1-2.1.3:  Pipeline骨架 ✅
+- Sub-Step 2.2.1-2.2.4: Stage 1-2 ✅
+- Sub-Step 2.3.1-2.3.6: Stage 3-5 ✅
+- Sub-Step 2.4.1-2.4.2: Stage 6 (CollisionResolve) ✅
+
+【任务目标】
+创建文件：Source/[ProjectName]/Camera/Pipeline/CameraStage_PostProcess.h
+定义Stage 7类。
+
+【Stage 7概述】
+- **名称**：Post Process（后处理）
+- **层级**：OUTPUT LAYER（输出层）
+- **索引**：7
+- **必需**：否
+- **可跳过**：是
+- **职责**：应用全局限制、最终平滑、构建后处理设置、最终校正
+
+【具体要求】
+
+1. 文件路径：Source/[ProjectName]/Camera/Pipeline/CameraStage_PostProcess. h
+
+2. 完整文件内容：
+
+```cpp
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "UObject/NoExportTypes.h"
+#include "ICameraStage.h"
+#include "Camera/Core/SoulsCameraRuntimeTypes.h"
+#include "CameraStage_PostProcess. generated.h"
+
+// Forward declarations
+class USoulsCameraGlobalConfig;
+
+/**
+ * UCameraStage_PostProcess - Stage 7: Post Process
+ * 阶段7：后处理
+ * 
+ * Seventh stage in the pipeline. Applies final adjustments:
+ * Pipeline第七阶段，应用最终调整：
+ * 
+ * - Global limits (min/max distance, FOV, pitch) 全局限制
+ * - Final smoothing pass 最终平滑
+ * - Post-process effect settings 后处理效果设置
+ * - Rotation normalization 旋转归一化
+ * - Any last-minute corrections 最终校正
+ * 
+ * Layer:  OUTPUT (输出层)
+ * Required: No (非必需)
+ * Skippable: Yes (可跳过)
+ */
+UCLASS(BlueprintType)
+class MYPROJECT_API UCameraStage_PostProcess : public UObject, public ICameraStage
+{
+    GENERATED_BODY()
+
+public:
+    /** Constructor */
+    UCameraStage_PostProcess();
+
+    //========================================
+    // ICameraStage Interface 接口实现
+    //========================================
+
+    /** Get stage index (7 for PostProcess) */
+    virtual int32 GetStageIndex() const override { return 7; }
+    
+    /** Get stage name for debugging */
+    virtual FName GetStageName() const override { return FName(TEXT("PostProcess")); }
+    
+    /** This stage CAN be skipped */
+    virtual bool CanBeSkipped() const override { return true; }
+    
+    /** Check if this stage should execute */
+    virtual bool ShouldExecute(const FStageExecutionContext& Context) const override;
+    
+    /** Execute the post process stage */
+    virtual EStageResult Execute(FStageExecutionContext& Context) override;
+
+    /** Pre-execute hook for debugging */
+    virtual void OnPreExecute(const FStageExecutionContext& Context) override;
+
+    /** Post-execute hook for debugging */
+    virtual void OnPostExecute(const FStageExecutionContext& Context, EStageResult Result) override;
+
+    //========================================
+    // Configuration 配置
+    //========================================
+
+    /**
+     * Set reference to global config
+     * @param InConfig Global config instance
+     */
+    void SetGlobalConfig(USoulsCameraGlobalConfig* InConfig);
+
+    /**
+     * Get global config reference
+     * @return Global config instance, or nullptr if not set
+     */
+    FORCEINLINE USoulsCameraGlobalConfig* GetGlobalConfig() const { return GlobalConfig; }
+
+protected:
+    //========================================
+    // Global Limits 全局限制
+    //========================================
+
+    /** 
+     * Apply global limits to output values
+     * 应用全局限制到输出值
+     */
+    void ApplyGlobalLimits(FStageExecutionContext& Context);
+
+    /**
+     * Clamp distance to global min/max
+     * 限制距离到全局最小/最大值
+     */
+    float ClampDistance(float Distance) const;
+
+    /**
+     * Clamp FOV to global min/max
+     * 限制FOV到全局最小/最大值
+     */
+    float ClampFOV(float FOV) const;
+
+    /**
+     * Clamp pitch to global min/max
+     * 限制俯仰角到全局最小/最大值
+     */
+    float ClampPitch(float Pitch) const;
+
+    //========================================
+    // Smoothing 平滑
+    //========================================
+
+    /** 
+     * Apply final smoothing pass
+     * 应用最终平滑
+     */
+    void ApplyFinalSmoothing(FStageExecutionContext& Context);
+
+    /**
+     * Smooth position between frames
+     * 帧间位置平滑
+     */
+    FVector SmoothPosition(const FVector& Current, const FVector& Previous, float DeltaTime);
+
+    /**
+     * Smooth rotation between frames
+     * 帧间旋转平滑
+     */
+    FRotator SmoothRotation(const FRotator& Current, const FRotator& Previous, float DeltaTime);
+
+    //========================================
+    // Post-Process Effects 后处理效果
+    //========================================
+
+    /** 
+     * Build post-process settings based on output
+     * 基于输出构建后处理设置
+     */
+    void BuildPostProcessSettings(FStageExecutionContext& Context);
+
+    /**
+     * Apply vignette effect
+     * 应用暗角效果
+     */
+    void ApplyVignetteEffect(FStageExecutionContext& Context);
+
+    /**
+     * Apply color tint effect
+     * 应用颜色色调效果
+     */
+    void ApplyColorTintEffect(FStageExecutionContext& Context);
+
+    //========================================
+    // Normalization 归一化
+    //========================================
+
+    /**
+     * Normalize rotation values (wrap angles)
+     * 归一化旋转值（角度回环）
+     */
+    void NormalizeRotation(FStageExecutionContext& Context);
+
+    /**
+     * Validate and fix any invalid output values
+     * 验证并修复任何无效输出值
+     */
+    void ValidateOutput(FStageExecutionContext& Context);
+
+private:
+    //========================================
+    // Global Config Reference
+    //========================================
+
+    /** Reference to global config (for limits and settings) */
+    UPROPERTY()
+    USoulsCameraGlobalConfig* GlobalConfig;
+
+    //========================================
+    // Smoothing State 平滑状态
+    //========================================
+
+    /** Previous frame output for smoothing */
+    FSoulsCameraOutput PreviousOutput;
+
+    /** Is first frame (no previous data) */
+    bool bFirstFrame;
+
+    /** Smoothing speed for position */
+    float PositionSmoothSpeed;
+
+    /** Smoothing speed for rotation */
+    float RotationSmoothSpeed;
+
+    //========================================
+    // Default Limits 默认限制
+    //========================================
+
+    /** Global minimum distance (cm) */
+    UPROPERTY(EditAnywhere, Category = "Limits")
+    float GlobalMinDistance;
+
+    /** Global maximum distance (cm) */
+    UPROPERTY(EditAnywhere, Category = "Limits")
+    float GlobalMaxDistance;
+
+    /** Global minimum FOV (degrees) */
+    UPROPERTY(EditAnywhere, Category = "Limits")
+    float GlobalMinFOV;
+
+    /** Global maximum FOV (degrees) */
+    UPROPERTY(EditAnywhere, Category = "Limits")
+    float GlobalMaxFOV;
+
+    /** Global minimum pitch (degrees, negative = look down) */
+    UPROPERTY(EditAnywhere, Category = "Limits")
+    float GlobalMinPitch;
+
+    /** Global maximum pitch (degrees, positive = look up) */
+    UPROPERTY(EditAnywhere, Category = "Limits")
+    float GlobalMaxPitch;
+
+    //========================================
+    // Execution Statistics 执行统计
+    //========================================
+
+    /** Total post-process time (ms) for profiling */
+    float TotalPostProcessTimeMs;
+
+    /** Number of values clamped this frame */
+    int32 ValuesClampedCount;
+};
+```
+
+3. 代码风格：
+   - 继承UObject和ICameraStage
+   - **CanBeSkipped()返回true** - 这是第三个可跳过的Stage
+   - 分组：全局限制、平滑、后处理效果、归一化
+   - 添加GlobalConfig引用
+   - 添加执行统计和配置变量
+   - 中英文双语注释
+   - MYPROJECT_API宏
+
+【验证标准】
+- 编译通过（需要配合. cpp）
+- 类可在蓝图中看到
+- CanBeSkipped()返回true
+
+【注意事项】
+- 依赖ICameraStage. h和SoulsCameraRuntimeTypes.h
+- 前向声明USoulsCameraGlobalConfig
+- **这是第三个可跳过的Stage（CanBeSkipped = true）**
+- 下一个Sub-Step创建. cpp实现
+- 确保MYPROJECT_API替换为你的项目名称（大写）
+- **添加新文件后可能需要重新Generate Visual Studio project files**
+
+【输出要求】
+输出完整的CameraStage_PostProcess.h文件代码。
+
+================================================================================
+                        上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+```
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：Sub-Step 2.4.3 创建CameraStage_PostProcess.h - Stage 7类声明
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断]
+
+【已完成内容】
+- [列出已完成的部分]
+
+【未完成内容】
+- [列出剩余部分]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存到CameraStage_PostProcess.h，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Phase 2 Step 2.4 Sub-Step 2.4.3 续接任务。
+完成CameraStage_PostProcess.h声明。
+**这是8个Stage中的第七个（输出层，第三个可跳过的Stage）。**
+
+【前置完成】
+- Phase 1 全部完成 ✅
+- Sub-Step 2.1.1-2.1.3: Pipeline骨架 ✅
+- Sub-Step 2.2.1-2.2.4: Stage 1-2 ✅
+- Sub-Step 2.3.1-2.3.6: Stage 3-5 ✅
+- Sub-Step 2.4.1-2.4.2: Stage 6 ✅
+- Sub-Step 2.4.3 部分完成 ✅
+
+【续接任务】
+继续完成CameraStage_PostProcess.h
+
+【目标文件】
+Source/[ProjectName]/Camera/Pipeline/CameraStage_PostProcess.h
+
+【Stage 7概述】
+- 名称：Post Process
+- 层级：OUTPUT LAYER
+- 索引：7
+- 必需：否
+- 可跳过：是
+- 职责：全局限制、平滑、后处理效果、归一化
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================
+```
+
+【交接信息要求】
+1. 交接PROMPT必须是**完全自包含**的
+2. 明确标注这是第三个可跳过的Stage
+3. 包含Stage概述信息
+4. 标明编译注意事项
+
+================================================================================

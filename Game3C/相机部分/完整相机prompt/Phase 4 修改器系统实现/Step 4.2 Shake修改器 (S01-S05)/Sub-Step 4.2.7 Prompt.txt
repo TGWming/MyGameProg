@@ -1,0 +1,151 @@
+Sub-Step 4.2.7 Prompt
+
+================================================================================
+任务：在CameraModifier_Shake.cpp中添加S05 EnvironmentShake实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+S05是环境事件触发的相机抖动，如地震、爆炸、Boss技能等。
+支持距离衰减和叠加。
+
+【当前进度】
+Phase 4 Step 4.2 Sub-Step 4.2.7 (共190个Sub-Step中的第118个)
+前置完成：4.2.6 S04实现
+这是Step 4.2的最后一个Sub-Step。
+
+【任务目标】
+在CameraModifier_Shake.cpp中添加S05实现。
+
+【具体要求】
+
+在S04实现之后添加：
+
+//========================================
+// S05: Environment Shake
+//========================================
+
+UCameraModifier_S05_EnvironmentShake::UCameraModifier_S05_EnvironmentShake()
+    : bUseDistanceFalloff(false)
+    , MaxShakeDistance(2000.0f)
+{
+    // Environment shake - powerful and sustained
+    PositionAmplitude = 10.0f;
+    RotationAmplitude = 2.0f;
+    ShakeFrequency = 12.0f; // Low frequency for rumbling feel
+}
+
+void UCameraModifier_S05_EnvironmentShake:: OnTriggered(const FModifierTriggerData& TriggerData)
+{
+    // Generate new random seed for variation
+    RandomSeed = FMath:: FRand() * 1000.0f;
+    ShakeTime = 0.0f;
+
+    // Check if source location was provided (for distance falloff)
+    bUseDistanceFalloff = ! TriggerData. SourceLocation.IsZero();
+
+    // Scale parameters based on intensity
+    float IntensityScale = FMath::Clamp(TriggerData. Intensity, 0.3f, 3.0f);
+    PositionAmplitude = 10.0f * IntensityScale;
+    RotationAmplitude = 2.0f * IntensityScale;
+
+    // Environmental events can affect FOV (explosion shockwave feel)
+    FOVEffect = 5.0f * IntensityScale; // Slight FOV increase for impact
+
+    // Configure based on custom tag
+    if (TriggerData.CustomTag == FName("Earthquake"))
+    {
+        ShakeFrequency = 8.0f; // Very low frequency
+        PositionAmplitude *= 1.5f;
+        MaxShakeDistance = 5000.0f; // Earthquakes affect large area
+    }
+    else if (TriggerData.CustomTag == FName("Explosion"))
+    {
+        ShakeFrequency = 15.0f;
+        MaxShakeDistance = 1500.0f;
+        FOVEffect = 8.0f * IntensityScale; // Stronger FOV punch
+    }
+    else if (TriggerData.CustomTag == FName("BossAbility"))
+    {
+        ShakeFrequency = 10.0f;
+        MaxShakeDistance = 3000.0f;
+    }
+    else
+    {
+        ShakeFrequency = 12.0f;
+        MaxShakeDistance = 2000.0f;
+    }
+
+    UE_LOG(LogTemp, Verbose, TEXT("S05 EnvironmentShake: Triggered with intensity %.2f, tag: %s"),
+        TriggerData. Intensity, *TriggerData. CustomTag.ToString());
+}
+
+void UCameraModifier_S05_EnvironmentShake::ComputeEffect(float DeltaTime, const FStageExecutionContext& Context)
+{
+    // Accumulate shake time
+    ShakeTime += DeltaTime;
+
+    // Calculate distance falloff if applicable
+    float DistanceMultiplier = 1.0f;
+    if (bUseDistanceFalloff)
+    {
+        DistanceMultiplier = CalculateDistanceFalloff(Context);
+    }
+
+    // Get effective amplitude
+    float EffectiveAmp = GetEffectiveAmplitude() * DistanceMultiplier;
+
+    // Generate position shake
+    PositionEffect = GeneratePositionShake(ShakeTime, ShakeFrequency, PositionAmplitude * EffectiveAmp);
+
+    // Generate rotation shake
+    RotationEffect = GenerateRotationShake(ShakeTime, ShakeFrequency, RotationAmplitude * EffectiveAmp);
+
+    // Decay FOV effect over time with distance
+    float NormalizedTime = StateTime / ActiveDuration;
+    FOVEffect = FOVEffect * (1.0f - NormalizedTime) * DistanceMultiplier;
+}
+
+float UCameraModifier_S05_EnvironmentShake::CalculateDistanceFalloff(const FStageExecutionContext& Context) const
+{
+    if (!bUseDistanceFalloff || MaxShakeDistance <= 0.0f)
+    {
+        return 1.0f;
+    }
+
+    FVector PlayerLocation = Context.InputContext.CharacterLocation;
+    FVector SourceLocation = TriggerData.SourceLocation;
+
+    float Distance = FVector:: Dist(PlayerLocation, SourceLocation);
+
+    // Linear falloff with smooth start
+    if (Distance >= MaxShakeDistance)
+    {
+        return 0.0f;
+    }
+
+    float NormalizedDistance = Distance / MaxShakeDistance;
+    
+    // Use smooth falloff curve (stronger near source, gradual falloff)
+    float Falloff = 1.0f - FMath::Pow(NormalizedDistance, 0.5f);
+    
+    return FMath::Clamp(Falloff, 0.0f, 1.0f);
+}
+
+【Step 4.2 完成验证】
+Shake修改器（S01-S05）全部实现：
+- ShakeBase:  通用抖动基类（Perlin噪声）
+- S01 HitShake_Light: 轻微受击抖动
+- S02 HitShake_Heavy:  重击抖动
+- S03 AttackShake: 攻击反馈抖动
+- S04 LandShake: 落地抖动（垂直强调）
+- S05 EnvironmentShake: 环境事件抖动（距离衰减）
+
+【验证标准】
+- 编译通过
+- 所有5个Shake修改器可工作
+- 抖动效果平滑自然
+
+【输出要求】
+输出S05的完整实现代码。
+================================================================================

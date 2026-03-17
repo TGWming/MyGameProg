@@ -1,0 +1,7 @@
+ModifierID,ModifierName,ChineseName,Category,TriggerEvent,Duration,BlendInTime,BlendOutTime,Priority,AffectsPosition,AffectsRotation,AffectsFOV,Description
+R01,Reaction_Parry,弹反反应,Reaction,弹反成功,0.25,0.02,0.15,150,true,true,true,弹反成功时的相机顿挫和特写
+R02,Reaction_PerfectParry,完美弹反反应,Reaction,完美弹反成功,0.35,0.02,0.2,160,true,true,true,完美弹反的强化相机效果
+R03,Reaction_Stagger,硬直反应,Reaction,敌人进入硬直,0.3,0.05,0.15,120,false,true,true,敌人硬直时轻微拉近聚焦
+R04,Reaction_Knockback,击退反应,Reaction,玩家被击退,0.4,0.05,0.2,110,true,true,false,被击退时相机跟随延迟
+R05,Reaction_Knockdown,倒地反应,Reaction,玩家倒地,0.5,0.05,0.25,115,true,true,true,倒地时相机下压和视角变化
+R06,Reaction_GuardBreak,崩防反应,Reaction,玩家或敌人崩防,0.3,0.03,0.15,130,true,true,true,崩防时的冲击相机效果

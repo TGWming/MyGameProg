@@ -1,0 +1,1453 @@
+
+
+# 选项A：最终合并版主纲领 — HAND OFF 文档
+
+```text
+================================================================================
+  UE4.27 类魂项目 · 角色动画系统完整开发纲领
+  HAND OFF DOCUMENT v1.0
+  
+  文档性质：项目交接文档 / 开发主纲领 / 技术设计规范
+  适用范围：玩家角色 / 敌人 / Boss / NPC敌对角色 全角色动画系统
+  引擎版本：Unreal Engine 4.27
+  开发方式：C++ / Blueprint 混合开发
+  文档产出：三方交叉验证后的最终合并版
+  
+  ⚠️ 阅读本文档的任何人应完整通读全文后再开始开发工作
+================================================================================
+```
+
+---
+
+## 第〇章 · 项目背景与开发现状
+
+```text
+================================================================================
+  0.1 项目基本信息
+================================================================================
+
+项目类型：类魂动作游戏（Soulslike）
+引擎版本：Unreal Engine 4.27
+开发方式：C++ / Blueprint 混合
+
+对标操作机制参考：
+- 血源诅咒（Bloodborne）
+- 匹诺曹的谎言（Lies of P）
+- 黑暗之魂3（Dark Souls III）
+
+对标氛围营造参考：
+- 生化危机2 重制版（Resident Evil 2 Remake）
+- 寂静岭2（Silent Hill 2）
+- 死魂曲（Siren）
+
+核心特征：
+- 类魂战斗系统（耐力管理、动作承诺、惩罚窗口、锁定战斗）
+- 恐怖/压迫氛围营造
+- 精确的动作手感与反馈
+
+================================================================================
+  0.2 代码与蓝图职责划分（已确定）
+================================================================================
+
+C++ 负责：
+- 角色相机系统组件（大致完成）
+- Debug 组件（大致完成，按需添加）
+- 锁定与切换锁定组件
+- 敌人侦测组件
+- 玩家角色数值组件
+
+蓝图负责：
+- 场景触碰盒子
+- 天气系统
+- 场景灯效
+- VFX 相关逻辑
+- 音乐系统逻辑
+- 氛围音效逻辑
+- CAMERA_SEQUENCER（过场动画类）逻辑
+- UI 逻辑
+
+================================================================================
+  0.3 当前开发进度
+================================================================================
+
+场景：进行中
+玩家角色相机总组件：大致完成，通过 DataTable 增加视角变化
+Debug 组件：大致完成，按需求添加
+玩家控制：大致完成，会按新需求添加映射
+玩家角色动画：
+- 前后左右移动大概完成
+- 其余所有动画需要重新做好 Blend Space 和状态机
+- 开发程度约 10%
+
+================================================================================
+  0.4 本文档要解决的核心问题
+================================================================================
+
+1. 建立统一的角色动画系统架构（适用于所有角色类型）
+2. 明确从动画资产准备到游戏内调用的完整管线
+3. 规划状态机、Blend Space、Montage 的职责与使用原则
+4. 确定 C++ 与蓝图在动画系统中的分工
+5. 提供可执行的开发计划与资产清单
+6. 确保整套设计在 UE4.27 下可落地、可维护、可扩展
+```
+
+---
+
+## 第一章 · 核心设计原则（必须固定，不可动摇）
+
+```text
+================================================================================
+  1.1 八条核心原则
+================================================================================
+
+以下八条原则经三方验证一致同意，是整个系统的根基。
+任何后续开发决策如果与这八条冲突，必须回到这里重新审视。
+
+原则1：动作请求制（TryDoAction）
+- 所有动作执行必须通过统一的请求接口
+- 不允许任何地方直接调用 PlayMontage
+- 请求流程：输入 → 条件检查 → 状态验证 → 执行 → 回调
+- 玩家、敌人、Boss 共用同一套请求流程
+- 只是触发来源不同（Input vs BehaviorTree）
+
+原则2：C++ 管规则，AnimBP 管表现
+- C++ / Character / Component 负责"为什么播这个动画"
+- AnimBP 负责"怎么播这个动画"
+- AnimBP 中不包含任何战斗判定、耐力计算、打断逻辑
+- AnimBP 只读取状态变量并据此选择动画
+
+原则3：玩家角色不使用 Blackboard 控制动画状态
+- Blackboard 专门给 AI 决策使用（配合 BehaviorTree + AIController）
+- 玩家角色的动画状态由 Character / Component 中的枚举和变量驱动
+- AnimBP 不关心"谁在控制角色"，只关心"当前状态是什么"
+- 如果未来有 AI 接管玩家的需求：
+  AI 修改 Character 状态 → AnimBP 读取 → 播放动画
+  与玩家操控时完全相同的后半段路径
+
+原则4：State Machine 处理持续状态，Montage 处理离散动作
+- State Machine 适合：Idle/Move/Fall/Land/Ladder/Guard Loop 等持续性状态
+- Montage 适合：攻击/闪避/受击/喝药/交互/处决/技能等离散事件
+- 原因：类魂项目的离散动作需要精准时机控制
+  （命中窗口、无敌帧、霸体帧、连段窗口、输入缓存）
+  这些通过 Montage + Notify 管理远优于纯 State Machine
+
+原则5：玩家 / 敌人 / Boss 统一状态设计语言
+- 所有角色类型共用同一套状态枚举定义
+- 所有角色类型共用同一套动作请求接口思想
+- AnimBP 可以不同，但变量接口命名保持一致
+- 这确保了：加新敌人不需要发明新状态系统
+
+原则6：Root Motion From Montages Only
+- AnimBP 的 Root Motion Mode 设为 Root Motion From Montages Only
+- Blend Space 中的移动动画使用 In-Place 动画
+  由 CharacterMovementComponent 控制移动
+- 只有 Montage 播放时才使用 Root Motion
+  （闪避、突进攻击、处决等需要动画驱动位移的动作）
+- 这确保移动系统和 Root Motion 不会互相抢控制权
+
+原则7：数据驱动动作配置
+- 动作数据通过 DataTable / DataAsset 配置
+- 不把动作规则写死在 AnimBP 或散落的蓝图中
+- 包括：Montage引用、耐力消耗、窗口时间、连段关系、AI使用参数等
+- 这确保了：换武器、加动作、调参数不需要改代码
+
+原则8：先完成最小战斗闭环，再扩展
+- 不要试图一次做完所有动画和系统
+- 先完成玩家的最小可战斗闭环
+- 验证手感和架构后，再扩展到敌人和 Boss
+- 闭环内容见本文档第七章
+
+================================================================================
+  1.2 UE4.27 平台设计原则（12条）
+================================================================================
+
+1.  优先用成熟方案，不追求 UE5 风格复杂技术
+2.  动画核心以 AnimBP + State Machine + Montage 为主
+3.  DataTable/DataAsset 用于动作配置，不把规则写死在 AnimBP
+4.  AnimBP 只做播放逻辑，不做复杂战斗判定
+5.  Character 或 Component 管状态，AnimBP 管表现
+6.  AI 用 Blackboard/BT 决策，不直接替代动画状态机
+7.  Root Motion 使用要统一策略，不能一半依赖一半不用
+8.  玩家与敌人的状态命名和接口尽量统一
+9.  能复用的通知、动作数据结构、组件接口都要抽象
+10. 先建立最小闭环，再扩展到 Boss 与特殊敌人
+11. 先可维护，再追求复杂表现
+12. Debug 可视化必须同步建设，否则后期必乱
+
+================================================================================
+  1.3 层级优先级模型
+================================================================================
+
+整个角色动画系统的概念层级（从高到低）：
+
+  ┌─────────────────────────────────────┐
+  │  State/Mode Layer（模式层）          │  ← 最高层
+  │  决定角色当前处于什么大状态          │
+  │  Normal / Combat / Climb / Dead     │
+  ├─────────────────────────────────────┤
+  │  Locomotion Layer（移动层）          │  ← 受 Mode 影响
+  │  不同 Mode 下移动方式不同            │
+  │  Idle / Move / Sprint / Strafe      │
+  ├─────────────────────────────────────┤
+  │  Action Layer（动作层）              │  ← 覆盖在移动之上
+  │  离散动作，可打断/覆盖移动           │
+  │  Attack / Dodge / Heal / Interact   │
+  ├─────────────────────────────────────┤
+  │  Reaction Layer（反应层）            │  ← 最高中断优先级
+  │  可打断 Action 和 Locomotion         │
+  │  HitReact / Stagger / Death         │
+  └─────────────────────────────────────┘
+
+注意：这是概念优先级图，不是代码嵌套结构。
+代码中采用多枚举并行 + 优先级门控的方式实现。
+不要因为概念图是层级的，就在代码中做成嵌套 if-else 树。
+```
+
+---
+
+## 第二章 · 统一状态系统设计
+
+```text
+================================================================================
+  2.1 状态拆分原则
+================================================================================
+
+绝对不要做的事：
+把所有状态塞进一个巨型枚举：
+  Idle / Run / Attack / Hit / Dead / CombatIdle / CombatRun /
+  CombatAttack / CombatHit / LockOnRun / LockOnAttack ...
+这会导致状态爆炸，不可维护。
+
+正确做法：
+拆成多个独立枚举，AnimBP 根据多个变量组合决定播放什么动画。
+
+例如：
+  MainState       = Combat
+  LocomotionState = Move
+  OverlayState    = OneHandedWeapon
+  MovementStyle   = LockOnStrafe
+  Gait            = Run
+  ActionState     = None
+
+AnimBP 读取这些变量的组合，选择对应的 Blend Space 和状态。
+
+================================================================================
+  2.2 统一状态枚举定义（全角色通用）
+================================================================================
+
+以下枚举适用于所有角色类型（玩家/敌人/Boss/NPC敌对角色）。
+
+--- ECharacterMainState ---
+角色当前的顶层状态，决定允许哪些行为。
+
+  Normal          正常探索
+  Combat          战斗中
+  Interaction     交互中（开门/拉杆/对话）
+  Climb           攀爬中
+  HitReact        受击硬直中
+  Execution       处决/被处决中（双人同步特殊状态）
+  Dead            死亡
+  Disabled        输入禁用（过场/特殊事件）
+  Cinematic       过场动画中
+
+--- ELocomotionState ---
+角色当前的运动阶段。
+
+  Idle            静止
+  Start           起步
+  Move            移动中
+  Stop            停步
+  Pivot           急停转向
+  TurnInPlace     原地转身
+  JumpStart       起跳（如果项目保留跳跃）
+  InAir           空中
+  Land            落地
+  LadderMove      梯子移动
+
+注意：Sprint 不在这里，它属于 EGait。
+注意：Dodge 不在这里，它属于 EActionState（通过 Montage 执行）。
+
+--- EGait ---
+移动速度档位。
+
+  Walk            走
+  Run             跑
+  Sprint          冲刺
+
+--- EMovementStyle ---
+移动风格，决定使用哪个 Blend Space。
+
+  FreeMove        自由移动（非锁定）
+  LockOnStrafe    锁定环绕移动
+  CautiousWalk    谨慎行走（低姿态/恐怖场景）
+  Ladder          梯子移动
+
+--- ERotationMode ---
+角色朝向控制方式。
+
+  OrientToMovement    朝向移动方向（非锁定时）
+  OrientToTarget      朝向目标（锁定时）
+  ManualControl       手动控制（特殊场景）
+
+--- EOverlayState ---
+角色当前的装备/姿态叠加层。
+
+  Unarmed             空手
+  OneHandedWeapon     单手武器
+  TwoHandedWeapon     双手武器
+  Firearm             火器
+  Torch               火把
+  Special             特殊
+
+--- EActionState ---
+角色当前正在执行的离散动作。
+
+  None            无动作
+  LightAttack     轻攻击
+  HeavyAttack     重攻击
+  ChargedAttack   蓄力攻击
+  Dodge           闪避
+  StepBack        后撤步
+  Guard           防御
+  Parry           弹反
+  UseItem         使用道具
+  Interact        交互
+  Execution       处决执行
+  Skill           技能
+  Heal            治疗
+
+--- EHitReactState ---
+角色当前的受击状态。
+
+  None            无受击
+  LightHit        轻受击
+  MediumHit       中受击
+  HeavyHit        重受击
+  Stagger         失衡
+  Knockdown       倒地
+  GetUp           起身
+  Death           死亡
+
+================================================================================
+  2.3 辅助状态变量（布尔/浮点，非枚举）
+================================================================================
+
+以下变量配合枚举使用，用于更细粒度的状态判断。
+在 P0 阶段使用这些变量替代独立的 ECombatSubState 枚举。
+如果后期系统复杂度上升，可考虑将部分变量统一为枚举。
+
+  bIsInCombat           bool    是否处于战斗状态
+  bIsLockedOn           bool    是否锁定目标
+  bIsGuarding           bool    是否正在防御
+  bInRecovery           bool    是否在动作恢复期（硬直/收招）
+  bCanChain             bool    是否处于可连段窗口
+  bCanBeInterrupted     bool    当前动作是否可被打断
+  bIsStaggered          bool    是否处于破绽/被弹反状态
+  bHasSuperArmor        bool    是否有霸体
+  bIsInvincible         bool    是否在无敌帧中
+  fCurrentSpeed         float   当前移动速度
+  fMovementDirection    float   当前移动方向角度
+  fForwardAxis          float   前后轴输入值（锁定时用）
+  fRightAxis            float   左右轴输入值（锁定时用）
+
+================================================================================
+  2.4 状态系统的通用性说明
+================================================================================
+
+以上所有枚举和变量对所有角色类型通用。
+不同角色类型的区别不在状态定义，而在：
+
+  玩家：
+  - 状态变更由 Input → Character/Component 驱动
+  - 不使用 Blackboard
+  - 有输入缓存系统
+
+  敌人/Boss：
+  - 状态变更由 BehaviorTree → AIController → Character/Component 驱动
+  - 使用 Blackboard 做决策（但 Blackboard 不直接控制动画）
+  - 不需要输入缓存，但有 AI 冷却和决策逻辑
+
+  两者最终汇聚到同一个路径：
+  Character/Component 状态 → AnimBP 读取 → 播放动画
+  AnimBP 完全不关心"谁在控制角色"
+```
+
+---
+
+## 第三章 · 动画系统架构
+
+```text
+================================================================================
+  3.1 通用角色动画架构五层模型
+================================================================================
+
+任何角色（玩家/敌人/Boss/NPC敌对角色）都统一具备以下五层：
+
+  一、基础数据层
+  - Skeleton（骨骼）
+  - Physics Asset（物理资产）
+  - Animation Sequences（动画序列）
+  - Blend Space（混合空间）
+  - Montage（蒙太奇）
+  - AnimBP（动画蓝图）
+  - DataTable / DataAsset（动作数据配置）
+
+  二、逻辑层
+  - Character Base（C++角色基类）
+  - Character Components（Combat / Stats / Targeting / Detection）
+  - AnimInstance Base（C++可选，推荐）
+  - AIController + BehaviorTree + Blackboard（仅AI角色）
+
+  三、状态层
+  - MainState
+  - LocomotionState
+  - ActionState
+  - OverlayState
+  - HitReactState
+  - MovementStyle
+  - RotationMode
+  - Gait
+
+  四、播放层
+  - State Machine 处理持续状态
+  - Blend Space 处理连续移动参数
+  - Montage 处理离散动作事件
+  - Additive 处理上半身/细节修正/呼吸/疲劳
+  - Notify / NotifyState 处理时机回调
+
+  五、反馈层
+  - VFX（视觉特效）
+  - SFX（音效）
+  - Camera Shake（相机震动）
+  - Hit Pause（命中顿帧）
+  - UI 提示
+  - Debug 可视化
+
+================================================================================
+  3.2 Blend Space 使用原则
+================================================================================
+
+适合做 Blend Space 的（连续变化、参数驱动）：
+  - 普通移动（Speed + Direction）
+  - 锁定环绕移动（Forward/Right 或 Speed + Direction）
+  - 战斗待机移动
+  - 受伤移动（如果有）
+  - 爬梯移动
+  - 警戒巡逻移动（敌人）
+
+不适合做 Blend Space 的（离散事件、高优先级行为）：
+  - 攻击连段
+  - 处决 / 背刺
+  - 喝药
+  - 拉杆 / 开门
+  - 受击大硬直
+  - 倒地 / 起身
+  - 死亡
+  - 特殊技能
+  - Boss 转阶段
+
+Lock-on Strafe Blend Space 特别说明：
+  - 类魂项目最重要的 Blend Space 之一
+  - 推荐 2D Blend Space：
+    X轴：Right（-1 到 1）
+    Y轴：Forward（-1 到 1）
+  - 至少 9 个采样点（8方向 + 中心 Idle）
+  - 如需区分 Walk/Run，考虑额外 Speed 轴或分两个 BS
+
+================================================================================
+  3.3 AnimBP 结构模板
+================================================================================
+
+所有角色的 AnimBP 遵循同一套组织结构模板。
+不是共用一个 AnimBP，而是共用结构模板。
+
+  1. Event Graph
+     - 从 Character / Components 拉取状态
+     - 缓存速度、方向、是否锁定、是否战斗、是否受击等
+     - 统一处理 Notify 回调
+
+  2. AnimGraph
+     - Base Locomotion State Machine
+     - Combat Locomotion State Machine（或合并到 Base 内通过参数切换）
+     - Overlay / Additive Layer
+     - Slot（Montage）
+     - Aim/Look Offset（如果需要）
+     - Layered Blend Per Bone（上半身覆盖，类魂项目中谨慎使用）
+     - Cached Pose（节制使用，不超过 3-4 个）
+     - Turn In Place
+
+  3. State Machine 分层
+     - Grounded（推荐半嵌套结构）
+     - InAir
+     - Locomotion
+     - HitReact（作为门控状态，阻止 Locomotion 输出）
+     - Ladder（如有）
+     - Dead
+
+  4. Montage Slot 规划
+     - DefaultGroup.FullBody     全身动作（攻击/闪避/处决）
+     - DefaultGroup.UpperBody    上半身覆盖（喝药/换武器/投掷）
+     - DefaultGroup.Additive     Additive层（呼吸/疲劳/受伤）
+     
+     注意：Slot Group 必须在 Skeleton 的 Anim Slot Manager 中提前配置
+     如果不预先规划，后期改动会影响所有已有 Montage
+
+  Layered Blend Per Bone 在类魂项目中的使用边界：
+  - 适合：喝药时下半身可移动、持火把上半身叠加、轻微 Additive 表现
+  - 不适合：攻击动作的上下半身分离（会失去类魂攻击的重量感）
+
+================================================================================
+  3.4 State Machine 最小集合
+================================================================================
+
+--- 玩家角色 ---
+
+  Grounded SM（半嵌套结构）：
+  ├── Idle State
+  │   └── 根据 MainState 选择 Exploration Idle 或 Combat Idle
+  ├── Movement State
+  │   └── 根据 MovementStyle 选择对应 Blend Space
+  │       ├── FreeMove BS
+  │       ├── LockOnStrafe BS
+  │       └── Gait 参数控制速度档
+  ├── Turn In Place State
+  └── Start/Stop State（可后期加入）
+
+  InAir SM：
+  ├── Fall
+  └── Land
+
+  Ladder SM（如有）：
+  ├── Enter
+  ├── Loop
+  └── Exit
+
+  Dead SM：
+  └── Death Pose / Loop
+
+  攻击/闪避/受击 → 不在 SM 中，走 Montage Slot
+  HitReact → SM 中保留门控状态（不播放动画，只阻止 Locomotion 输出）
+              实际受击动画由 Montage 处理
+              Montage 结束后回到 Grounded
+
+--- 敌人/Boss ---
+
+  Grounded SM：
+  ├── Idle
+  ├── Patrol Move
+  ├── Alert Move
+  ├── Combat Move
+  └── Strafe Move（精英/Boss）
+
+  InAir SM（若需要）：
+  ├── Fall
+  └── Land
+
+  HitReact SM（门控，同玩家处理方式）：
+  └── 阻止 Locomotion → Montage 播放受击 → 结束后返回 Grounded
+
+  Special State（Boss）：
+  ├── Phase Change
+  ├── Enraged
+  ├── Summon
+  └── Cast
+
+  Dead SM
+
+================================================================================
+  3.5 Montage 与 State Machine 的职责对照
+================================================================================
+
+  State Machine 承载：                Montage 承载：
+  ─────────────────                  ─────────────────
+  Idle / Move / LockOnMove           轻攻击 / 重攻击
+  Combat Idle / Combat Move          闪避 / 垫步
+  InAir / Land                       喝药 / 使用道具
+  Ladder                             交互（开门/拉杆）
+  Guard Loop（视需求）                受击（尤其需要窗口控制时）
+  Downed / GetUp（也可混合）          处决 / 背刺
+                                     技能
+                                     武器切换
+```
+
+---
+
+## 第四章 · 动作请求系统设计
+
+```text
+================================================================================
+  4.1 动作请求制 vs 直接播放制
+================================================================================
+
+绝对不要这样做：
+  按下攻击键 → 直接在蓝图里 Play Montage Attack_01
+
+必须这样做：
+  按下攻击键
+  → Character/C++ 发起 TryDoAction(EActionState::LightAttack)
+  → 检查当前 MainState 是否允许
+  → 检查当前 ActionState 是否允许（不在不可打断的动作中）
+  → 检查耐力是否足够
+  → 检查是否在可连段窗口（决定是普攻1还是普攻2）
+  → 从 DataTable 查找对应的 ActionData
+  → 设置 ActionState
+  → 扣除耐力
+  → 通知 AnimInstance / 播放对应 Montage
+  → Montage Notify 回传命中窗口 / 连段窗口 / 结束事件
+  → Character 更新状态
+
+优点：
+  - 玩家、敌人、Boss 统一
+  - 后期加武器不崩
+  - 后期加敌人不崩
+  - 易于调试
+  - 易于复用
+
+================================================================================
+  4.2 完整动作请求流水线（以玩家轻攻击为例）
+================================================================================
+
+  步骤1：Input（蓝图/C++）
+  → 玩家按下攻击键
+
+  步骤2：InputBuffer（C++）
+  → 如果当前不能立即攻击，缓存这个输入
+  → 缓存有效期约 0.15~0.3 秒（可调参）
+  → 当进入"可接受输入"窗口时自动触发
+
+  步骤3：TryDoAction（C++，CombatComponent）
+  → 检查 MainState 是否允许（不在 Dead/Disabled/Cinematic）
+  → 检查 ActionState 是否允许（不在不可打断的动作中）
+  → 检查 Stamina 是否足够
+  → 检查 ComboWindow 是否开启（决定连段序号）
+  → 从 DataTable 查找对应的 ActionData
+
+  步骤4：ExecuteAction（C++，CombatComponent/ActionComponent）
+  → 设置 ActionState = LightAttack
+  → 扣除 Stamina
+  → 调用 AnimInstance->Montage_Play(ActionData.Montage)
+  → 如果需要锁定朝向：修改旋转模式
+  → 如果使用 Root Motion：确认设置正确
+  → 触发 CameraEvent 回调（预留相机系统联动接口）
+
+  步骤5：Notify 回调（AnimBP → C++）
+  → ANS_ComboWindow：开启/关闭连段窗口
+  → AN_EnableHitbox：激活攻击碰撞
+  → AN_DisableHitbox：关闭攻击碰撞
+  → AN_PlaySFX：触发挥砍音效
+  → AN_PlayVFX：触发挥砍特效
+  → AN_ActionEnd：动作结束，重置 ActionState
+
+  步骤6：中断处理（C++）
+  → 如果在攻击过程中被击中
+  → HitReact 逻辑判断是否应该被打断（韧性/霸体）
+  → 如果打断：停止当前 Montage，播放受击 Montage
+  → 重置 ActionState
+
+  对敌人同样适用：
+  → 敌人的 BT Task 调用同一个 TryDoAction
+  → 触发来源从 Input 变成 BT Decision
+  → 后续流程完全一致
+
+================================================================================
+  4.3 输入缓存系统
+================================================================================
+
+类魂项目的输入缓存是手感的核心之一。
+
+  原理：
+  玩家在动作执行中按下的输入不会丢失
+  而是被缓存一小段时间
+  当角色进入"可接受输入"窗口时
+  缓存的输入自动触发
+
+  关键参数：
+  - BufferDuration：缓存有效时长（0.15~0.3秒）
+  - BufferAction：缓存的动作类型
+  - bIsBufferActive：缓存是否激活
+
+  这个系统必须用 C++ 实现，蓝图不适合处理这种帧精度逻辑。
+
+================================================================================
+  4.4 连段系统
+================================================================================
+
+  连段不是"按一次打一下"
+  而是通过 Notify 控制的窗口系统：
+
+  Montage 播放中：
+  ├── 攻击开始
+  ├── [ANS_ComboWindow 开启]  ← 此窗口内的输入会触发下一段
+  ├── [AN_EnableHitbox]       ← 攻击判定开始
+  ├── [AN_DisableHitbox]      ← 攻击判定结束
+  ├── [ANS_ComboWindow 关闭]  ← 窗口关闭
+  └── 恢复期 → ActionEnd
+
+  如果在 ComboWindow 内接收到输入：
+  → Montage_JumpToSection("Combo_02")
+  → 或 Montage_Play(NextComboMontage)
+
+  如果 ComboWindow 关闭仍无输入：
+  → 播放完恢复期 → 回到 Idle/Move
+```
+
+---
+
+## 第五章 · C++ 与蓝图分工
+
+```text
+================================================================================
+  5.1 职责分工表
+================================================================================
+
+  【C++ 负责】
+  ─────────────────────────────────────────────────
+  - 角色基础状态枚举与状态流转
+  - 输入解析与输入缓存
+  - 动作请求系统（TryAttack / TryDodge / TryInteract）
+  - 耐力、韧性、硬直、霸体等规则
+  - 锁定组件、敌人检测组件与动作联动
+  - 动作可执行性判断（CanAttack / CanDodge）
+  - 命中、受击、打断逻辑
+  - 动作数据读取（DataTable / DataAsset）
+  - 对 AnimBP 暴露统一变量接口
+  - Notify 基类定义（UAnimNotify / UAnimNotifyState 子类）
+
+  【蓝图负责】
+  ─────────────────────────────────────────────────
+  - AnimBP 状态机搭建
+  - Blend Space 组织
+  - Montage 通知事件对接
+  - VFX、SFX、镜头震动、屏幕反馈
+  - 关卡交互动画拼装
+  - Boss 特殊演出逻辑
+  - 美术和设计频繁调参的内容
+
+  【绝对不能让蓝图独占的部分】
+  ─────────────────────────────────────────────────
+  - 核心战斗规则
+  - 耐力扣减与恢复
+  - 动作打断规则
+  - 连段许可规则
+  - 无敌帧 / 霸体帧判定
+  - 角色主状态切换条件
+  - 输入缓存
+
+================================================================================
+  5.2 组件架构
+================================================================================
+
+  已有组件（已完成或大致完成）：
+  - 相机系统组件
+  - Debug 组件
+  - 锁定与切换锁定组件
+  - 敌人侦测组件
+  - 玩家角色数值组件
+
+  建议新增组件：
+  - UCombatComponent（核心优先）
+    管理战斗状态、动作请求、连段、耐力、受击判定
+    受击逻辑先并入此组件
+    当组件超过 1500 行时再考虑拆分
+
+  组件间关系：
+  - 锁定组件    → 提供目标信息给 CombatComponent
+  - 侦测组件    → 提供敌人信息给 CombatComponent
+  - 数值组件    → 提供耐力/血量给 CombatComponent 做可执行性判断
+  - Debug组件   → 可视化 CombatComponent 的状态
+  - 相机组件    → 订阅 CombatComponent 的动作事件做相机响应
+
+================================================================================
+  5.3 状态变更路径（保持单一入口）
+================================================================================
+
+  所有状态变更都集中在 Character / Component 中
+  不散落在 AnimBP 或各种蓝图中
+
+  这样做的好处：
+  1. 调试时只需要看一个地方
+  2. 如果未来有联机需求，只需在请求入口加权限判断
+  3. AnimBP 永远只是"读取者"，不是"决策者"
+```
+
+---
+
+## 第六章 · Root Motion 策略
+
+```text
+================================================================================
+  6.1 Root Motion 前置决策（必须在导入动画资产前确定）
+================================================================================
+
+  这个决策必须在阶段1.5完成，在导入任何动画资产之前。
+  如果动画资产有 Root Motion 数据但你不想用
+  或者你想用但资产里没有
+  后期返工代价很大。
+
+  决策表：
+
+  ┌──────────────────┬──────────────┬────────────────────────────────┐
+  │ 动画类型          │ 是否用 RM    │ 原因                           │
+  ├──────────────────┼──────────────┼────────────────────────────────┤
+  │ 移动类动画        │ 不使用       │ 由 CharacterMovement 控制       │
+  │ （Walk/Run/Idle） │              │ BS 中应使用 In-Place 动画       │
+  ├──────────────────┼──────────────┼────────────────────────────────┤
+  │ 攻击动画          │ 视设计需求   │ 需要位移的攻击（突进斩）→ 用   │
+  │                   │              │ 不需要位移的 → 不用             │
+  │                   │              │ 建议：默认不用，需要时单独开启  │
+  ├──────────────────┼──────────────┼────────────────────────────────┤
+  │ 闪避动画          │ 强烈建议使用 │ 闪避距离和节奏由动画决定更自然  │
+  │                   │              │ 类魂闪避手感很大程度取决于 RM   │
+  ├──────────────────┼──────────────┼────────────────────────────────┤
+  │ 受击动画          │ 一般不使用   │ 受击位移由代码控制更灵活         │
+  │                   │              │ （Launch / Knockback 力）       │
+  ├──────────────────┼──────────────┼────────────────────────────────┤
+  │ 处决动画          │ 使用         │ 双人同步需要精确位移             │
+  └──────────────────┴──────────────┴────────────────────────────────┘
+
+================================================================================
+  6.2 UE4.27 Root Motion 设置
+================================================================================
+
+  AnimBP 设置：
+  - Root Motion Mode = Root Motion From Montages Only
+  - 这样 Blend Space 里的动画不受 Root Motion 影响
+  - 只有 Montage 播放时才使用 Root Motion
+
+  Montage 设置：
+  - 每个 Montage 可单独开关 EnableRootMotion
+  - 需要位移的动作开启，不需要的关闭
+
+================================================================================
+  6.3 UE4.27 特有限制
+================================================================================
+
+  Motion Warping：
+  - UE4.27 没有原生 Motion Warping
+  - 如果需要攻击自动修正朝向/距离（类魂常见需求）
+  - 需要自己实现简化版：
+    a. 攻击开始时计算目标位置
+    b. 通过代码插值修正角色朝向
+    c. 或通过 Root Motion Scale 修正位移距离
+  - 建议放在 P1 阶段实现
+
+  Distance Matching：
+  - UE4.27 没有 UE5 的 Distance Matching 节点
+  - Start/Stop 动画的脚步匹配需要手动处理
+  - 建议前期直接用混合过渡，不在此花费太多时间
+```
+
+---
+
+## 第七章 · 数据驱动动作配置
+
+```text
+================================================================================
+  7.1 动作数据结构（分阶段实现）
+================================================================================
+
+  采用 DataTable 驱动动作配置。
+  不要一次性实现所有字段，按开发阶段递进。
+
+  --- P0 阶段：最小字段集 ---
+  ActionID              FName       动作唯一标识
+  ActionType            EActionType 动作类型（Attack/Dodge/Heal/Interact）
+  MontageAsset          TSoftObjectPtr<UAnimMontage> 软引用避免全部加载
+  PlayRate              float       播放速率
+  StaminaCost           float       耐力消耗
+  bUsesRootMotion       bool        是否使用 Root Motion
+  bCanBeInterrupted     bool        是否可被打断
+
+  --- P1 阶段追加 ---
+  MontageSectionName    FName       Montage Section 名
+  ComboWindowStart      float       连段窗口开启时间
+  ComboWindowEnd        float       连段窗口关闭时间
+  NextComboActionID     FName       下一连段动作ID
+  HitboxEnableTime      float       攻击判定开启时间
+  HitboxDisableTime     float       攻击判定关闭时间
+  IFrameStart           float       无敌帧开始
+  IFrameEnd             float       无敌帧结束
+  SuperArmorStart       float       霸体开始
+  SuperArmorEnd         float       霸体结束
+  InterruptibleAfter    float       几秒后可被打断
+
+  --- P2 阶段追加 ---
+  bAICanUse             bool        AI是否可使用
+  AIPreferredRange      float       AI倾向使用距离
+  AICooldown            float       AI使用冷却
+  RequiredOverlay       EOverlayState 武器类型限制
+  HealthCost            float       HP消耗（特殊技能）
+  bLocksRotation        bool        是否锁定朝向
+  DisplacementScale     float       位移倍率
+
+  使用 TSoftObjectPtr 而非直接引用 Montage：
+  - 避免启动时全部加载
+  - 按需加载，节省内存
+
+  窗口时间的两种管理方案：
+  - DataTable 方案：易于批量调参，适合设计师快速迭代
+  - Notify 方案：与动画时间轴绑定更精确，适合最终版本
+  - 建议：开发期用 DataTable 快速迭代，后期关键动作改为 Notify 精调
+
+================================================================================
+  7.2 DataTable 命名
+================================================================================
+
+  DT_ActionData_Player          玩家动作数据
+  DT_ActionData_Enemy_Grunt     普通敌人动作数据
+  DT_ActionData_Enemy_Elite     精英敌人动作数据
+  DT_ActionData_Boss_X          Boss X 动作数据
+  DT_WeaponActionMap            武器-动作映射表
+```
+
+---
+
+## 第八章 · AI 系统与 Blackboard
+
+```text
+================================================================================
+  8.1 Blackboard 的定位
+================================================================================
+
+  重申：Blackboard 是给 AI 决策用的，不是给动画状态机用的。
+
+  Blackboard 不直接控制"播哪一帧动画"
+  而是控制：
+  - 当前是否进入战斗
+  - 是否接近目标
+  - 是否使用技能
+  - 是否需要撤退
+  - 是否转阶段
+
+  然后：
+  AIController / Character / Component
+  → 修改角色状态（统一枚举）
+  → AnimBP 读取状态
+  → State Machine / Montage 播放对应动作
+
+================================================================================
+  8.2 敌人/Boss Blackboard 推荐字段
+================================================================================
+
+  --- 核心战斗字段 ---
+  TargetActor                   当前目标
+  DistanceToTarget              到目标距离
+  HasLineOfSight                是否有视线
+  IsAlerted                     是否警觉
+  IsInCombat                    是否战斗中
+  CanAttack                     是否可攻击
+  CanStrafe                     是否可环绕
+  CanUseSkill                   是否可用技能
+  IsStunned                     是否被击晕
+  IsDead                        是否死亡
+  DesiredRange                  期望战斗距离
+  CurrentPhase                  当前阶段（Boss）
+  IsPhase2                      是否二阶段（Boss）
+
+  --- 导航与巡逻字段 ---
+  HomeLocation                  出生位置
+  SpawnLocation                 刷新位置
+  LastKnownTargetLocation       目标最后已知位置
+  PatrolIndex                   巡逻点索引
+  InvestigationLocation         调查位置
+
+  --- 恐怖氛围扩展字段（可选，放在 AI 氛围设计扩展中）---
+  bIsHiddenFromPlayer           是否在玩家视野外
+  bIsInAmbushPosition           是否在伏击位置
+  HideTimer                     隐藏计时
+  AggressionLevel               攻击性等级
+  bShouldStalk                  是否跟踪而不攻击
+  AwarenessLevel                感知等级
+
+  注：恐怖氛围字段不是动作系统核心必须项
+  但对于对标生化2/寂静岭2/死魂曲的氛围营造非常有用
+  敌人可以有"潜伏→跟踪→出现→攻击"的行为链
+```
+
+---
+
+## 第九章 · 动画资源规划
+
+```text
+================================================================================
+  9.1 动作资产大类总表
+================================================================================
+
+  【A. 基础移动类】
+  1. Idle（站立）
+  2. Walk/Run 前后左右
+  3. Start/Stop
+  4. Pivot / 急停转向
+  5. Turn In Place（原地转身）
+  6. Jump/Drop/Fall/Land（如果项目保留）
+  7. Stair/Slope 适配
+  8. Lock-on Strafe 移动
+  9. Sprint
+  10. Crouch（如有）
+  11. Ladder（如有）
+
+  【B. 战斗姿态类】
+  1. 战斗待机
+  2. 武器持有姿态
+  3. 锁定移动姿态
+  4. 防御姿态
+  5. 蓄力准备姿态
+  6. 受威胁警戒姿态（敌人可用）
+
+  【C. 攻击动作类】
+  1. 轻攻击 1/2/3 连段
+  2. 重攻击 1/2
+  3. 跑攻
+  4. 闪避攻击
+  5. 背刺/处决
+  6. 蓄力攻击
+  7. 空间位移动作（突进、后撤斩）
+  8. 技能动作
+  9. 特殊武器动作
+
+  【D. 防御/回避类】
+  1. Dodge 前/后/左/右
+  2. Step 前/后/左/右
+  3. Guard Start/Loop/End
+  4. Parry Start/Success/Fail
+  5. Perfect Guard（如有）
+
+  【E. 受击反馈类】
+  1. 轻受击（前后左右）
+  2. 中受击（前后左右）
+  3. 重受击（前后左右）
+  4. Stagger
+  5. Knockdown
+  6. Wall Hit
+  7. Launch/Fall
+  8. Get Up
+
+  【F. 交互类】
+  1. 拉杆
+  2. 开门
+  3. 拾取
+  4. 调查
+  5. 推物/搬运（如有）
+  6. 对话进入/退出
+
+  【G. 生存与氛围类】
+  1. 喝药/使用消耗品
+  2. 疲惫/低血
+  3. 中毒/异常状态循环
+  4. 恐惧/惊吓/观察（敌人/NPC 可用）
+  5. 处决被命中者的被动演出
+
+  【H. 死亡类】
+  1. 普通死亡
+  2. 重击死亡
+  3. 击飞死亡
+  4. 处决死亡
+  5. 倒地死亡循环
+
+  【I. 过渡与状态切换类（补充）】
+  1. 武器拔出 / 收起（如有探索/战斗切换）
+  2. 战斗待机 → 探索待机过渡
+  3. Additive 呼吸动画
+  4. Additive 疲惫/低耐力动画
+
+================================================================================
+  9.2 优先级分批规划
+================================================================================
+
+  --- P0：必须先做，才能验证 3C ---
+
+  Idle
+  Walk/Run 8方向或至少前后左右
+  Start / Stop
+  Turn In Place
+  Lock-on Strafe 8方向
+  战斗待机
+  轻攻击 3段
+  重攻击 1~2段
+  Dodge 4方向
+  轻受击 4方向
+  Stagger
+  Death
+  Heal/Use Item
+  Interact
+  Land
+  武器拔出/收起（如果设计确认有探索/战斗切换）
+
+  --- P1：进入正式战斗体验 ---
+
+  Sprint
+  Run Attack
+  Dodge Attack
+  Guard Start/Loop/End
+  Parry Start/Success/Fail
+  Heavy Hit（中/重受击）
+  Knockdown / Get Up
+  Backstab / Execution（至少技术样机）
+  Combat Turn / Combat Pivot
+  Weapon Equip / Unequip（如果 P0 没做）
+  空挥恢复动作区分
+  Additive 呼吸 / 疲惫动画
+  简化版 Motion Warping 实现
+
+  --- P2：内容深化与敌人扩展 ---
+
+  Ladder
+  特殊武器形态动作
+  Boss Phase Transition
+  特殊异常状态动作
+  惊吓/搜查/巡逻/警戒（敌人）
+  处决双人同步演出（完善版）
+  更细的命中方向变体
+  更复杂的环境交互
+
+================================================================================
+  9.3 动画资源制作模板表
+================================================================================
+
+  | 分类     | 具体动作         | 方向变体 | Blend Space | Montage | Root Motion | 优先级 |
+  |----------|-----------------|----------|-------------|---------|-------------|--------|
+  | 基础移动 | Idle            | 否       | 否          | 否      | 否          | P0     |
+  | 基础移动 | Walk/Run        | 是       | 是          | 否      | 否          | P0     |
+  | 基础移动 | Start/Stop      | 可选     | 否          | 可选    | 低          | P1     |
+  | 基础移动 | Turn In Place   | 左右     | 否          | 可选    | 低          | P0     |
+  | 战斗移动 | Combat Idle     | 否       | 否          | 否      | 否          | P0     |
+  | 战斗移动 | Lock-on Strafe  | 8方向    | 是          | 否      | 否          | P0     |
+  | 攻击     | Light Combo     | 一般否   | 否          | 是      | 视情况      | P0     |
+  | 攻击     | Heavy Attack    | 一般否   | 否          | 是      | 建议        | P0     |
+  | 攻击     | Run Attack      | 一般否   | 否          | 是      | 建议        | P1     |
+  | 攻击     | Dodge Attack    | 一般否   | 否          | 是      | 建议        | P1     |
+  | 防御     | Guard           | 否       | 可选        | 可选    | 否          | P1     |
+  | 防御     | Parry           | 否       | 否          | 是      | 否          | P1     |
+  | 回避     | Dodge/Step      | 4方向    | 否          | 是      | 强建议      | P0     |
+  | 受击     | Light Hit       | 前后左右 | 否          | 是      | 否          | P0     |
+  | 受击     | Heavy Hit       | 前后左右 | 否          | 是      | 否          | P1     |
+  | 倒地     | Knockdown/GetUp | 一般否   | 否          | 是      | 可选        | P1     |
+  | 交互     | Interact        | 视情况   | 否          | 是      | 可选        | P0     |
+  | 道具     | Heal/Use Item   | 否       | 否          | 是      | 否          | P0     |
+  | 特殊     | Execution       | 一般否   | 否          | 是      | 强建议      | P1     |
+  | 死亡     | Death           | 前后     | 否          | 是/SM   | 否          | P0     |
+  | 环境     | Ladder          | 上下     | 是          | 可选    | 否          | P2     |
+  | 状态切换 | Weapon Equip    | 否       | 否          | 是      | 否          | P0/P1  |
+  | 叠加层   | Breathing       | 否       | 否          | 否      | 否          | P1     |
+  | 叠加层   | Exhausted       | 否       | 否          | 否      | 否          | P1     |
+```
+
+---
+
+## 第十章 · Notify 与音效联动规范
+
+```text
+================================================================================
+  10.1 Notify 命名规范
+================================================================================
+
+  瞬时通知（单一时间点）使用 AN_ 前缀：
+  - AN_PlaySFX_SwingLight         挥砍音效（轻）
+  - AN_PlaySFX_SwingHeavy         挥砍音效（重）
+  - AN_PlaySFX_FootStep           脚步音效
+  - AN_PlayVFX_Slash               斩击特效
+  - AN_PlayVFX_Impact              命中特效
+  - AN_EnableHitbox                攻击判定开启
+  - AN_DisableHitbox               攻击判定关闭
+  - AN_ActionEnd                   动作结束
+
+  状态通知（持续时间段）使用 ANS_ 前缀：
+  - ANS_ComboWindow                连段窗口
+  - ANS_SuperArmor                 霸体窗口
+  - ANS_IFrame                     无敌帧窗口
+  - ANS_DisableInput               禁用输入窗口
+  - ANS_EnableHitbox               持续攻击判定（可替代 AN 版本）
+
+  所有 Notify 建议用 C++ 定义（UAnimNotify/UAnimNotifyState 子类）
+  在 AnimBP 中添加使用
+
+================================================================================
+  10.2 音效联动原则
+================================================================================
+
+  战斗音效时机要求精确：
+  - 挥刀音效：必须和动画的挥砍帧精确对齐（通过 AN_PlaySFX）
+  - 命中音效：由命中判定触发（不是 Notify，是碰撞回调）
+  - 脚步音效：必须和落脚帧对齐（通过 AN_PlaySFX_FootStep）
+  - 防御/弹反音效：由判定窗口触发
+
+  在 Notify 中只发出事件
+  实际音效播放由音效系统（蓝图侧）负责
+  保持"动作系统触发事件，表现系统响应事件"的原则
+
+================================================================================
+  10.3 相机联动预留
+================================================================================
+
+  在 ExecuteAction 中预留 CameraEvent 回调接口
+  让相机组件可以订阅动作事件并做出响应
+
+  需要响应的动作事件：
+  - 攻击时的轻微 Camera Shake
+  - 受击时的相机反馈
+  - 处决时的特殊相机角度
+  - 闪避时相机跟随/延迟
+  - Boss战的相机距离自动调整
+
+  接口预留应在 P0 阶段完成（你已有相机组件，联动接口越早做越好）
+```
+
+---
+
+## 第十一章 · 命名规范与文件夹结构
+
+```text
+================================================================================
+  11.1 动画资产命名规范
+================================================================================
+
+  动画序列：
+  AN_Character_Action_Direction_Variant
+  例：
+    AN_Player_LightAttack_01
+    AN_Player_Dodge_F
+    AN_Player_Dodge_B
+    AN_Enemy_Grunt_HitReact_B
+    AN_Boss_PhaseShift_01
+    AN_Player_Idle_Exploration
+    AN_Player_Idle_Combat
+
+  Blend Space：
+  BS_Character_Locomotion_Type
+  例：
+    BS_Player_Locomotion
+    BS_Player_LockOnStrafe
+    BS_Enemy_CombatMove
+    BS_Enemy_PatrolMove
+
+  Montage：
+  AM_Character_Action_Category
+  例：
+    AM_Player_LightCombo
+    AM_Player_Dodge
+    AM_Player_Heal
+    AM_Enemy_AttackSet_A
+    AM_Boss_Execution
+
+  Montage Section（用于连段）：
+    Default             Attack_01
+    Combo_02            Attack_02
+    Combo_03            Attack_03
+    Recovery            收招
+
+  AnimBP：
+  ABP_CharacterName
+  例：
+    ABP_Player
+    ABP_EnemyBase
+    ABP_BossHunter
+
+  DataTable：
+    DT_ActionData_Player
+    DT_ActionData_Enemy_Grunt
+    DT_WeaponActionMap
+
+  状态枚举：
+    ECharacterMainState
+    EActionState
+    ELocomotionState
+    EGait
+    EOverlayState
+    EMovementStyle
+    ERotationMode
+    EHitReactState
+
+  外部资产来源标记（如使用 Mixamo/Marketplace）：
+    AN_Player_LightAttack_01_SRC_Mixamo
+    AN_Player_LightAttack_01_SRC_Original
+    （或用文件夹区分来源）
+
+================================================================================
+  11.2 Content 文件夹结构
+================================================================================
+
+  Content/
+  ├── Characters/
+  │   ├── Player/
+  │   │   ├── Animations/
+  │   │   │   ├── Locomotion/           Walk/Run/Idle/Turn 等
+  │   │   │   ├── Combat/               攻击/防御/闪避
+  │   │   │   ├── HitReact/             受击/倒地/死亡
+  │   │   │   ├── Interaction/           交互动画
+  │   │   │   └── Additive/             叠加层动画
+  │   │   ├── BlendSpaces/
+  │   │   ├── Montages/
+  │   │   └── ABP_Player
+  │   ├── Enemies/
+  │   │   ├── EnemyBase/
+  │   │   ├── Grunt_A/
+  │   │   ├── Elite_A/
+  │   │   └── Boss_A/
+  │   └── Shared/                        共享资产
+  │       ├── AnimNotifies/
+  │       └── DataTables/
+  ├── Blueprints/
+  │   ├── Components/
+  │   └── ...
+  └── ...
+
+================================================================================
+  11.3 动画重定向流程（如使用外部动画资产）
+================================================================================
+
+  1. 尽早确定项目主骨骼（Skeleton）
+  2. 所有外部动画统一通过 Retarget 到主骨骼
+  3. 使用 UE4.27 的 Retarget Manager 设置骨骼映射
+  4. 验证流程：
+     - 导入外部动画
+     - Retarget 到主骨骼
+     - 在标准场景中预览
+     - 检查手脚穿模
+     - 检查 Root Motion 是否正确转移
+  5. P0 阶段确定此流程，避免后期大量返工
+```
+
+---
+
+## 第十二章 · 项目管理总清单
+
+```text
+================================================================================
+  12.1 完整模块清单（含依赖项）
+================================================================================
+
+  | 模块     | 子项                              | 必须度 | 推荐实现              | 适用对象       | 依赖项                       | 备注       |
+  |----------|----------------------------------|--------|----------------------|---------------|------------------------------|-----------|
+  | 状态架构 | MainState/ActionState等拆分        | 高     | C++枚举+AnimBP读取    | 全角色         | 无（最先做）                  | 必做       |
+  | 状态架构 | Root Motion策略决策                | 高     | 文档确认              | 全角色         | 无                           | 阶段1.5   |
+  | 移动系统 | 普通移动 Blend Space              | 高     | 2D Blend Space        | 玩家/敌人      | 状态枚举、移动动画            | 必做       |
+  | 移动系统 | Lock-on Strafe BS                 | 高     | 2D Blend Space        | 玩家/Boss/敌人 | 状态枚举、锁定环绕动画        | 类魂核心   |
+  | 移动系统 | Turn In Place                     | 高     | State或Additive       | 玩家/敌人      | 转身动画                      | 体验关键   |
+  | 移动系统 | Start/Stop/Pivot                  | 中     | State/Montage混合     | 玩家/敌人      | 对应动画                      | 后续加强   |
+  | 动作系统 | 轻攻击连段                        | 高     | Montage               | 玩家/敌人/Boss | 状态枚举、输入缓存            | 核心       |
+  | 动作系统 | 重攻击                            | 高     | Montage               | 玩家/敌人/Boss | 状态枚举                      | 核心       |
+  | 动作系统 | 闪避/垫步                         | 高     | Montage               | 玩家/敌人      | 状态枚举、RM策略              | 核心       |
+  | 动作系统 | 受击                              | 高     | Montage+SM门控        | 全角色         | 状态枚举、韧性系统            | 核心       |
+  | 动作系统 | 死亡                              | 高     | Montage/State         | 全角色         | 状态枚举                      | 核心       |
+  | 动作系统 | 喝药/用道具                       | 中     | Montage               | 玩家           | 动作请求系统                  | 推荐       |
+  | 动作系统 | 交互                              | 中     | Montage               | 玩家/NPC       | 动作请求系统                  | 推荐       |
+  | 动作系统 | 处决/背刺                         | 中     | Montage               | 玩家/敌人/Boss | RM策略、状态枚举              | P1技术样机 |
+  | 动作规则 | 输入缓存                          | 高     | C++                   | 玩家           | 动作请求系统                  | 强烈建议   |
+  | 动作规则 | 连段窗口                          | 高     | Notify + C++          | 玩家/敌人      | Montage、Notify规范           | 强烈建议   |
+  | 动作规则 | 耐力系统联动                      | 高     | C++组件               | 玩家/敌人      | 数值组件、CombatComponent     | 类魂核心   |
+  | 动作规则 | 动作打断                          | 高     | C++状态控制           | 全角色         | 状态枚举、CombatComponent     | 核心       |
+  | 动作规则 | 无敌帧/霸体帧                     | 高     | Notify + C++          | 玩家/敌人/Boss | Notify规范、CombatComponent   | 核心       |
+  | 动画蓝图 | 基础 Locomotion SM                | 高     | AnimBP                | 全角色         | BS、状态枚举                  | 必做       |
+  | 动画蓝图 | Combat Locomotion SM              | 高     | AnimBP                | 玩家/敌人      | Combat BS、状态枚举           | 必做       |
+  | 动画蓝图 | HitReact 门控状态                 | 中     | AnimBP                | 全角色         | 受击Montage                   | 推荐       |
+  | 动画蓝图 | Slot Group 配置                   | 高     | Skeleton设置          | 全角色         | 无                           | 提前做     |
+  | AI       | Blackboard                        | 中     | BT+Blackboard         | 敌人/Boss      | AIController                  | 不用于玩家 |
+  | AI       | Behavior Tree                     | 中     | BT                    | 敌人/Boss      | Blackboard                    | 推荐       |
+  | 数据驱动 | Action DataTable                  | 高     | C++结构体+DT          | 全角色         | 状态枚举定义                  | 强烈建议   |
+  | 联动     | 相机动作事件接口                  | 中     | C++回调               | 全角色         | 相机组件、CombatComponent     | P0预留     |
+  | 联动     | 音效Notify规范                    | 中     | AN_ C++定义           | 全角色         | Notify规范                    | P1        |
+  | 调试     | 动作状态Debug                     | 高     | Debug组件             | 全角色         | 状态枚举、Debug组件           | 必做       |
+  | 调试     | 命中框/窗口Debug                  | 高     | Debug绘制             | 全角色         | Hitbox系统                    | 必做       |
+  | 扩展     | IK/Foot Placement                 | 低~中  | 后期追加              | 玩家/Boss      | 基础系统完成后                | 后期       |
+  | 扩展     | 处决双人同步完善版                | 中     | Montage/蓝图          | 玩家/Boss      | 处决技术样机                  | 中后期     |
+  | 扩展     | Additive 呼吸/疲惫                | 中     | Additive动画          | 玩家/敌人      | Additive动画资产              | P1        |
+  | 扩展     | 简化版Motion Warping              | 中     | C++                   | 玩家/敌人      | 攻击系统完成后                | P1        |
+  | 规范     | 命名规范确定                      | 高     | 文档                  | 全项目         | 无                           | 最先做     |
+  | 规范     | 文件夹结构确定                    | 高     | Content组织           | 全项目         | 无                           | 最先做     |
+  | 规范     | 动画重定向流程                    | 中     | Retarget Manager      | 全项目         | 主骨骼确定                    | P0确定     |
+```
+
+---
+
+## 第十三章 · 三方验证共识记录
+
+```text
+================================================================================
+  13.1 三方一致同意的核心原则（8条）
+================================================================================
+
+  1. 动作请求制（TryDoAction）是核心
+  2. C++ 管规则，AnimBP 管表现
+  3. 玩家不用 Blackboard 做动画状态控制
+  4. SM 处理持续状态，Montage 处理离散动作
+  5. 玩家/敌人/Boss 统一状态语言
+  6. Root Motion From Montages Only
+  7. 数据驱动动作配置
+  8. 先闭环再扩展
+
+================================================================================
+  13.2 三方达成的分级共识
+================================================================================
+
+  第一层（必须固定）：
+  - 8条核心原则
+  - 状态枚举拆分（DodgeMove移出Locomotion、Sprint归入Gait）
+  - Execution加入MainState
+  - Root Motion策略前置决策
+  - AnimBP Root Motion Mode = Root Motion From Montages Only
+
+  第二层（推荐实现）：
+  - Root Motion策略决策文档
+  - 命名规范与文件夹结构
+  - Notify/Slot/Section规范
+  - P0/P1/P2资产分层
+  - 总清单加依赖项
+  - 相机/音效联动接口预留
+
+  第三层（可选扩展，视项目推进决定）：
+  - ECombatSubState独立枚举（中期演进选项）
+  - 恐怖氛围Blackboard扩展字段
+  - Additive呼吸/疲惫（P1）
+  - Weapon Equip/Unequip优先级（取决于是否有探索/战斗切换）
+  - Motion Warping简化替代方案
+  - 组件进一步拆分
+
+================================================================================
+  13.3 已识别但暂不展开的领域
+================================================================================
+
+  1. 网络同步/联机
+     - 当前为单机项目，暂不展开
+     - 但设计上保持状态变更单一入口，为潜在联机预留
+
+  2. 动画重定向与骨骼兼容
+     - 如大量使用外部动画资产，需单独建立流程
+     - P0阶段确定主骨骼和Retarget流程
+
+  3. 相机系统与动作系统深度联动
+     - 已有相机组件，P0预留联动接口
+     - 深度集成放在战斗闭环完成后
+
+  4. 音效系统与动作系统深度联动
+     - Notify规范已定义
+     - 具体音效系统设计属于蓝图侧工作
+
+================================================================================
+  文档结束
+  
+  本文档版本：v1.0
+  验证方式：三方交叉验证（原纲领 + 交叉验证 + 二次验证 + 第三层评估）
+  适用引擎：Unreal Engine 4.27
+  文档性质：HAND OFF 文档，任何接手人员应完整通读后再开始开发
+================================================================================
+```
+
+---
+
+**选项A 输出完毕。** 这是完整的最终合并版主纲领 HAND OFF 文档，包含了：
+
+- 项目背景与开发现状
+- 全部核心设计原则
+- 统一状态系统
+- 动画系统架构
+- 动作请求系统
+- C++/蓝图分工
+- Root Motion 策略
+- 数据驱动配置
+- AI 与 Blackboard
+- 动画资源规划
+- Notify 与联动规范
+- 命名与文件夹结构
+- 项目管理总清单
+- 三方验证共识记录
+

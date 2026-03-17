@@ -1,0 +1,526 @@
+Sub-Step 3.6.5 Prompt
+
+================================================================================
+任务：在CameraModule_Offset.cpp中添加O04 Crouch_Offset实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+O04在蹲伏时降低相机高度，使相机跟随角色蹲下的动作。
+这在潜行和穿越低矮通道时非常重要。
+
+【Pipeline中的位置】
+```
+Offset模块计算流程：
+1. O01: SocketOffset = (0, 0, 20) (Override，基础值)
+2. O02: Shoulder = (0, 50, 0) (Override，肩部)
+3. O03: Switch = (0, ±50, 0) (Override，切换)
+4. O04: Crouch = (0, 0, -50) (Additive，蹲伏) ← 当前
+   → 蹲伏时相机下降50cm
+5. O05: Mount = (0, 0, +80) (Additive，骑乘)
+```
+
+【当前进度】
+Phase 3 Step 3.6 Sub-Step 3.6.5 (共190个Sub-Step中的第98个)
+前置完成：3.6.4 O03实现 ✅
+
+【任务目标】
+在CameraModule_Offset.cpp中完整实现O04模块，替换现有的占位符。
+
+【⚠️ 重要提醒】
+
+1. **编译前必做步骤：**
+   本Sub-Step只修改现有.  cpp文件，不添加新文件。
+   因此**不需要Regenerate**，可以直接编译。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   确认StateConfig的字段路径与项目实际结构一致。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_Offset.cpp
+
+2. **定位修改位置：**
+
+在文件中找到O04的占位符实现部分：
+
+```cpp
+//========================================
+// O04: Crouch Offset
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.6.5
+// Vertical offset for crouching
+...   占位符代码（包括构造函数、ShouldActivate、Compute）
+```
+
+**将上述占位符代码完整替换为下方的完整实现。**
+
+---
+
+3. **O04完整实现代码：**
+
+**A. 构造函数：**
+
+```cpp
+/**
+ * Constructor - Initialize crouch blend state
+ * 
+ * Start with blend of 0 (standing position)
+ */
+UCameraModule_O04_Crouch_Offset:: UCameraModule_O04_Crouch_Offset()
+	: CurrentCrouchBlend(0.0f)
+{
+}
+```
+
+---
+
+**B. ShouldActivate() 实现：**
+
+```cpp
+/**
+ * ShouldActivate - Determine if crouch offset should be active
+ * 
+ * O04 activates when: 
+ * - Module is enabled
+ * - Character is crouching (bIsCrouching)
+ * - OR currently transitioning out of crouch (blend > threshold)
+ * 
+ * The second condition ensures smooth camera return when standing up. 
+ * Without it, camera would snap back instantly.
+ * 
+ * Priority 108 (after shoulder offsets), uses Additive policy. 
+ * 
+ * Use Cases:
+ * - Stealth sections (crouching through areas)
+ * - Low passages (crouch to fit)
+ * - Cover systems (crouch behind obstacles)
+ */
+bool UCameraModule_O04_Crouch_Offset:: ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if character is currently crouching
+	bool bIsCrouching = Context.InputContext.bIsCrouching;
+	
+	// Also activate if we're transitioning out of crouch
+	// This ensures smooth camera return when standing up
+	const float TransitionThreshold = 0.01f;
+	bool bIsTransitioning = CurrentCrouchBlend > TransitionThreshold;
+	
+	// Activate if crouching or transitioning
+	if (! bIsCrouching && ! bIsTransitioning)
+	{
+		return false;
+	}
+	
+	// All conditions met - activate crouch offset
+	return true;
+}
+```
+
+---
+
+**C.  Compute() 实现：**
+
+```cpp
+/**
+ * Compute - Calculate vertical offset for crouching
+ * 
+ * This module lowers the camera when the character crouches. 
+ * The offset is applied smoothly to prevent jarring transitions.
+ * 
+ * Steps:
+ * 1. Determine target blend based on crouch state
+ * 2. Smoothly interpolate current blend towards target
+ * 3. Get crouch offset from config
+ * 4. Calculate vertical offset based on blend
+ * 5. Output with Additive policy
+ * 
+ * Blend System:
+ * - CurrentCrouchBlend: 0.0 (standing) to 1.0 (fully crouched)
+ * - Smooth interpolation for natural camera movement
+ * 
+ * Typical Crouch Offset: 
+ * - Light crouch: -30cm to -40cm
+ * - Full crouch: -50cm to -60cm
+ * - Prone (if supported): -80cm to -100cm
+ * 
+ * @param Context The current pipeline execution context
+ * @param StateConfig The current camera state configuration
+ * @param OutOutput Output structure to fill with computed values
+ * @return True if computation succeeded
+ */
+bool UCameraModule_O04_Crouch_Offset::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Step 1: Determine target blend based on crouch state
+	// 1. 0 when crouching, 0.0 when standing
+	float TargetBlend = Context.InputContext. bIsCrouching ? 1.0f : 0.0f;
+	
+	// Step 2: Smoothly interpolate current blend towards target
+	// Fast transition for responsive feel
+	float InterpSpeed = 8.0f;  // About 0.3 seconds to fully transition
+	
+	// Try to get interp speed from config
+	float ConfigInterpSpeed = StateConfig.Module. Offset.CrouchInterpSpeed;
+	if (ConfigInterpSpeed > 0.0f)
+	{
+		InterpSpeed = ConfigInterpSpeed;
+	}
+	
+	CurrentCrouchBlend = FMath:: FInterpTo(
+		CurrentCrouchBlend, 
+		TargetBlend, 
+		Context.DeltaTime, 
+		InterpSpeed
+	);
+	
+	// Step 3: Get crouch vertical offset from config
+	// Should be negative to lower camera
+	float CrouchVerticalOffset = StateConfig. Module.  Offset.CrouchVerticalOffset;
+	
+	// Default if not configured
+	if (FMath::IsNearlyZero(CrouchVerticalOffset))
+	{
+		CrouchVerticalOffset = -50.0f;  // Default:  50cm lower
+	}
+	
+	// Step 4: Calculate vertical offset based on blend
+	float VerticalOffset = CrouchVerticalOffset * CurrentCrouchBlend;
+	
+	// Clamp to reasonable range
+	const float MaxCrouchOffset = 100.0f;  // Max 1 meter offset
+	VerticalOffset = FMath::Clamp(VerticalOffset, -MaxCrouchOffset, MaxCrouchOffset);
+	
+	// Create offset vector (Z-axis vertical)
+	// X = 0 (no forward/back change)
+	// Y = 0 (no horizontal change)
+	// Z = VerticalOffset (negative = lower camera)
+	FVector OffsetVector(0.0f, 0.0f, VerticalOffset);
+	
+	// Step 5: Fill output structure
+	OutOutput. OffsetOutput = OffsetVector;
+	OutOutput.bHasOffsetOutput = true;
+	
+	return true;
+}
+```
+
+---
+
+4. **完整的O04代码块（用于复制粘贴）：**
+
+```cpp
+//========================================
+// O04: Crouch Offset
+//========================================
+
+/**
+ * Constructor - Initialize crouch blend state
+ */
+UCameraModule_O04_Crouch_Offset:: UCameraModule_O04_Crouch_Offset()
+	: CurrentCrouchBlend(0.0f)
+{
+}
+
+/**
+ * ShouldActivate - Activate when crouching or transitioning
+ */
+bool UCameraModule_O04_Crouch_Offset::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if crouching
+	bool bIsCrouching = Context.InputContext.bIsCrouching;
+	
+	// Check if transitioning out of crouch
+	const float TransitionThreshold = 0.01f;
+	bool bIsTransitioning = CurrentCrouchBlend > TransitionThreshold;
+	
+	// Activate if either condition
+	if (!bIsCrouching && !bIsTransitioning)
+	{
+		return false;
+	}
+	
+	return true;
+}
+
+/**
+ * Compute - Calculate vertical offset for crouching
+ */
+bool UCameraModule_O04_Crouch_Offset::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output
+	OutOutput = CreateBaseOutput();
+	
+	// Determine target blend
+	float TargetBlend = Context. InputContext.bIsCrouching ?  1.0f : 0.0f;
+	
+	// Get interp speed
+	float InterpSpeed = 8.0f;
+	float ConfigInterpSpeed = StateConfig.Module. Offset.CrouchInterpSpeed;
+	if (ConfigInterpSpeed > 0.0f)
+	{
+		InterpSpeed = ConfigInterpSpeed;
+	}
+	
+	// Smooth interpolation
+	CurrentCrouchBlend = FMath::FInterpTo(
+		CurrentCrouchBlend, 
+		TargetBlend, 
+		Context.DeltaTime, 
+		InterpSpeed
+	);
+	
+	// Get crouch offset from config
+	float CrouchVerticalOffset = StateConfig.Module.Offset.CrouchVerticalOffset;
+	if (FMath:: IsNearlyZero(CrouchVerticalOffset))
+	{
+		CrouchVerticalOffset = -50.0f;  // Default: 50cm lower
+	}
+	
+	// Calculate offset
+	float VerticalOffset = CrouchVerticalOffset * CurrentCrouchBlend;
+	
+	// Clamp to range
+	const float MaxCrouchOffset = 100.0f;
+	VerticalOffset = FMath::Clamp(VerticalOffset, -MaxCrouchOffset, MaxCrouchOffset);
+	
+	// Create offset vector (Z-axis)
+	FVector OffsetVector(0.0f, 0.0f, VerticalOffset);
+	
+	// Fill output
+	OutOutput.OffsetOutput = OffsetVector;
+	OutOutput.bHasOffsetOutput = true;
+	
+	return true;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 说明混合值系统
+   - 解释负偏移的含义
+   - 描述过渡阈值的作用
+   - 所有注释英文
+
+2. **格式：**
+   - Tab缩进
+   - 清晰步骤标注
+   - 方法间空两行
+
+3. **防御性编程：**
+   - 使用IsNearlyZero检测配置
+   - Clamp确保有效范围
+   - 过渡阈值防止突然停止
+
+【技术说明】
+
+**O04的核心机制：**
+
+### 1. 混合值系统
+
+```cpp
+// CurrentCrouchBlend的范围
+0.0 ←─────────────────────→ 1.0
+站立                        蹲伏
+
+// 计算最终偏移
+VerticalOffset = CrouchVerticalOffset * CurrentCrouchBlend;
+
+// 示例（CrouchVerticalOffset = -50cm）：
+// Blend = 0.0 → Offset = 0cm (站立)
+// Blend = 0.5 → Offset = -25cm (半蹲)
+// Blend = 1.0 → Offset = -50cm (完全蹲下)
+```
+
+### 2. 过渡阈值的作用
+
+```
+为什么需要过渡阈值？
+
+场景：玩家松开蹲伏键
+
+没有过渡阈值：
+Frame 0: bIsCrouching = true, Blend = 1.0, 模块激活 ✓
+Frame 1: bIsCrouching = false, Blend = 0.9, 模块不激活 ✗
+→ 相机瞬间跳回，因为模块不再计算
+
+有过渡阈值(0.01)：
+Frame 0: bIsCrouching = true, Blend = 1.0, 模块激活 ✓
+Frame 1: bIsCrouching = false, Blend = 0.9 > 0.01, 模块激活 ✓
+Frame N:  Blend = 0.005 < 0.01, 模块不激活 ✗
+→ 相机平滑回到站立位置
+```
+
+### 3. Additive策略的意义
+
+```
+O04使用Additive策略，意味着：
+
+O01基础偏移:  (0, 0, 20)   → 相机抬高20cm
+O04蹲伏偏移: (0, 0, -50)  → 相机降低50cm
+
+Stage 5混合后:  (0, 0, 20) + (0, 0, -50) = (0, 0, -30)
+→ 最终相机比角色低30cm
+
+对比Override：
+如果O04是Override，会完全替换O01的Z值
+→ 失去O01的基础抬高效果
+```
+
+### 4. 典型蹲伏偏移值
+
+```
+类魂游戏蹲伏：
+- 角色高度: 180cm → 120cm (降低60cm)
+- 相机偏移: 约-50cm (略少于角色降低量)
+- 原因:  相机稍高于头部，不完全跟随
+
+其他游戏参考：
+- 潜行游戏:  -60cm to -70cm (更低更隐蔽)
+- 射击游戏:  -40cm to -50cm (保持视野)
+- 趴伏(Prone): -100cm to -120cm
+```
+
+### 5. 与角色动画的配合
+
+```
+蹲伏过程时间线：
+
+T=0s: 按下蹲伏键
+      角色开始蹲伏动画
+      O04开始降低相机
+
+T=0.15s: 相机Blend ≈ 0.7
+         相机已降低35cm
+
+T=0.3s: 角色动画完成
+        相机Blend ≈ 1.0
+        相机完全降低50cm
+
+InterpSpeed=8.0 约0.3秒完成
+→ 与典型蹲伏动画时长匹配
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] 构造函数完整（初始化CurrentCrouchBlend）
+   - [ ] ShouldActivate()完整（含过渡检测）
+   - [ ] Compute()完整
+
+3. **逻辑正确性：**
+   - [ ] bIsCrouching检测
+   - [ ] 过渡阈值0.01
+   - [ ] 负偏移值处理
+   - [ ] FInterpTo平滑过渡
+   - [ ] Additive策略（Z轴偏移）
+
+4. **字段访问：**
+   - [ ] Context.InputContext.bIsCrouching
+   - [ ] StateConfig.Module. Offset.CrouchVerticalOffset
+   - [ ] StateConfig.Module. Offset.CrouchInterpSpeed（可选）
+
+【注意事项】
+
+1. **不需要Regenerate**
+
+2. **字段缺失处理：**
+   ```cpp
+   // 如果CrouchVerticalOffset不存在
+   float CrouchVerticalOffset = -50.0f;  // 默认值
+   
+   // 如果CrouchInterpSpeed不存在
+   float InterpSpeed = 8.0f;  // 默认值
+   ```
+
+3. **bIsCrouching字段：**
+   确认InputContext中有bIsCrouching字段。如果没有：
+   ```cpp
+   // 在FCameraInputContext中添加
+   bool bIsCrouching;
+   ```
+
+4. **测试建议：**
+   - 蹲伏 → 相机应平滑下降
+   - 站立 → 相机应平滑上升
+   - 快速蹲起 → 过渡应平滑无跳变
+   - 确认偏移值正确（负值 = 下降）
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 3.6. 5 完成报告
+================================================================================
+
+【修改内容】
+- 文件：CameraModule_Offset.cpp
+- 修改位置：O04模块
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ 构造函数：初始化CurrentCrouchBlend
+- ✅ ShouldActivate：蹲伏+过渡检测
+- ✅ Compute：垂直偏移平滑过渡
+
+【编译结果】
+- 编译状态：[成功/失败]
+
+【最终状态】
+✅ O04完成，蹲伏相机偏移
+
+================================================================================
+```
+
+【后续步骤】
+
+O04完成后，Offset模块进度：
+- [x] ✅ 3.6.1:  CameraModule_Offset.h
+- [x] ✅ 3.6.2: O01 - SocketOffset Base
+- [x] ✅ 3.6.3: O02 - Shoulder Offset
+- [x] ✅ 3.6.4: O03 - Shoulder Switch
+- [x] ✅ 3.6.5: O04 - Crouch Offset
+- [ ] ⏳ 3.6.6: O05 - Mount Offset（最后一个！）
+
+**Offset模块完成度：4/5 (80%)**
+
+**下一步：** O05 Mount Offset（Offset模块最后一个）
+
+================================================================================

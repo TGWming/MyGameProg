@@ -1,0 +1,512 @@
+================================================================================
+任务：创建SoulsCameraPipeline. cpp - Pipeline管理器类实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4. 27 C++项目。
+实现Pipeline管理器的所有功能。
+
+【当前进度】
+Phase 2 Step 2. 1 Sub-Step 2.1.3 (共190个Sub-Step中的第38个)
+
+前置完成：
+- Phase 1 全部完成 ✅
+- Sub-Step 2.1.1:  ICameraStage. h ✅
+- Sub-Step 2.1.2: SoulsCameraPipeline.h ✅
+
+【任务目标】
+创建文件：Source/[ProjectName]/Camera/Pipeline/SoulsCameraPipeline.cpp
+实现Pipeline管理器。
+
+**这是一个. cpp文件，添加后需要重新Generate Visual Studio project files。**
+
+【具体要求】
+
+1. 文件路径：Source/[ProjectName]/Camera/Pipeline/SoulsCameraPipeline. cpp
+
+2. 完整文件内容：
+
+```cpp
+// Copyright Epic Games, Inc.  All Rights Reserved. 
+
+#include "SoulsCameraPipeline.h"
+#include "Camera/Core/SoulsCameraManager.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogCameraPipeline, Log, All);
+
+USoulsCameraPipeline::USoulsCameraPipeline()
+    : CameraManager(nullptr)
+    , bIsInitialized(false)
+    , bCollectStats(false)
+    , bPerformanceMode(false)
+    , CurrentFrameNumber(0)
+{
+    // Initialize arrays for 8 stages
+    RegisteredStages. SetNum(8);
+    StageEnabled. SetNum(8);
+    
+    for (int32 i = 0; i < 8; ++i)
+    {
+        RegisteredStages[i] = nullptr;
+        StageEnabled[i] = true;
+    }
+}
+
+//========================================
+// Initialization 初始化
+//========================================
+
+void USoulsCameraPipeline::Initialize(USoulsCameraManager* InManager)
+{
+    CameraManager = InManager;
+    CurrentContext. Manager = InManager;
+    bIsInitialized = (CameraManager != nullptr);
+    
+    if (bIsInitialized)
+    {
+        UE_LOG(LogCameraPipeline, Log, TEXT("Pipeline initialized successfully"));
+    }
+    else
+    {
+        UE_LOG(LogCameraPipeline, Warning, TEXT("Pipeline initialization failed:  null manager"));
+    }
+}
+
+//========================================
+// Stage Registration Stage注册
+//========================================
+
+bool USoulsCameraPipeline::RegisterStage(int32 StageIndex, TScriptInterface<ICameraStage> Stage)
+{
+    const int32 ArrayIndex = StageIndexToArrayIndex(StageIndex);
+    
+    if (ArrayIndex < 0)
+    {
+        UE_LOG(LogCameraPipeline, Warning, TEXT("RegisterStage: Invalid stage index %d (must be 1-8)"), StageIndex);
+        return false;
+    }
+    
+    if (! Stage)
+    {
+        UE_LOG(LogCameraPipeline, Warning, TEXT("RegisterStage: Cannot register null stage at index %d"), StageIndex);
+        return false;
+    }
+    
+    // Verify stage index matches
+    if (Stage->GetStageIndex() != StageIndex)
+    {
+        UE_LOG(LogCameraPipeline, Warning, TEXT("RegisterStage: Stage reports index %d but registering at %d"),
+            Stage->GetStageIndex(), StageIndex);
+    }
+    
+    RegisteredStages[ArrayIndex] = Stage. GetObject();
+    
+    UE_LOG(LogCameraPipeline, Log, TEXT("Registered Stage %d:  %s"), 
+        StageIndex, *Stage->GetStageName().ToString());
+    
+    return true;
+}
+
+bool USoulsCameraPipeline::UnregisterStage(int32 StageIndex)
+{
+    const int32 ArrayIndex = StageIndexToArrayIndex(StageIndex);
+    
+    if (ArrayIndex < 0)
+    {
+        UE_LOG(LogCameraPipeline, Warning, TEXT("UnregisterStage: Invalid stage index %d"), StageIndex);
+        return false;
+    }
+    
+    if (RegisteredStages[ArrayIndex])
+    {
+        UE_LOG(LogCameraPipeline, Log, TEXT("Unregistered Stage %d"), StageIndex);
+        RegisteredStages[ArrayIndex] = nullptr;
+        return true;
+    }
+    
+    return false;
+}
+
+TScriptInterface<ICameraStage> USoulsCameraPipeline::GetStage(int32 StageIndex) const
+{
+    const int32 ArrayIndex = StageIndexToArrayIndex(StageIndex);
+    
+    if (ArrayIndex < 0 || ! RegisteredStages[ArrayIndex])
+    {
+        return nullptr;
+    }
+    
+    return TScriptInterface<ICameraStage>(RegisteredStages[ArrayIndex]);
+}
+
+bool USoulsCameraPipeline::AreAllStagesRegistered() const
+{
+    // Required stages: 1, 2, 3, 5, 8
+    // Optional stages: 4 (Modifier), 6 (Collision), 7 (PostProcess)
+    static const TArray<int32> RequiredStages = {1, 2, 3, 5, 8};
+    
+    for (int32 StageIndex : RequiredStages)
+    {
+        const int32 ArrayIndex = StageIndexToArrayIndex(StageIndex);
+        if (!RegisteredStages[ArrayIndex])
+        {
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+//========================================
+// Execution 执行
+//========================================
+
+FSoulsCameraOutput USoulsCameraPipeline::Execute(float DeltaTime, const FCameraInputContext& InputContext)
+{
+    if (!bIsInitialized)
+    {
+        UE_LOG(LogCameraPipeline, Warning, TEXT("Execute:  Pipeline not initialized"));
+        return FSoulsCameraOutput();
+    }
+
+    // Reset context for this frame
+    CurrentContext.Reset();
+    CurrentContext.DeltaTime = DeltaTime;
+    CurrentContext.Manager = CameraManager;
+    CurrentContext. InputContext = InputContext;
+
+    // Update frame number
+    CurrentFrameNumber = GFrameCounter;
+
+    // Reset stats if collecting
+    if (bCollectStats)
+    {
+        LastFrameStats.Reset();
+        LastFrameStats. FrameNumber = CurrentFrameNumber;
+    }
+
+    const double PipelineStartTime = FPlatformTime:: Seconds();
+
+    // Execute all 8 stages in order
+    for (int32 StageIndex = 1; StageIndex <= 8; ++StageIndex)
+    {
+        // Check for abort request
+        if (CurrentContext.bShouldAbort)
+        {
+            UE_LOG(LogCameraPipeline, Log, TEXT("Pipeline aborted at Stage %d (requested by Stage %d)"),
+                StageIndex, CurrentContext.AbortRequestedByStage);
+            break;
+        }
+
+        const EStageResult Result = ExecuteStage(StageIndex);
+
+        // Handle abort result
+        if (Result == EStageResult::Abort)
+        {
+            CurrentContext.bShouldAbort = true;
+            CurrentContext.AbortRequestedByStage = StageIndex;
+        }
+    }
+
+    // Finalize stats
+    if (bCollectStats)
+    {
+        LastFrameStats.TotalTimeMs = static_cast<float>((FPlatformTime::Seconds() - PipelineStartTime) * 1000.0);
+    }
+
+    return CurrentContext.Output;
+}
+
+//========================================
+// Stage Control Stage控制
+//========================================
+
+void USoulsCameraPipeline::SetStageEnabled(int32 StageIndex, bool bEnabled)
+{
+    const int32 ArrayIndex = StageIndexToArrayIndex(StageIndex);
+    
+    if (ArrayIndex >= 0)
+    {
+        StageEnabled[ArrayIndex] = bEnabled;
+        UE_LOG(LogCameraPipeline, Verbose, TEXT("Stage %d %s"), 
+            StageIndex, bEnabled ? TEXT("enabled") : TEXT("disabled"));
+    }
+}
+
+bool USoulsCameraPipeline::IsStageEnabled(int32 StageIndex) const
+{
+    const int32 ArrayIndex = StageIndexToArrayIndex(StageIndex);
+    
+    if (ArrayIndex >= 0)
+    {
+        return StageEnabled[ArrayIndex];
+    }
+    
+    return false;
+}
+
+void USoulsCameraPipeline::SetPerformanceMode(bool bEnabled)
+{
+    bPerformanceMode = bEnabled;
+    
+    if (bPerformanceMode)
+    {
+        // Disable optional stages:  4 (Modifier), 6 (Collision), 7 (PostProcess)
+        SetStageEnabled(4, false);
+        SetStageEnabled(6, false);
+        SetStageEnabled(7, false);
+        
+        UE_LOG(LogCameraPipeline, Log, TEXT("Performance mode ENABLED - optional stages disabled"));
+    }
+    else
+    {
+        // Re-enable optional stages
+        SetStageEnabled(4, true);
+        SetStageEnabled(6, true);
+        SetStageEnabled(7, true);
+        
+        UE_LOG(LogCameraPipeline, Log, TEXT("Performance mode DISABLED - all stages enabled"));
+    }
+}
+
+//========================================
+// Internal Methods 内部方法
+//========================================
+
+EStageResult USoulsCameraPipeline::ExecuteStage(int32 StageIndex)
+{
+    const int32 ArrayIndex = StageIndexToArrayIndex(StageIndex);
+    
+    // Validate array index
+    if (ArrayIndex < 0)
+    {
+        UE_LOG(LogCameraPipeline, Error, TEXT("ExecuteStage: Invalid stage index %d"), StageIndex);
+        return EStageResult::Failed;
+    }
+
+    // Check if stage is registered
+    if (! RegisteredStages[ArrayIndex])
+    {
+        // Required stage missing is an error
+        if (IsStageRequired(StageIndex))
+        {
+            UE_LOG(LogCameraPipeline, Warning, TEXT("ExecuteStage: Required Stage %d not registered"), StageIndex);
+            return EStageResult::Failed;
+        }
+        
+        // Optional stage missing is okay - just skip
+        if (bCollectStats)
+        {
+            LastFrameStats.StagesSkipped++;
+        }
+        return EStageResult:: Skipped;
+    }
+
+    // Check if stage is enabled
+    if (!StageEnabled[ArrayIndex])
+    {
+        if (bCollectStats)
+        {
+            LastFrameStats.StagesSkipped++;
+        }
+        return EStageResult::Skipped;
+    }
+
+    // Get stage interface
+    ICameraStage* Stage = Cast<ICameraStage>(RegisteredStages[ArrayIndex]);
+    if (!Stage)
+    {
+        UE_LOG(LogCameraPipeline, Error, TEXT("ExecuteStage: Stage %d does not implement ICameraStage"), StageIndex);
+        return EStageResult:: Failed;
+    }
+
+    // Check if stage wants to execute this frame
+    if (! Stage->ShouldExecute(CurrentContext))
+    {
+        if (bCollectStats)
+        {
+            LastFrameStats.StagesSkipped++;
+        }
+        return EStageResult:: Skipped;
+    }
+
+    // Execute stage with optional timing
+    double StageStartTime = 0.0;
+    if (bCollectStats)
+    {
+        StageStartTime = FPlatformTime::Seconds();
+    }
+
+    // Pre-execute hook (for debugging/profiling)
+    Stage->OnPreExecute(CurrentContext);
+    
+    // Main execution
+    const EStageResult Result = Stage->Execute(CurrentContext);
+    
+    // Post-execute hook (for debugging/profiling)
+    Stage->OnPostExecute(CurrentContext, Result);
+
+    // Record timing and result
+    if (bCollectStats)
+    {
+        LastFrameStats.StageTimesMs[ArrayIndex] = static_cast<float>((FPlatformTime::Seconds() - StageStartTime) * 1000.0);
+        
+        if (Result == EStageResult:: Success)
+        {
+            LastFrameStats.StagesExecuted++;
+        }
+        else if (Result == EStageResult::Skipped)
+        {
+            LastFrameStats.StagesSkipped++;
+        }
+    }
+
+    return Result;
+}
+
+bool USoulsCameraPipeline::IsStageRequired(int32 StageIndex) const
+{
+    // Required stages:  1 (Input), 2 (StateMachine), 3 (Module), 5 (Blend), 8 (Render)
+    // Optional stages: 4 (Modifier), 6 (Collision), 7 (PostProcess)
+    switch (StageIndex)
+    {
+        case 4:  // Stage 4: Modifier Apply - optional
+        case 6:  // Stage 6: Collision Resolve - optional
+        case 7:  // Stage 7: Post Process - optional
+            return false;
+        default:
+            return true;
+    }
+}
+```
+
+3. 代码风格：
+   - 使用DEFINE_LOG_CATEGORY_STATIC定义专用日志类别
+   - 使用StageIndexToArrayIndex()统一索引转换
+   - 完整的执行循环
+   - 性能统计收集
+   - Stage跳过逻辑
+   - 详细的日志输出
+   - 中英文注释分组
+   - 使用static_cast替代C风格转换
+
+【验证标准】
+- 编译通过
+- Pipeline可正确注册和执行Stage
+- 日志输出正确
+
+【注意事项】
+- Stage索引为1-8，内部转换为0-7数组索引（使用StageIndexToArrayIndex）
+- 必需Stage：1,2,3,5,8；可选Stage：4,6,7
+- **这是. cpp文件，添加后需要重新Generate Visual Studio project files**
+
+【输出要求】
+输出完整的SoulsCameraPipeline.cpp文件代码。
+
+================================================================================
+                        上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+```
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：Sub-Step 2.1.3 创建SoulsCameraPipeline.cpp - Pipeline管理器类实现
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断，例如：完成到Execute方法，未完成ExecuteStage]
+
+【已完成内容】
+- 构造函数
+- Initialize方法
+- [列出已完成的方法]
+
+【未完成内容】
+- [列出剩余方法]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存到SoulsCameraPipeline.cpp，然后开启新对话。
+
+【编译注意】
+添加. cpp文件后需要：
+1. 右键. uproject → Generate Visual Studio project files
+2. 重新打开. sln
+
+================================================================================
+                    继续任务 - 新对话PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Phase 2 Step 2.1 Sub-Step 2.1.3 续接任务。
+完成SoulsCameraPipeline.cpp实现。
+
+【前置完成】
+- Phase 1 全部完成 ✅
+- Sub-Step 2.1.1: ICameraStage.h ✅
+- Sub-Step 2.1.2: SoulsCameraPipeline.h ✅
+- Sub-Step 2.1.3 部分完成：
+  - [列出已完成的方法] ✅
+
+【续接任务】
+继续完成SoulsCameraPipeline.cpp：
+- [列出剩余方法]
+
+【目标文件】
+Source/[ProjectName]/Camera/Pipeline/SoulsCameraPipeline.cpp
+
+【方法清单】
+- 构造函数
+- Initialize()
+- RegisterStage() / UnregisterStage() / GetStage() / AreAllStagesRegistered()
+- Execute()
+- SetStageEnabled() / IsStageEnabled() / SetPerformanceMode()
+- ExecuteStage() / IsStageRequired()
+
+【Stage索引规则】
+- Stage索引：1-8
+- 数组索引：0-7
+- 必需Stage：1,2,3,5,8
+- 可选Stage：4,6,7
+
+【编译注意】
+添加.cpp文件后需要：
+1. 右键.uproject → Generate Visual Studio project files
+2. 重新打开.sln
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================
+```
+
+【交接信息要求】
+1. 交接PROMPT必须是**完全自包含**的
+2. 明确标注目标文件和前置依赖
+3. 包含完整方法清单
+4. 标明Stage索引规则（1-8 vs 0-7）
+5. **强调这是.cpp文件，需要Generate**
+
+================================================================================

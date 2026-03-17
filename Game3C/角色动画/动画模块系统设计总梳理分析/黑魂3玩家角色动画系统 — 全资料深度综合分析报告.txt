@@ -1,0 +1,782 @@
+黑魂3玩家角色动画系统 — 全资料深度综合分析报告
+
+收到全部确认，已记录你的决策。现在我将所有确认结果落实到最终版本中。
+
+---
+
+# 📋 黑魂3玩家角色动画系统 — 最终确认版完整设计表
+
+基于全部资料综合分析 + 你的10项决策确认，以下为**修正后的最终版本**。
+
+---
+
+# 第一部分：最终决策记录
+
+| 编号 | 决策 | 你的选择 | 执行结果 |
+|---|---|---|---|
+| D1 | 翻滚合并为1个State | ✅ 确认 | `Dodge_Roll` 1个State，`EDodgeDirection` + `EWeightClass` 驱动 |
+| D2 | 补充Kick/Plunging/Crossbow/TwoHandToggle | ✅ 确认 | SM_Action +4 States |
+| D3 | 补充Ladder_Attack/Ladder_JumpOff | ✅ 确认 | SM_Ladder +2 States |
+| D4 | 补充BleedProc/FrostbiteProc/Death_Curse | ✅ 确认 | SM_HitReact +2, SM_Death +1 |
+| D5 | PlaceSummonSign确认，WriteMessage不要 | ✅ 部分确认 | SM_Interaction +1 State |
+| D6 | 删除冗余交互Bool，统一用Enum | ✅ 确认 | 删除8个Bool |
+| D7 | SM_Action保持整体，Montage化后自然缩减 | ✅ 确认 | 不拆分子SM |
+| D8 | 补充GrabVictim | ✅ 确认 | SM_HitReact +1 |
+| D9 | 中毒/猛毒走Additive层 | ✅ 确认 | 新增2个Additive层 |
+| D10 | `bParry` → `bIsParrying` | ✅ 确认 | 全局重命名 |
+
+---
+
+# 第二部分：最终优先级总控表
+
+| Priority | Condition | Output Machine |
+|---|---|---|
+| 1 | `bDead` | `SM_Death` |
+| 2 | `bExecuted \|\| bBackstabbed \|\| bGrabbed` | `SM_HitReact` |
+| 3 | `bHitReact \|\| bGuardBreak \|\| bKnockdown` | `SM_HitReact` |
+| 4 | `bIsOnLadder` | `SM_Ladder` |
+| 5 | `bInteracting` | `SM_Interaction` |
+| 6 | `bInActionState` | `SM_Action` |
+| 7 | `bCombatMode \|\| bLockOn \|\| bGuarding` | `SM_Locomotion_Combat` |
+| 8 | Default | `SM_Locomotion_Base` |
+
+---
+
+# 第三部分：最终变量表
+
+## 3.1 Bool 变量（最终版，共 44 个）
+
+### 基础移动（8个）
+
+| Variable | Type | Purpose | Notes |
+|---|---|---|---|
+| `bHasMovementInput` | Bool | 是否有移动输入 | 输入/加速度驱动 |
+| `bIsMoving` | Bool | 是否正在移动 | 派生：`Speed > 5` |
+| `bIsAccelerating` | Bool | 是否加速中 | 来自 MovementComp |
+| `bIsInAir` | Bool | 是否离地 | 来自 Falling |
+| `bIsFalling` | Bool | 是否下落中 | 可与 IsInAir 同义或细化 |
+| `bIsLanding` | Bool | 是否落地恢复中 | 可选 |
+| `bIsSprinting` | Bool | 是否冲刺 | |
+| `bEnableTurnInPlace` | Bool | 是否启用原地转身 | 可选 |
+
+### 战斗状态（19个）
+
+| Variable | Type | Purpose | Notes |
+|---|---|---|---|
+| `bCombatMode` | Bool | 战斗模式 | |
+| `bLockOn` | Bool | 锁定敌人 | |
+| `bGuarding` | Bool | 举盾/防御中 | |
+| `bTwoHanded` | Bool | 双手持武器 | |
+| `bWeaponEquipped` | Bool | 是否装备武器 | |
+| `bIsAttacking` | Bool | 普通攻击中 | |
+| `bIsHeavyAttacking` | Bool | 重攻击中 | |
+| `bIsChargingAttack` | Bool | 蓄力攻击中 | |
+| `bCanCombo` | Bool | 当前可接连段 | 由Notify打开 |
+| `bNextComboQueued` | Bool | 已缓存下一段连招输入 | |
+| `bIsDodging` | Bool | 翻滚中 | |
+| `bIsBackstep` | Bool | 后撤步中 | |
+| `bIsParrying` | Bool | 弹反中 | **D10已改名** |
+| `bIsUsingSkill` | Bool | 战技中 | |
+| `bWeaponArtFollowUp` | Bool | 战技派生已触发 | |
+| `bIsCasting` | Bool | 施法中 | |
+| `bSpellRelease` | Bool | 法术释放阶段 | |
+| `bIsAimingBow` | Bool | 拉弓瞄准中 | |
+| `bBowFire` | Bool | 射箭触发 | |
+
+### 道具/物品（3个）
+
+| Variable | Type | Purpose | Notes |
+|---|---|---|---|
+| `bIsUsingItem` | Bool | 使用普通道具中 | |
+| `bDrinkEstus` | Bool | 喝药中 | |
+| `bSwitchingGrip` | Bool | 双持切��中 | **D2新增** |
+
+### 交互（3个）— **D6精简后**
+
+| Variable | Type | Purpose | Notes |
+|---|---|---|---|
+| `bInteracting` | Bool | 交互中 | |
+| `bCanInteract` | Bool | 可交互 | 判定用，不驱动State |
+| `bIsOnLadder` | Bool | 在梯子上 | |
+
+> **已删除**（D6）：~~bPickup, bOpenDoor, bPullLever, bOpenChest, bTraverseFog, bRestAtBonfire, bTalkToNPC, bUseElevator~~ — 全部由 `InteractionType` Enum 替代
+
+### 梯子（4个）
+
+| Variable | Type | Purpose | Notes |
+|---|---|---|---|
+| `bClimbUp` | Bool | 梯子上爬 | |
+| `bClimbDown` | Bool | 梯子下爬 | |
+| `bSlideDown` | Bool | 梯子滑下 | |
+| `bLadderAtTop` / `bLadderAtBottom` | Bool | 到顶/到底 | 可用1个Enum替代 |
+
+### 受击/死亡（7个）
+
+| Variable | Type | Purpose | Notes |
+|---|---|---|---|
+| `bHitReact` | Bool | 受击中 | |
+| `bGuardBreak` | Bool | 破防中 | |
+| `bKnockdown` | Bool | 击倒中 | |
+| `bGetUp` | Bool | 起身中 | |
+| `bBackstabbed` | Bool | 被背刺 | |
+| `bExecuted` | Bool | 被处决 | |
+| `bGrabbed` | Bool | 被Boss抓取 | **D8新增** |
+| `bDead` | Bool | 死亡 | |
+
+### 系统控制（3个）
+
+| Variable | Type | Purpose | Notes |
+|---|---|---|---|
+| `bInvincible` | Bool | 无敌帧开启 | Notify控制 |
+| `bCanBeInterrupted` | Bool | 当前动作可被打断 | 玩法逻辑控制 |
+| `bCanBeReHit` | Bool | 受击中是否允许被新受击打断 | 受击连续处理 |
+
+### 派生总状态（3个）
+
+| Variable | Type | Derivation |
+|---|---|---|
+| `bInActionState` | Bool | `bIsAttacking \|\| bIsHeavyAttacking \|\| bIsChargingAttack \|\| bIsDodging \|\| bIsBackstep \|\| bIsParrying \|\| bIsUsingSkill \|\| bIsCasting \|\| bIsUsingItem \|\| bDrinkEstus \|\| bIsAimingBow \|\| bBowFire \|\| bSwitchingGrip` |
+| `bInHitState` | Bool | `bHitReact \|\| bGuardBreak \|\| bKnockdown \|\| bBackstabbed \|\| bExecuted \|\| bGrabbed` |
+| `bInCombatLocomotion` | Bool | `(bCombatMode \|\| bLockOn \|\| bGuarding) && !bInActionState && !bInteracting && !bInHitState && !bDead` |
+
+---
+
+## 3.2 Float 变量（最终版，共 14 个）
+
+| Variable | Purpose | Notes |
+|---|---|---|
+| `Speed` | 平面速度 | `VectorLengthXY(Velocity)` |
+| `Direction` | 移动方向 | BlendSpace 2D用 |
+| `FallSpeed` | 垂直速度 | 落地判定 |
+| `YawDelta` | 朝向角差 | 原地转身 |
+| `AimPitch` | 瞄准上下角度 | AimOffset |
+| `AimYaw` | 瞄准左右角度 | AimOffset |
+| `LadderSpeed` | 梯子移动速度 | 梯子BlendSpace |
+| `HitDirection` | 受击方向 | 方向受击 |
+| `HitStrength` | 受击强度 | 方向受击BlendSpace |
+| `LeanAmount` | 倾斜强度 | Additive可选 |
+| `TurnAngle` | 原地转身角度 | TurnInPlace |
+| `GuardAlpha` | 举盾混合值 | Overlay可选 |
+| `BowAimAlpha` | 弓瞄准覆盖权重 | Overlay可选 |
+| `EquipLoad` | 装备负重比 | 驱动WeightClass |
+
+## 3.3 Int 变量（最终版，共 2 个）
+
+| Variable | Purpose |
+|---|---|
+| `ComboIndex` | 当前连段段数 |
+| `NewHitPriority` | 新受击优先级 |
+
+## 3.4 Enum（最终版，共 9 个）
+
+### `EWeaponType`（23值）— 无变化
+
+| Value |
+|---|
+| `Unarmed` / `StraightSword` / `Greatsword` / `UltraGreatsword` / `CurvedSword` / `Katana` / `Axe` / `GreatAxe` / `Hammer` / `GreatHammer` / `Spear` / `Halberd` / `Rapier` / `Dagger` / `Fist` / `Claw` / `Whip` / `Bow` / `Crossbow` / `Staff` / `Chime` / `PyroFlame` / `TwinWeapon` |
+
+### `ECombatStance`（7值）— 无变化
+
+| Value |
+|---|
+| `None` / `Unarmed` / `OneHanded` / `TwoHanded` / `Guard` / `BowAim` / `Casting` |
+
+### `EInteractionType`（14值）— D5调整：+1 PlaceSummonSign，不加WriteMessage
+
+| Value | Notes |
+|---|---|
+| `None` | |
+| `Pickup` | |
+| `OpenDoor` | |
+| `PullLever` | |
+| `OpenChest` | |
+| `TraverseFog` | |
+| `LightBonfire` | |
+| `RestBonfire` | |
+| `LeaveBonfire` | |
+| `TalkNPC` | |
+| `UseElevator` | |
+| `ReadMessage` | |
+| `TouchBloodstain` | |
+| **`PlaceSummonSign`** | 🆕 D5新增 |
+
+> 注意：`LadderEnterTop` / `LadderEnterBottom` 保留在此Enum中用于从Interaction到Ladder的握手，但梯子主体逻辑在SM_Ladder中，所以总值为 14+2=16
+
+### `EHitReactType`（14值）— D4/D8调整
+
+| Value | Notes |
+|---|---|
+| `None` | |
+| `Light` | |
+| `Medium` | |
+| `Heavy` | |
+| `GuardImpact` | |
+| `GuardBreak` | |
+| `Stagger` | |
+| `Knockdown` | |
+| `AirHit` | |
+| `BackstabVictim` | |
+| `RiposteVictim` | |
+| **`BleedProc`** | 🆕 D4新增 |
+| **`FrostbiteProc`** | 🆕 D4新增 |
+| **`GrabVictim`** | 🆕 D8新增 |
+
+### `EDeathType`（5值）— D4调整
+
+| Value | Notes |
+|---|---|
+| `None` | |
+| `Normal` | |
+| `Fall` | |
+| `Special` | |
+| **`Curse`** | 🆕 D4新增 |
+
+### `EDodgeDirection`（9值）— D1调整，补充8方向
+
+| Value |
+|---|
+| `None` / `Forward` / `Backward` / `Left` / `Right` / `ForwardLeft` / `ForwardRight` / `BackwardLeft` / `BackwardRight` |
+
+### `EWeightClass`（3值）— D1新增
+
+| Value | 条件 | Notes |
+|---|---|---|
+| `Light` | `EquipLoad < 30%` | 快滚 |
+| `Medium` | `EquipLoad 30%~70%` | 中滚 |
+| `Heavy` | `EquipLoad > 70%` | 胖滚 |
+
+### `ELadderEntryType`（3值）— 无变化
+
+| Value |
+|---|
+| `None` / `Top` / `Bottom` |
+
+### `EActionState`（14值）— 无变化
+
+| Value |
+|---|
+| `None` / `LightAttack` / `HeavyAttack` / `ChargedAttack` / `Dodge` / `Backstep` / `WeaponArt` / `CastSpell` / `UseItem` / `DrinkEstus` / `BowAim` / `BowFire` / `Parry` / `CriticalAttack` |
+
+---
+
+# 第四部分：最终7个State Machine完整设计表
+
+## 4.1 SM_Locomotion_Base（9 States）
+
+| State | Animation / BS | Enter Condition | Exit Condition | Can Interrupt | Root Motion | Notes |
+|---|---|---|---|---|---|---|
+| `Idle` | `Idle_Base` | `!bCombatMode && !bLockOn && Speed<=5 && !bInActionState && !bInteracting && !bInHitState && !bDead` | → `StartMove`: `bHasMovementInput && Speed>5`; → `JumpStart`: `bIsInAir`; → 高优先级SM | Yes | No | 基础待机 |
+| `StartMove` | `Start_Move_F/B/L/R` | From `Idle` when `bHasMovementInput && Speed>5` | → `Move`: `TimeRemaining<0.1 \|\| Speed>10`; → `Idle`: input lost | Yes | Optional | 可选，增强动量感 |
+| `Move` | `BS_BaseLocomotion_2D` | `Speed>5 && !bCombatMode && !bLockOn` | → `Idle`: `Speed<=5 && !bHasMovementInput`; → `Sprint`: `bIsSprinting`; → `JumpStart`: `bIsInAir` | Yes | No | 核心非战斗移动 |
+| `Sprint` | `Sprint_Loop` | `bIsSprinting && Speed>SprintThreshold` | → `Move`: `!bIsSprinting && Speed>5`; → `Idle`: stop; → `JumpStart`: airborne | Yes | Optional | 冲刺 |
+| `JumpStart` | `Jump_Start` | `bIsInAir && !bIsOnLadder` | → `InAir`: `TimeRemaining<0.1 \|\| bIsFalling` | Limited | Optional | DS3跑跳为主 |
+| `InAir` | `Fall_Loop` | From `JumpStart` or direct airborne | → `Land`: `!bIsInAir` | Limited | No | 空中/坠落 |
+| `Land` | `Land_Light/Heavy` 或 `BS_Land_1D` | Landed | → `Idle`: `Speed<=5 && TimeRemaining<0.1`; → `Move`: `Speed>5 && TimeRemaining<0.1` | Limited | Optional | 可根据FallSpeed选轻/重 |
+| `TurnInPlace` | `Turn_L90/R90/180` | `abs(YawDelta)>TurnThreshold && Speed<=5 && !bLockOn` | → `Idle`: complete | Yes | Optional | 可选 |
+| `Stop` | `Stop_Run` | From `Move/Sprint` sudden stop | → `Idle`/`Move`: complete | Yes | Optional | 可选 |
+
+### BlendSpace
+
+| BlendSpace | X | Y | Samples |
+|---|---|---|---|
+| `BS_BaseLocomotion_2D` | `Direction` | `Speed` | Idle / Walk F/B/L/R / Jog F/B/L/R / Run F/B/L/R / Diagonals |
+| `BS_Land_1D` | `FallSpeed` | — | LightLand / MediumLand / HardLand |
+| `BS_StartMove_2D` | `Direction` | `Speed` | 起步前后左右（可选） |
+
+---
+
+## 4.2 SM_Locomotion_Combat（6 States）
+
+| State | Animation / BS | Enter Condition | Exit Condition | Can Interrupt | Root Motion | Notes |
+|---|---|---|---|---|---|---|
+| `CombatIdle` | `Idle_Combat` | `(bCombatMode\|\|bLockOn) && Speed<=5 && !bGuarding` | → `CombatMove`: `Speed>5`; → `GuardIdle`: `bGuarding` | Yes | No | 战斗待机 |
+| `CombatMove` | `BS_CombatLocomotion_2D` | `Speed>5 && (bCombatMode\|\|bLockOn) && !bGuarding` | → `CombatIdle`: `Speed<=5`; → `CombatSprint`: `bIsSprinting`; → `GuardMove`: `bGuarding` | Yes | No | 锁定八方向 |
+| `CombatSprint` | `Sprint_Combat` | `bIsSprinting && !bGuarding` | → `CombatMove`: `!bIsSprinting && Speed>5`; → `CombatIdle`: stop | Yes | Optional | 战斗冲刺 |
+| `CombatTurn` | `Turn_Combat_Adjust` | From `CombatIdle` when target angle large && `Speed<=5` | → `CombatIdle`: complete | Yes | Optional | 可选，脚步校正 |
+| `GuardIdle` | `Idle_Guard` | `bGuarding && Speed<=5` | → `GuardMove`: `Speed>5`; → `CombatIdle`: `!bGuarding` | Limited | No | 举盾待机 |
+| `GuardMove` | `BS_GuardLocomotion_2D` | `bGuarding && Speed>5` | → `GuardIdle`: `Speed<=5`; → `CombatMove`: `!bGuarding` | Limited | No | 举盾移动 |
+
+### BlendSpace
+
+| BlendSpace | X | Y | Samples |
+|---|---|---|---|
+| `BS_CombatLocomotion_2D` | `Direction` | `Speed` | Combat F/B/L/R + 4 Diagonal |
+| `BS_GuardLocomotion_2D` | `Direction` | `Speed` | Guard F/B/L/R + Diagonal |
+| `BS_CombatTurn_1D` | `YawDelta` | — | LeftTurn / RightTurn（可选） |
+
+---
+
+## 4.3 SM_Action（28 States）— 最终版
+
+| State | Animation / BS | Enter Condition | Exit Condition | Can Interrupt | Root Motion | Notes |
+|---|---|---|---|---|---|---|
+| `Action_None` | Empty / Ref Pose | Default: no action flags | → 任意action state | Yes | No | 默认空 |
+| **攻击 — 轻击连段** | | | | | | |
+| `LightAttack_01` | `ATK_Light_01` | `bIsAttacking && ComboIndex==1` | → `LightAttack_02`: `bCanCombo && ComboIndex==2`; → `AttackRecovery`: anim near end | Limited | Often Yes | 建议Montage |
+| `LightAttack_02` | `ATK_Light_02` | combo queued from 01 | → `LightAttack_03`: `bCanCombo && ComboIndex==3`; → `AttackRecovery` | Limited | Often Yes | 建议Montage |
+| `LightAttack_03` | `ATK_Light_03` | combo queued from 02 | → `AttackRecovery`: anim end | Limited | Often Yes | 不同武器段数不同 |
+| **攻击 — 重击/蓄力** | | | | | | |
+| `HeavyAttack_01` | `ATK_Heavy_01` | `bIsHeavyAttacking && !bIsChargingAttack` | → `AttackRecovery`: anim end | Limited | Often Yes | 重击 |
+| `ChargeAttack_Loop` | `ATK_Charge_Loop` | `bIsChargingAttack` | → `ChargeAttack_Release`: `!bIsChargingAttack` | No | Optional | 蓄力循环 |
+| `ChargeAttack_Release` | `ATK_Charge_Release` | From Loop on release | → `AttackRecovery`: anim end | Limited | Often Yes | 蓄力释放 |
+| `AttackRecovery` | `ATK_Recovery` | From any attack end, no further combo | → `Action_None`: complete | Yes | No | 可选 |
+| **攻击 — 派生攻击** | | | | | | |
+| `RunningAttack` | `ATK_Running` | `bIsAttacking && bIsSprinting` | → `AttackRecovery` / `Action_None` | Limited | Yes | 冲刺攻击 |
+| `RollAttack` | `ATK_Rolling` | attack buffered during roll recovery | → `AttackRecovery` / `Action_None` | Limited | Yes | 翻滚攻击 |
+| `BackstepAttack` | `ATK_Backstep` | attack after backstep | → `AttackRecovery` / `Action_None` | Limited | Yes | 后撤攻击 |
+| `JumpAttack` | `ATK_Jump` | attack during jump window | → `AttackRecovery` / `Action_None` | Limited | Yes | 跳劈 |
+| `KickAttack` | `ATK_Kick` | `bIsAttacking && bKickInput`（前推+R1） | → `Action_None`: complete | Limited | Yes | 🆕 D2新增；部分武器替换 |
+| `PlungingAttack` | `ATK_Plunging` | `bIsInAir && bAttackInput && FallDistance>threshold` | → `Action_None`: on land + complete | Limited | Yes | 🆕 D2新增；从InAir进入 |
+| **闪避** | | | | | | |
+| `Dodge_Roll` | 由`EDodgeDirection`+`EWeightClass`选择 | `bIsDodging` | → `Action_None`: complete | Limited | Yes | D1合并为1个State；无敌帧NotifyState |
+| `Backstep` | `Backstep` | `bIsBackstep` | → `Action_None`: complete | Limited | Yes | 后撤步 |
+| **防御** | | | | | | |
+| `Parry` | `Parry_Start` | `bIsParrying` | → `Action_None`: complete; or → critical chain | Very Limited | Optional | D10已改名 |
+| **战技** | | | | | | |
+| `WeaponArt_Start` | `WA_Start` | `bIsUsingSkill && !bWeaponArtFollowUp` | → `WeaponArt_Follow`: follow flag; → `Action_None`: end | Limited | Often Yes | 战技起手 |
+| `WeaponArt_Follow` | `WA_Follow` | From Start when `bWeaponArtFollowUp` | → `Action_None`: complete | Limited | Often Yes | 战技派生 |
+| **法术/远程** | | | | | | |
+| `CastSpell_Start` | `Cast_Start` | `bIsCasting && !bSpellRelease` | → `CastSpell_Release`: `bSpellRelease \|\| TimeRemaining<0.1` | Limited | Optional | 施法起手 |
+| `CastSpell_Release` | `Cast_Release` | From Start | → `Action_None`: complete | Limited | Optional | 施法释放 |
+| `BowAim` | `Bow_Aim_Loop` / `BS_BowAimOffset` | `bIsAimingBow` | → `BowFire`: `bBowFire`; → `Action_None`: `!bIsAimingBow` | Limited | No | 拉弓瞄准 |
+| `BowFire` | `Bow_Fire` | From `BowAim` when `bBowFire` | → `BowAim`: keep aiming; → `Action_None`: cancel | Limited | Optional | 射箭 |
+| `CrossbowFire` | `Crossbow_Fire` | `bBowFire && WeaponType==Crossbow` | → `Action_None`: complete | Limited | Optional | 🆕 D2新增；无Aim Loop |
+| **道具/切换** | | | | | | |
+| `UseItem` | `Use_Item` | `bIsUsingItem && !bDrinkEstus` | → `Action_None`: complete | Limited | Optional | 一般道具 |
+| `DrinkEstus` | `Drink_Estus` | `bDrinkEstus` | → `Action_None`: complete | Limited | Optional | 喝药 |
+| `TwoHandToggle` | `TwoHand_Toggle` | `bSwitchingGrip` | → `Action_None`: complete | Limited | No | 🆕 D2新增；建议UpperBody Montage |
+
+---
+
+## 4.4 SM_Interaction（16 States）— 最终版
+
+| State | Animation | Enter Condition | Exit Condition | Can Interrupt | Root Motion | Notes |
+|---|---|---|---|---|---|---|
+| `Interaction_None` | Empty | `!bInteracting` | → matching state | Yes | No | 默认 |
+| `Pickup` | `Interact_Pickup` | `InteractionType==Pickup` | → `Interaction_None`: complete | Limited | Optional | 拾取 |
+| `OpenDoor` | `Interact_OpenDoor` | `InteractionType==OpenDoor` | → `Interaction_None`: complete | No | Yes | 开门 |
+| `PullLever` | `Interact_PullLever` | `InteractionType==PullLever` | → `Interaction_None`: complete | No | Yes | 拉杆 |
+| `OpenChest` | `Interact_OpenChest` | `InteractionType==OpenChest` | → `Interaction_None`: complete | No | Yes | 宝箱 |
+| `TraverseFog` | `Interact_TraverseFog` | `InteractionType==TraverseFog` | → `Interaction_None`: complete | No | Yes | 穿雾门 |
+| `LightBonfire` | `Interact_LightBonfire` | `InteractionType==LightBonfire` | → `RestBonfire`: resting; → `Interaction_None` | No | Yes | 点篝火 |
+| `RestBonfire` | `Interact_RestBonfire` | `InteractionType==RestBonfire` | → `LeaveBonfire`: leave | No | Optional | 坐篝火 |
+| `LeaveBonfire` | `Interact_LeaveBonfire` | leave request | → `Interaction_None`: complete | No | Optional | 篝火起身 |
+| `TalkNPC` | `Interact_TalkNPC` | `InteractionType==TalkNPC` | → `Interaction_None`: complete | Yes | Optional | 对话 |
+| `UseElevator` | `Interact_Elevator` | `InteractionType==UseElevator` | → `Interaction_None`: dismount | Yes | Optional | 电梯 |
+| `ReadMessage` | `Interact_ReadMessage` | `InteractionType==ReadMessage` | → `Interaction_None`: complete | Yes | Optional | 查看留言 |
+| `TouchBloodstain` | `Interact_TouchBloodstain` | `InteractionType==TouchBloodstain` | → `Interaction_None`: complete | Yes | Optional | 查看血迹 |
+| `PlaceSummonSign` | `Interact_PlaceSummonSign` | `InteractionType==PlaceSummonSign` | → `Interaction_None`: complete | Limited | Optional | 🆕 D5新增 |
+| `LadderEnterTop` | `Ladder_EnterTop` | `InteractionType==LadderEnterTop` | → SM_Ladder handoff | No | Yes | 握手到梯子SM |
+| `LadderEnterBottom` | `Ladder_EnterBottom` | `InteractionType==LadderEnterBottom` | → SM_Ladder handoff | No | Yes | 握手到梯子SM |
+
+---
+
+## 4.5 SM_Ladder（10 States）— 最终版
+
+| State | Animation / BS | Enter Condition | Exit Condition | Can Interrupt | Root Motion | Notes |
+|---|---|---|---|---|---|---|
+| `Ladder_None` | Empty | `!bIsOnLadder` | → Enter states | No | No | 默认 |
+| `Ladder_EnterTop` | `Ladder_Enter_Top` | `bIsOnLadder && LadderEntryType==Top` | → `Ladder_ClimbDown`: complete | No | Yes | 从上方挂入 |
+| `Ladder_EnterBottom` | `Ladder_Enter_Bottom` | `bIsOnLadder && LadderEntryType==Bottom` | → `Ladder_ClimbUp`: complete | No | Yes | 从下方上梯 |
+| `Ladder_ClimbUp` | `BS_LadderClimb_1D` | `bClimbUp` | → `ClimbDown`: reversed; → `ExitTop`: `bLadderAtTop`; → `Ladder_Attack`: attack input | No | Usually No | 由LadderSpeed驱动 |
+| `Ladder_ClimbDown` | `BS_LadderClimb_1D` | `bClimbDown` | → `ClimbUp`: reversed; → `SlideDown`: `bSlideDown`; → `ExitBottom`: `bLadderAtBottom`; → `Ladder_Attack`: attack input | No | Usually No | 向下爬 |
+| `Ladder_SlideDown` | `Ladder_SlideDown` | `bSlideDown` | → `ExitBottom`: bottom reached | No | Optional | 快速下滑 |
+| `Ladder_ExitTop` | `Ladder_Exit_Top` | top reached | → `Ladder_None`: complete | No | Yes | 翻上平台 |
+| `Ladder_ExitBottom` | `Ladder_Exit_Bottom` | bottom reached | → `Ladder_None`: complete | No | Yes | 回到地面 |
+| `Ladder_Attack` | `Ladder_Kick` | `bIsOnLadder && bAttackInput` | → `ClimbUp`/`ClimbDown`: complete | No | Optional | 🆕 D3新增 |
+| `Ladder_JumpOff` | `Ladder_JumpOff` | `bIsOnLadder && bDodgeInput` | → `Ladder_None` → InAir: `bIsOnLadder=false` | No | Yes | 🆕 D3新增 |
+
+### BlendSpace
+
+| BlendSpace | Input | Samples |
+|---|---|---|
+| `BS_LadderClimb_1D` | `LadderSpeed` | ClimbDown(-) / IdleHold(0) / ClimbUp(+) |
+
+---
+
+## 4.6 SM_HitReact（15 States）— 最终版
+
+| State | Animation / BS | Enter Condition | Exit Condition | Can Interrupt | Root Motion | Notes |
+|---|---|---|---|---|---|---|
+| `Hit_None` | Empty | no hit flags | → matching state | No | No | 默认 |
+| `Hit_Light` | `Hit_Light_F/B/L/R` | `bHitReact && HitReactType==Light` | → `Hit_None`: complete; → 可被更高优先级受击打断 | `bCanBeReHit` | Optional | 轻受击，4方向 |
+| `Hit_Medium` | `Hit_Medium_F/B/L/R` | `HitReactType==Medium` | → `Hit_None`: complete | `bCanBeReHit` (limited) | Optional | 中受击 |
+| `Hit_Heavy` | `Hit_Heavy_F/B/L/R` | `HitReactType==Heavy` | → `Hit_None`: complete; → `Knockdown`: if needed | No | Optional | 重受击 |
+| `Guard_Impact` | `Guard_Impact` | `HitReactType==GuardImpact` | → `Hit_None`: complete | No | Optional | 格挡受击 |
+| `Guard_Break` | `Guard_Break` | `bGuardBreak` | → `Hit_None`: complete | No | Often Yes | 破防 |
+| `Stagger` | `Stagger` | `HitReactType==Stagger` | → `Hit_None`: complete | No | Optional | 失衡 |
+| `Knockdown` | `Knockdown` | `bKnockdown` | → `GetUp`: `bGetUp` or anim end | No | Often Yes | 倒地 |
+| `GetUp` | `GetUp` | From `Knockdown` | → `Hit_None`: complete | No | Optional | 起身（有无敌帧） |
+| `BackstabVictim` | `Victim_Backstab` | `bBackstabbed` | → `Hit_None`: complete; or → Death | No | Yes | 被背刺 |
+| `RiposteVictim` | `Victim_Riposte` | `bExecuted` | → `Hit_None`: complete; or → Death | No | Yes | 被处决 |
+| `AirHit` | `Air_Hit` | aerial hit flag | → `Knockdown` or `Hit_None` on landing | No | Optional | 空中被击 |
+| `BleedProc` | `BleedProc_React` | `HitReactType==BleedProc` | → `Hit_None`: complete | No | Optional | 🆕 D4；出血触发硬直 |
+| `FrostbiteProc` | `FrostbiteProc_React` | `HitReactType==FrostbiteProc` | → `Hit_None`: complete | No | Optional | 🆕 D4；冰冻触发 |
+| `GrabVictim` | `Victim_Grab` | `bGrabbed` | → `Hit_None`: complete; or → Death | No | Yes | 🆕 D8；Boss抓取受害 |
+
+### BlendSpace
+
+| BlendSpace | X | Y | Samples |
+|---|---|---|---|
+| `BS_HitReact_Directional` | `HitDirection` | `HitStrength` | F/B/L/R × Light/Medium/Heavy |
+
+---
+
+## 4.7 SM_Death（6 States）— 最终版
+
+| State | Animation | Enter Condition | Exit Condition | Can Interrupt | Root Motion | Notes |
+|---|---|---|---|---|---|---|
+| `Alive` | Empty | `!bDead` | → matching death state | No | No | 占位 |
+| `Death_Normal` | `Death_Normal` | `bDead && DeathType==Normal` | → `DeadLoop`: complete | No | Often Yes | 普通死亡 |
+| `Death_Fall` | `Death_Fall` | `bDead && DeathType==Fall` | → `DeadLoop`: complete | No | Often Yes | 坠落死亡 |
+| `Death_Special` | `Death_Special` | `bDead && DeathType==Special` | → `DeadLoop`: complete | No | Often Yes | 特殊死亡 |
+| `Death_Curse` | `Death_Curse` | `bDead && DeathType==Curse` | → `DeadLoop`: complete | No | Often Yes | 🆕 D4；诅咒结晶化 |
+| `DeadLoop` | `Dead_Pose` / ragdoll | death anim finished | No exit | No | No | 最终躺尸 |
+
+---
+
+# 第五部分：Additive / Overlay 层最终设计
+
+## 5.1 Additive 异常状态层（D9确认）
+
+| Layer | Type | Trigger | Notes |
+|---|---|---|---|
+| `Additive_PoisonEffect` | Additive Animation | 中毒状态持续时叠加 | 微颤/身体不适微动画，不影响State |
+| `Additive_ToxicEffect` | Additive Animation | 猛毒状态持续时叠加 | 更强的持续反应 |
+
+## 5.2 Overlay 层（无变化）
+
+| Layer / Slot | Type | Purpose |
+|---|---|---|
+| `UpperBody_Overlay` | Layered Blend Per Bone | 持盾/持弓/施法待机姿态 |
+| `Slot_FullBody` | Anim Slot | 全身强动作Montage |
+| `Slot_UpperBody` | Anim Slot | 上半身动作Montage |
+| `Additive_Aim` | AimOffset | 弓/法术瞄准偏移 |
+| `Additive_IdleBreak` | Additive | 待机呼吸等细节（可选） |
+
+---
+
+# 第六部分：最终统计
+
+| State Machine | State数 | 较原版变化 |
+|---|---|---|
+| SM_Locomotion_Base | 9 | 不变 |
+| SM_Locomotion_Combat | 6 | 不变 |
+| SM_Action | 28 | +4（Kick/Plunging/Crossbow/TwoHandToggle），-3（4个Roll合并为1个） |
+| SM_Interaction | 16 | +1（PlaceSummonSign） |
+| SM_Ladder | 10 | +2（Attack/JumpOff） |
+| SM_HitReact | 15 | +3（BleedProc/FrostbiteProc/GrabVictim） |
+| SM_Death | 6 | +1（Death_Curse） |
+| **总计** | **90** | **净增 +8** |
+
+| 资源类型 | 数量 |
+|---|---|
+| Bool 变量 | 44 |
+| Float 变量 | 14 |
+| Int 变量 | 2 |
+| Enum | 9（共~107个枚举值） |
+| BlendSpace | 9~10 |
+| Additive 层 | 2（+原有的 Aim/IdleBreak） |
+| Overlay Slot | 2（FullBody + UpperBody） |
+
+---
+
+以上为全部资料综合分析 + 你的决策确认后的**最终确认版完整设计表**。
+
+
+
+好问题，我用最直白的方式解释。
+
+---
+
+## 核心区别：谁决定"现在播什么动画"？
+
+### 方案一：Montage 驱动（文档 C 的路线）
+
+**AnimBP ���管"走路站着飞着"这几件事。**
+
+```
+AnimBP 的状态机里只有：
+  站着（Idle）
+  走路（Movement）
+  空中（InAir）
+  死了（Dead）
+
+就这么几个。
+```
+
+**攻击、翻滚、喝药、受击、开门……全部不在状态机里。**
+
+那这些动画怎么播？
+
+→ **C++ 代码直接调用 `Montage_Play()`**，强行把动画"盖"在状态机输出上面。
+
+打个比方：
+
+> 状态机就像一台**一直在播的电视**，永远在放"走路/站着"的节目。
+> 
+> 当你按下攻击键，C++ 代码就像拿了一张**不透明的海报**糊在电视屏幕上——你看到的是攻击动画（海报），但电视（状态机）其实还在后面默默播走路。
+> 
+> 攻击动画播完，海报撕掉，你又看到电视了（回到走路/站着）。
+
+这张"海报"就是 **Montage**，"糊上去"的动作就是 **Slot 覆盖**。
+
+---
+
+### 方案二：SM 全量承载（3.txt 的路线）
+
+**AnimBP 的状态机管所有事。**
+
+```
+AnimBP 的状态机里有：
+  站着、走路、冲刺、跳起、空中、落地、
+  战斗站着、战斗走路、举盾站着、举盾走路、
+  轻击第1段、轻击第2段、轻击第3段、重击、蓄力、
+  前滚、后滚、左滚、右滚、后撤步、
+  弹反、战技起手、战技派生、施法起手、施法释放、
+  喝药、用道具、拉弓、射箭、
+  拾取、开门、拉杆、开宝箱、穿雾门、点篝火、坐篝火、
+  爬梯子上、爬梯子下、滑梯子、
+  轻受击、中受击、重受击、破防、击倒、起身、被背刺、被处决、
+  普通死亡、坠落死亡、特殊死亡……
+  
+  总共90个状态。
+```
+
+每两个状态之间要写**过渡条件**（什么时候从A切到B）。
+
+打个比方：
+
+> 状态机就像一个**超级复杂的流程图**，90个方框，几百条连线。
+> 
+> 按下攻击键 → AnimBP 里的某个 Bool 变成 true → 流程图顺着箭头从"战斗站着"走到"轻击第1段" → 动画开始播 → 播完了条件变了 → 流程图又顺着箭头走到下一个方框。
+> 
+> **所有事情都在这张流程图里发生。**
+
+---
+
+## 对比总结
+
+| | Montage 驱动 | SM 全量 |
+|---|---|---|
+| **AnimBP 状态机里有什么** | 只有走路/站着/空中/死亡（~6个状态） | 所有动作全在里面（~90个状态） |
+| **攻击怎么播** | C++ 调用 `Montage_Play()`，盖在状态机上面 | 状态机内部从"Idle"过渡到"LightAttack_01" |
+| **谁做决策** | C++ 代码决定播什么、什么时候播 | AnimBP 蓝图里的过渡条件决定 |
+| **连段怎么做** | C++ 里 `JumpToSection("Combo_02")` | 状态机从 `LightAttack_01` 过渡到 `LightAttack_02`，条件是 `bCanCombo && ComboIndex==2` |
+| **需要维护什么** | C++ 组件逻辑 + 少量 AnimBP 变量 | AnimBP 里 90个 State + 几百条过渡线 + 44个 Bool |
+| **调试难度** | C++ 断点 + 少量 AnimBP 检查 | 在 AnimBP 蓝图里追踪几百条过渡线 |
+
+---
+
+## 一句话总结
+
+> **Montage 驱动** = 状态机只管走路，其他动作**由代码直接"贴"上去**
+> 
+> **SM 全量** = 状态机管一切，**全靠蓝图里的箭头和条件切换**
+
+这就是两者最本质的区别。
+
+
+
+这三款游戏的答案非常明确。
+
+---
+
+## 直接结论
+
+**黑魂3、血源诅咒、匹诺曹，全部都是"Montage 驱��"路线。**
+
+没有一个是靠 90 个 State Machine 状态来管所有动作的。
+
+---
+
+## 逐个说明
+
+### 黑魂3 / 血源诅咒（FromSoftware 自研引擎）
+
+它们不用 UE，所以没有"Montage"这个概念。但它们的做法**等价于 Montage 驱动**：
+
+| 系统 | 怎么做的 |
+|---|---|
+| 走路/站着/跑步 | 类似 State Machine 的状态切换 |
+| 攻击/翻滚/喝药/弹反/背刺/处决 | **不在状态机里**。而是玩家按键 → 代码把"动作请求"丢进一个**队列** → 引擎播放对应的动作动画，直接**覆盖**掉当前的走路/站着 |
+| 连段 | 代码检查"连段窗口是否打开" → 打开了就跳到下一段动画 |
+| 受击 | 代码收到伤害事件 → 根据方向和强度选一个受击动画 → 直接播放覆盖 |
+
+> 简单说：**FromSoft 的自研引擎里，"动作队列 + 动画覆盖"就是他们版本的 Montage。**
+
+---
+
+### 匹诺曹（UE4 引擎）
+
+匹诺曹用的就是 UE4，所以它**直接用了 UE 的 Montage 系统**：
+
+| 系统 | 怎么做的 |
+|---|---|
+| 走路/站着/空中 | AnimBP 里的 State Machine |
+| 攻击连段 | **Montage**，用 Section 分段 + Notify 控制连段窗口 |
+| 翻滚/冲刺攻击 | **Montage** |
+| 弹反/���决 | **Montage** |
+| Boss 招式 | **Montage** |
+| 输入缓冲 | 代码侧管理，Montage 里用 Notify 标记"可以接受下一个输入的窗口" |
+
+> 匹诺曹就是**文档 C 路线的实际商业案例**。
+
+---
+
+## 为什么这些游戏都不用 SM 全量？
+
+原因很直白：
+
+| 问题 | 用 SM 全量会怎样 |
+|---|---|
+| **轻击第1段 → 第2段** | 要在 State Machine 里画一条箭头，写条件 `bCanCombo && ComboIndex == 2` |
+| **换把武器，连段变了** | 每种武器的连段都要在 State Machine 里再画一套箭头 |
+| **黑魂3 有几十种武器** | SM 里要画 **几十套** 连段箭头 |
+| **加一个新武器** | 要回到 AnimBP 里加 State、加箭头、加条件 |
+
+而用 Montage：
+
+| 同样的问题 | Montage 怎么做 |
+|---|---|
+| **轻击第1段 → 第2段** | 代码调用 `JumpToSection("Combo_02")` |
+| **换把武器，连段变了** | 代码换一个 Montage 资产就行 |
+| **几十种武器** | 几十个 Montage 文件，State Machine 完全不用改 |
+| **加新武器** | 做一个新 Montage，配到 DataTable 里，**AnimBP 一行不动** |
+
+---
+
+## 一句话总结
+
+> **黑魂3、血源、匹诺曹都是：State Machine 只管走路，打架的事全交给代码 + Montage。**
+> 
+> 这和文档 C（我之前写的）的路线完全一致。
+> 
+> 3.txt 那个 90 State 的方案，**没有任何一款成功的魂like游戏是那样做的。**
+
+
+这个问题问得非常好，这确实是很多人对 Montage 的第一直觉担忧。
+
+但实际上 **Montage 的 Blend 效果并不差**，甚至可以说很好。原因如下：
+
+---
+
+## Montage 并不是"硬切"
+
+你可能想象的是这样：
+
+```
+走路动画在播 ████████████
+                          ↓ 突然一刀切断
+攻击动画开始播             ████████████
+```
+
+但实际上 Montage 是这样的：
+
+```
+走路动画在播 ████████████████
+                     ╲  BlendIn（渐入）
+攻击动画开始播          ▓▓████████████
+                                  ╲  BlendOut（渐出）
+走路动画恢复                         ▓▓█████████��██
+```
+
+**每个 Montage 都有两个关键参数：**
+
+| 参数 | 作用 | 典型值 |
+|---|---|---|
+| **BlendIn** | 从当前动画**渐变**到 Montage 动画，不是硬切 | 0.1 ~ 0.25 秒 |
+| **BlendOut** | 从 Montage 动画**渐变**回状态机的动画 | 0.15 ~ 0.3 秒 |
+
+这个渐变就是你说的 Blend。**它和 State Machine 里两个 State 之间的过渡 Blend 是完全一样的底层机制。**
+
+---
+
+## 打个比方
+
+| State Machine 的 Blend | Montage 的 Blend |
+|---|---|
+| 你从"走路"State 过渡到"攻击"State，UE 在 0.2 秒内把两个动画混合 | 你在"走路"上面贴了一个 Montage，UE 在 0.2 秒内把走路混合到攻击 |
+| **底层用的是同一个混合算法** | **底层用的是同一个混合���法** |
+
+所以 Blend 质量是**一模一样的**。
+
+---
+
+## 那为什么魂like游戏的过渡看起来这么干脆利落？
+
+因为**这类游戏故意把 BlendIn 设得很短**。
+
+这不是技术限制，而是**设计选择**：
+
+| 游戏类型 | BlendIn 时间 | 手感 |
+|---|---|---|
+| 黑魂3 / 血源 / 匹诺曹 | **0.05 ~ 0.15 秒**（很短） | 按键后角色**立刻**进入动作，手感干脆 |
+| 刺客信条 / 巫师3 | **0.2 ~ 0.4 秒**（较长） | 动画过渡丝滑，但操作感觉"黏" |
+| 格斗游戏 | **接近 0 秒** | 几乎硬切，帧数精确 |
+
+> 魂like 的"沉重感"和"即时反馈感"，恰恰来自于 **BlendIn 短 + 动画前摇长**。
+> 
+> 不是 Blend 差，而是**故意 Blend 得快**。
+
+---
+
+## Montage 还能做 SM 做不到的 Blend 技巧
+
+### 技巧 1：BlendIn Curve（混合曲线）
+
+```
+普通线性 Blend：  走路 ████▓▓▓▓ 攻击
+                        均匀过渡
+
+自定义曲线 Blend：走路 ████▓█ 攻击
+                        快速切上半身，下半身延迟跟上
+```
+
+Montage 可以设置 **Blend Curve**（线性、缓入缓出、自定义曲线），SM 的 State 过渡也能设但没那么灵活。
+
+### 技巧 2：分层 Blend（上下半身分开）
+
+```
+下半身：还在播走路 ████████████████████
+上半身：Montage 覆盖攻击动画 ████████████
+```
+
+比如 **边跑边喝药**：
+- 下半身继续走路（State Machine 输出）
+- 上半身播喝药动画（Montage 通过 UpperBody Slot 覆盖）
+
+这在 SM 里要做的话，你需要把"走路+喝药"做成一个单独的 State，**每种组合都要一个新 State**。
+
+### 技巧 3：Montage 之间的切换
+
+```
+轻击第1段 Montage 还在播 ████████████
+                              ↓ BlendIn 0.1s
+轻击第2段 Montage 开始播       ▓▓████████████
+```
+
+连段之间的 Montage 切换也是带 Blend 的，不是硬切。
+
+---
+
+## 实际对比
+
+| 场景 | SM 做法 | Montage 做法 | Blend 效果 |
+|---|---|---|---|
+| 站着 → 攻击 | Idle State → Attack State，过渡时间 0.1s | Idle 上面贴 Attack Montage，BlendIn 0.1s | **一样** |
+| 攻击 → 站着 | Attack State → Idle State，过渡时间 0.2s | Attack Montage 结束，BlendOut 0.2s 回到 SM 的 Idle | **一样** |
+| 走路 → 翻滚 | Move State → Roll State，过渡时间 0.1s | Move 上面贴 Roll Montage，BlendIn 0.1s | **一样** |
+| 攻击第1段 → 第2段 | State 过渡 0.05s | JumpToSection 或新 Montage BlendIn 0.05s | **一样** |
+| 跑步 + 喝药（上下分离） | 需要专门做一个"跑步喝药"State 或额外混合逻辑 | UpperBody Slot 播 Montage，下半身不受影响 | **Montage 更好** |
+
+---
+
+## 一句话总结
+
+> **Montage 的 Blend 和 State Machine 的 Blend 用的是同一套底层系统，效果完全一样。**
+> 
+> Montage 不是"硬贴海报"，而是"带淡入淡出的透明海报"。
+> 
+> 魂like 游戏过渡看起来"快"，不是因为 Blend 差，而是**故意设计成短 Blend + 长前摇**来制造沉重感和操作精确感。
+

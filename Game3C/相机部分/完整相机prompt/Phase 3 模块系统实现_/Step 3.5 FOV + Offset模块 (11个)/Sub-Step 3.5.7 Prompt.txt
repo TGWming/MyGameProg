@@ -1,0 +1,680 @@
+Sub-Step 3.5.7 Prompt
+
+================================================================================
+任务：在CameraModule_FOV.cpp中添加F06 Impact_FOV实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+F06提供冲击时的FOV脉冲效果，当玩家受击或命中敌人时触发。
+这是一种常见的游戏反馈技术，通过短暂的FOV变化增强打击感。
+
+【Pipeline中的位置】
+```
+FOV模块计算流程：
+1. F01:   BaseFOV = 90° (Override)
+2. F02: +5° (速度)
+3. F03: -7.5° (锁定)
+4. F04: +5° (战斗)
+5. F05: +10° (Boss)
+6. F06: -8° (冲击脉冲) ← 当前
+   → 短暂的FOV减少，然后快速恢复
+   → 创造"punch-in"效果
+```
+
+【当前进度】
+Phase 3 Step 3.5 Sub-Step 3.5.7 (共190个Sub-Step中的第93个)
+前置完成：3.5.6 F05实现 ✅
+**这是Step 3.5的最后一个Sub-Step**
+
+【任务目标】
+在CameraModule_FOV.cpp中完整实现F06模块，替换现有的占位符。
+完成后，所有6个FOV模块（F01-F06）全部实现完毕。
+
+【⚠️ 重要提醒】
+
+1. **编译前必做步骤：**
+   本Sub-Step只修改现有.  cpp文件，不添加新文件。
+   因此**不需要Regenerate**，可以直接编译。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   确认StateConfig和InputContext的字段路径与项目实际结构一致。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_FOV.cpp
+
+2. **定位修改位置：**
+
+在文件中找到F06的占位符实现部分：
+
+```cpp
+//========================================
+// F06: Impact FOV
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.5.7
+// Momentary FOV pulse on impacts
+...   占位符代码
+```
+
+**将上述占位符代码完整替换为下方的完整实现。**
+
+---
+
+3. **F06完整实现代码：**
+
+**A. 构造函数（保持不变）：**
+
+```cpp
+/**
+ * Constructor - Initialize impact state
+ */
+UCameraModule_F06_Impact_FOV::UCameraModule_F06_Impact_FOV()
+	: CurrentImpactIntensity(0.0f)
+	, bImpactActive(false)
+	, ImpactTimeRemaining(0.0f)
+{
+}
+```
+
+---
+
+**B. ShouldActivate() 实现：**
+
+```cpp
+/**
+ * ShouldActivate - Determine if impact FOV effect should be active
+ * 
+ * F06 activates when: 
+ * - Module is enabled
+ * - Impact effect is currently active (bImpactActive)
+ * - Impact intensity is above threshold
+ * 
+ * Unlike other FOV modules, F06 is triggered externally via TriggerImpact()
+ * rather than being based on game state.   This allows precise control over
+ * when the impact effect occurs.
+ * 
+ * Priority 125 (highest among FOV modules), uses Additive policy. 
+ * The high priority ensures the impact effect is visible on top of
+ * all other FOV adjustments.
+ * 
+ * Use Cases:
+ * - Player takes damage
+ * - Player lands a heavy hit
+ * - Parry/counter timing
+ * - Explosion nearby
+ * - Boss attack impacts
+ */
+bool UCameraModule_F06_Impact_FOV::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if impact effect is currently active
+	if (! bImpactActive)
+	{
+		return false;
+	}
+	
+	// Check if intensity is above minimum threshold
+	// This prevents very small lingering effects
+	const float MinIntensityThreshold = 0.01f;
+	if (CurrentImpactIntensity <= MinIntensityThreshold)
+	{
+		return false;
+	}
+	
+	// Impact is active and significant - activate module
+	return true;
+}
+```
+
+---
+
+**C.  Compute() 实现：**
+
+```cpp
+/**
+ * Compute - Calculate impact FOV pulse effect
+ * 
+ * This module creates a momentary FOV change (typically reduction)
+ * when an impact is triggered.   The effect quickly decays back to normal.
+ * 
+ * Steps:
+ * 1. Validate impact is active
+ * 2. Update impact timer
+ * 3. Check if effect has expired
+ * 4. Get impact settings from config
+ * 5. Calculate decayed intensity
+ * 6. Apply FOV offset
+ * 7. Output with Additive policy
+ * 
+ * Impact Behavior:
+ * - Trigger:  FOV instantly reduces (punch-in)
+ * - Decay: FOV smoothly returns to normal
+ * - Duration:  Typically 0.1-0.3 seconds
+ * - Curve: Exponential decay for snappy feel
+ * 
+ * FOV Change:
+ * - Negative offset: Punch-in effect (zoom in feeling)
+ * - Positive offset:  Punch-out effect (explosion feeling)
+ * - Default: Negative (punch-in)
+ * 
+ * @param Context The current pipeline execution context
+ * @param StateConfig The current camera state configuration
+ * @param OutOutput Output structure to fill with computed values
+ * @return True if computation succeeded
+ */
+bool UCameraModule_F06_Impact_FOV::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Step 1: Validate impact is active
+	if (!bImpactActive)
+	{
+		OutOutput.  FOVOutput = 0. 0f;
+		OutOutput. bHasFOVOutput = true;
+		return false;
+	}
+	
+	// Step 2: Update impact timer
+	ImpactTimeRemaining -= Context.DeltaTime;
+	
+	// Step 3: Check if effect has expired
+	if (ImpactTimeRemaining <= 0.0f)
+	{
+		// Effect has ended - reset state
+		bImpactActive = false;
+		CurrentImpactIntensity = 0.0f;
+		ImpactTimeRemaining = 0.0f;
+		
+		OutOutput. FOVOutput = 0.0f;
+		OutOutput. bHasFOVOutput = true;
+		return false;
+	}
+	
+	// Step 4: Get impact settings from config
+	float ImpactFOVAmount = StateConfig.Module. FOV.ImpactFOVAmount;
+	float ImpactDuration = StateConfig.Module.FOV.ImpactFOVDuration;
+	
+	// Default values if not configured
+	if (ImpactFOVAmount <= 0.0f)
+	{
+		ImpactFOVAmount = 10.0f;  // Default:  10 degrees
+	}
+	
+	if (ImpactDuration <= 0.0f)
+	{
+		ImpactDuration = 0.15f;  // Default: 0.15 seconds
+	}
+	
+	// Step 5: Calculate decayed intensity using exponential curve
+	// This creates a snappy "punch" feel that quickly fades
+	float NormalizedTime = ImpactTimeRemaining / ImpactDuration;
+	
+	// Exponential decay: intensity² for quick falloff
+	// At t=1. 0 (start): intensity = 1.0
+	// At t=0.5 (half): intensity = 0.25
+	// At t=0.0 (end): intensity = 0.0
+	float DecayedIntensity = CurrentImpactIntensity * NormalizedTime * NormalizedTime;
+	
+	// Step 6: Calculate FOV offset
+	// Negative for punch-in effect (most common for hits)
+	// CurrentImpactIntensity allows scaling the effect
+	float FOVOffset = -ImpactFOVAmount * DecayedIntensity;
+	
+	// Clamp to prevent extreme values
+	FOVOffset = FMath:: Clamp(FOVOffset, -25.0f, 10.0f);
+	
+	// Step 7: Fill output structure
+	OutOutput. FOVOutput = FOVOffset;
+	OutOutput.bHasFOVOutput = true;
+	OutOutput.  Weight = 1.0f;
+	
+	return true;
+}
+```
+
+---
+
+**D. TriggerImpact() 实现：**
+
+```cpp
+/**
+ * TriggerImpact - Externally trigger an FOV impact pulse
+ * 
+ * Call this function when the player takes damage, lands a hit,
+ * or any other moment that should have FOV feedback.
+ * 
+ * The intensity parameter scales the effect: 
+ * - 0.5:  Light hit (small enemy attack)
+ * - 1.0: Normal hit (standard attack)
+ * - 1.5: Heavy hit (boss attack, critical hit)
+ * - 2.0: Maximum impact (massive damage, near-death)
+ * 
+ * @param Intensity Strength of the impact effect (0.0 to 2.0)
+ */
+void UCameraModule_F06_Impact_FOV::TriggerImpact(float Intensity)
+{
+	// Clamp intensity to valid range
+	// Allow values up to 2.0 for extra heavy impacts
+	CurrentImpactIntensity = FMath::Clamp(Intensity, 0.0f, 2.0f);
+	
+	// Activate the impact effect
+	bImpactActive = true;
+	
+	// Set default duration
+	// This can be overridden by config in Compute()
+	ImpactTimeRemaining = 0.15f;  // 150ms default
+	
+	// Optional: Log for debugging
+	// UE_LOG(LogTemp, Verbose, TEXT("F06 Impact FOV:  Triggered with intensity %. 2f"), Intensity);
+}
+```
+
+---
+
+4. **完整的F06代码块（用于复制粘贴）：**
+
+```cpp
+//========================================
+// F06: Impact FOV
+//========================================
+
+/**
+ * Constructor - Initialize impact state
+ */
+UCameraModule_F06_Impact_FOV:: UCameraModule_F06_Impact_FOV()
+	: CurrentImpactIntensity(0.0f)
+	, bImpactActive(false)
+	, ImpactTimeRemaining(0.0f)
+{
+}
+
+/**
+ * ShouldActivate - Activate when impact effect is active
+ */
+bool UCameraModule_F06_Impact_FOV::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if impact is active
+	if (!bImpactActive)
+	{
+		return false;
+	}
+	
+	// Check intensity threshold
+	const float MinIntensityThreshold = 0.01f;
+	if (CurrentImpactIntensity <= MinIntensityThreshold)
+	{
+		return false;
+	}
+	
+	return true;
+}
+
+/**
+ * Compute - Calculate impact FOV pulse with exponential decay
+ */
+bool UCameraModule_F06_Impact_FOV:: Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output
+	OutOutput = CreateBaseOutput();
+	
+	// Validate impact is active
+	if (!bImpactActive)
+	{
+		OutOutput.FOVOutput = 0.0f;
+		OutOutput.bHasFOVOutput = true;
+		return false;
+	}
+	
+	// Update timer
+	ImpactTimeRemaining -= Context.DeltaTime;
+	
+	// Check if expired
+	if (ImpactTimeRemaining <= 0.0f)
+	{
+		bImpactActive = false;
+		CurrentImpactIntensity = 0.0f;
+		ImpactTimeRemaining = 0.0f;
+		
+		OutOutput. FOVOutput = 0.0f;
+		OutOutput. bHasFOVOutput = true;
+		return false;
+	}
+	
+	// Get config values
+	float ImpactFOVAmount = StateConfig. Module.FOV. ImpactFOVAmount;
+	float ImpactDuration = StateConfig. Module.FOV. ImpactFOVDuration;
+	
+	// Default values
+	if (ImpactFOVAmount <= 0.0f)
+	{
+		ImpactFOVAmount = 10.0f;
+	}
+	
+	if (ImpactDuration <= 0.0f)
+	{
+		ImpactDuration = 0.15f;
+	}
+	
+	// Calculate decayed intensity (exponential)
+	float NormalizedTime = ImpactTimeRemaining / ImpactDuration;
+	float DecayedIntensity = CurrentImpactIntensity * NormalizedTime * NormalizedTime;
+	
+	// Calculate FOV offset (negative for punch-in)
+	float FOVOffset = -ImpactFOVAmount * DecayedIntensity;
+	FOVOffset = FMath::Clamp(FOVOffset, -25.0f, 10.0f);
+	
+	// Fill output
+	OutOutput.FOVOutput = FOVOffset;
+	OutOutput.  bHasFOVOutput = true;
+	OutOutput.Weight = 1.0f;
+	
+	return true;
+}
+
+/**
+ * TriggerImpact - Trigger the FOV impact pulse
+ */
+void UCameraModule_F06_Impact_FOV::TriggerImpact(float Intensity)
+{
+	CurrentImpactIntensity = FMath::Clamp(Intensity, 0.0f, 2.0f);
+	bImpactActive = true;
+	ImpactTimeRemaining = 0.15f;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 说明指数衰减的作用
+   - 解释正负FOV偏移的含义
+   - 说明TriggerImpact的调用场景
+   - 所有注释英文
+
+2. **格式：**
+   - Tab缩进
+   - 清晰步骤标注
+   - 方法间空两行
+
+3. **防御性编程：**
+   - 验证激活状态
+   - 计时器正确更新
+   - 状态正确重置
+
+【技术说明】
+
+**F06的核心机制：**
+
+### 1. 外部触发模式
+
+**与其他模块的区别：**
+
+```
+其他FOV模块（F01-F05）：
+- 基于游戏状态自动激活
+- ShouldActivate检查Context/StateConfig
+- 持续生效
+
+F06 Impact模块：
+- 外部手动触发（TriggerImpact）
+- ShouldActivate检查内部状态
+- 短暂效果后自动结束
+
+调用方式：
+// 在受击处理代码中
+CameraManager->GetModule<UCameraModule_F06_Impact_FOV>()->TriggerImpact(1.0f);
+
+// 或通过蓝图调用（因为有UFUNCTION(BlueprintCallable)）
+```
+
+### 2. 指数衰减曲线
+
+**为什么使用 t² 而不是线性？**
+
+```
+线性衰减：
+t=1.0 → intensity=1.0
+t=0.5 → intensity=0.5
+t=0.0 → intensity=0.0
+
+效果：平均减弱，感觉拖沓
+
+指数衰减（t²）：
+t=1.0 → intensity=1.0
+t=0.5 → intensity=0.25
+t=0.0 → intensity=0.0
+
+效果：快速减弱，感觉干脆
+
+视觉时间线：
+0ms: FOV -10°（满强度）
+37ms: FOV -2. 5°（已衰减75%）
+75ms: FOV -0.6°（几乎消失）
+150ms: FOV 0°（完全恢复）
+
+好处：
+- "Punch"感觉更强烈
+- 快速恢复正常视野
+- 不干扰游戏操作
+```
+
+### 3. 强度参数的使用
+
+**Intensity参数如何影响效果：**
+
+```cpp
+TriggerImpact(0.5f);   // 轻击
+// FOVOffset = -10 × 0.5 × t² = 最大-5°
+
+TriggerImpact(1.0f);   // 标准打击
+// FOVOffset = -10 × 1.0 × t² = 最大-10°
+
+TriggerImpact(1.5f);   // 重击
+// FOVOffset = -10 × 1.5 × t² = 最大-15°
+
+TriggerImpact(2.0f);   // 致命打击
+// FOVOffset = -10 × 2.0 × t² = 最大-20°
+
+使用场景：
+- 小怪攻击:  Intensity = 0.3-0.5
+- 普通攻击:  Intensity = 0.8-1.0
+- 重攻击: Intensity = 1.2-1.5
+- Boss技能:  Intensity = 1.5-2.0
+- 濒死时: Intensity = 2.0
+```
+
+### 4. 状态管理
+
+**三个成员变量的作用：**
+
+```cpp
+float CurrentImpactIntensity;  // 当前强度（0-2）
+bool bImpactActive;             // 效果是否激活
+float ImpactTimeRemaining;      // 剩余时间
+
+状态转换：
+1. 初始状态：
+   Intensity=0, Active=false, Time=0
+
+2. 触发后：
+   Intensity=1.0, Active=true, Time=0.15
+
+3. 每帧更新：
+   Time -= DeltaTime
+   计算衰减后的FOV偏移
+
+4. 结束时：
+   Time <= 0
+   重置所有状态
+```
+
+### 5. 与相机震动的配合
+
+**完整的打击反馈系统：**
+
+```
+玩家受击时触发的效果：
+1. 相机震动（Modifier系统）
+2. FOV脉冲（F06模块）
+3. 短暂时停（游戏系统）
+4. 屏幕特效（后处理）
+
+配合调用：
+void OnPlayerHit(float Damage)
+{
+    float Intensity = FMath::Clamp(Damage / 100.0f, 0.3f, 2.0f);
+    
+    // 触发相机震动
+    CameraManager->TriggerShake(Intensity);
+    
+    // 触发FOV脉冲
+    FOVModule->TriggerImpact(Intensity);
+    
+    // 其他效果... 
+}
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] 构造函数完整（初始化3个成员变量）
+   - [ ] ShouldActivate()完整
+   - [ ] Compute()完整
+   - [ ] TriggerImpact()完整
+
+3. **逻辑正确性：**
+   - [ ] 检查bImpactActive
+   - [ ] 计时器正确减少
+   - [ ] 效果结束时重置状态
+   - [ ] 指数衰减计算正确
+   - [ ] 负FOV偏移（punch-in）
+
+4. **字段访问：**
+   - [ ] StateConfig. Module.FOV. ImpactFOVAmount
+   - [ ] StateConfig. Module.FOV. ImpactFOVDuration
+
+【注意事项】
+
+1. **不需要Regenerate**
+
+2. **字段缺失处理：**
+   ```cpp
+   // 如果配置字段不存在
+   float ImpactFOVAmount = 10.0f;   // 默认10度
+   float ImpactDuration = 0.15f;    // 默认0.15秒
+   ```
+
+3. **UE_LOG可选：**
+   ```cpp
+   // 调试用，可以注释掉
+   // UE_LOG(LogTemp, Verbose, TEXT("F06 Impact FOV:  Triggered"));
+   ```
+
+4. **测试建议：**
+   - 调用TriggerImpact(1.0f) → FOV应瞬间减少
+   - 等待0.15秒 → FOV应恢复正常
+   - 不同Intensity测试 → 效果强度应变化
+   - 确认衰减曲线平滑
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 3.5.7 完成报告
+================================================================================
+
+【修改内容】
+- 文件：CameraModule_FOV.cpp
+- 修改位置：F06模块
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ 构造函数：初始化3个成员变量
+- ✅ ShouldActivate：检查激活状态
+- ✅ Compute：指数衰减FOV脉冲
+- ✅ TriggerImpact：外部触发接口
+
+【编译结果】
+- 编译状态：[成功/失败]
+
+【最终状态】
+✅ F06完成，冲击FOV脉冲效果
+
+================================================================================
+```
+
+【🎉 Step 3.5 完成庆祝】
+
+**FOV模块系列全部完成！**
+
+完成后，FOV模块最终状态：
+- [x] ✅ F01:  Base FOV（基础视野，Override）
+- [x] ✅ F02: Speed FOV（速度视野，Additive）
+- [x] ✅ F03: Aim FOV（瞄准视野，Additive）
+- [x] ✅ F04: Combat FOV（战斗视野，Additive）
+- [x] ✅ F05: Boss FOV（Boss视野，Additive）
+- [x] ✅ F06: Impact FOV（冲击视野，Additive）
+
+**FOV模块完成度：6/6 (100%)** 🎊
+
+**模块特性总结：**
+
+| 模块 | 优先级 | 触发条件 | 典型偏移 |
+|------|--------|---------|---------|
+| F01 | 100 | 总是激活 | 基础90° |
+| F02 | 105 | 移动速度高 | +5°到+15° |
+| F03 | 115 | 瞄准/锁定 | -7.5°到-15° |
+| F04 | 110 | 战斗状态 | +2.5°到+5° |
+| F05 | 120 | Boss目标 | +10°到+20° |
+| F06 | 125 | 外部触发 | -10°到-20° |
+
+**Phase 3 总进度：**
+- [x] ✅ Step 3.1: 模块基础设施（4个文件）
+- [x] ✅ Step 3.2: Position模块（8个模块）
+- [x] ✅ Step 3.3: Rotation模块（9个模块）
+- [x] ✅ Step 3.4: Distance模块（7个模块）
+- [x] ✅ Step 3.5: FOV模块（6个模块）
+- [ ] ⏳ Step 3.6: Offset模块（5个模块）
+- [ ] ⏳ Step 3.7: Constraint模块（4个模块）
+
+**已完成模块：34/43 (79. 1%)**
+
+**下一步：**
+- Step 3.6: Offset模块（屏幕偏移控制）
+- 5个Offset模块
+
+================================================================================

@@ -1,0 +1,102 @@
+Sub-Step 4.2.6 Prompt
+
+================================================================================
+任务：在CameraModifier_Shake. cpp中添加S04 LandShake实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+S04是落地时的相机抖动，强调垂直方向，强度基于坠落高度。
+
+【当前进度】
+Phase 4 Step 4.2 Sub-Step 4.2.6 (共190个Sub-Step中的第117个)
+前置完成：4.2.5 S03实现
+
+【任务目标】
+在CameraModifier_Shake.cpp中添加S04实现。
+
+【具体要求】
+
+在S03实现之后添加：
+
+//========================================
+// S04: Land Shake
+//========================================
+
+UCameraModifier_S04_LandShake::UCameraModifier_S04_LandShake()
+    : VerticalEmphasis(2.0f)
+{
+    // Land shake - vertical emphasis
+    PositionAmplitude = 4.0f;
+    RotationAmplitude = 0.3f; // Less rotation for landing
+    ShakeFrequency = 15.0f; // Lower frequency for "heavy" landing feel
+}
+
+void UCameraModifier_S04_LandShake::OnTriggered(const FModifierTriggerData& TriggerData)
+{
+    // Generate new random seed for variation
+    RandomSeed = FMath::FRand() * 1000.0f;
+    ShakeTime = 0.0f;
+
+    // Intensity represents fall distance/impact severity
+    float IntensityScale = FMath::Clamp(TriggerData.Intensity, 0.2f, 2.0f);
+    
+    PositionAmplitude = 4.0f * IntensityScale;
+    RotationAmplitude = 0.3f * IntensityScale;
+    VerticalEmphasis = 2.0f * IntensityScale;
+
+    // Harder landings get slower frequency (feels heavier)
+    ShakeFrequency = FMath:: Lerp(18.0f, 10.0f, FMath:: Clamp(IntensityScale - 0.5f, 0.0f, 1.0f));
+
+    // Hard landings add slight FOV effect
+    if (IntensityScale > 1.0f)
+    {
+        FOVEffect = -4.0f * (IntensityScale - 1.0f);
+    }
+    else
+    {
+        FOVEffect = 0.0f;
+    }
+
+    UE_LOG(LogTemp, Verbose, TEXT("S04 LandShake: Triggered with intensity %. 2f (fall impact)"), TriggerData.Intensity);
+}
+
+void UCameraModifier_S04_LandShake::ComputeEffect(float DeltaTime, const FStageExecutionContext& Context)
+{
+    // Accumulate shake time
+    ShakeTime += DeltaTime;
+
+    // Get effective amplitude
+    float EffectiveAmp = GetEffectiveAmplitude();
+
+    // Generate base position shake
+    FVector BaseShake = GeneratePositionShake(ShakeTime, ShakeFrequency, PositionAmplitude * EffectiveAmp);
+
+    // Emphasize vertical (Z) component for landing
+    BaseShake.Z *= VerticalEmphasis;
+    
+    // Add initial downward spike at start of shake
+    float NormalizedTime = StateTime / ActiveDuration;
+    if (NormalizedTime < 0.1f)
+    {
+        // Sharp downward motion at moment of impact
+        float SpikeFactor = 1.0f - (NormalizedTime / 0.1f);
+        BaseShake.Z -= PositionAmplitude * EffectiveAmp * SpikeFactor * 2.0f;
+    }
+
+    PositionEffect = BaseShake;
+
+    // Generate rotation shake (minimal for landing)
+    RotationEffect = GenerateRotationShake(ShakeTime, ShakeFrequency, RotationAmplitude * EffectiveAmp);
+    
+    // Decay FOV effect over time
+    FOVEffect *= FMath::Max(0.0f, 1.0f - NormalizedTime);
+}
+
+【验证标准】
+- 编译通过
+- S04可触发落地抖动，强调垂直方向
+
+【输出要求】
+输出S04的完整实现代码。
+================================================================================

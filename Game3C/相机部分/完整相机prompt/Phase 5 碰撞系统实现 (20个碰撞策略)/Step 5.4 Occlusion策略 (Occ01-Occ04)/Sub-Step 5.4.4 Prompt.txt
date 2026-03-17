@@ -1,0 +1,577 @@
+Sub-Step 5.4.4 Prompt
+
+================================================================================
+任务：在CameraCollision_Occlusion. cpp中实现OC04 DitherFade + 注册到Resolver
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.  27 C++项目。
+OC04使用抖动图案实现遮挡物的淡出效果。
+
+【当前进度】
+Phase 5 Step 5. 4 Sub-Step 5.  4. 4 (共190个Sub-Step中的第166个)
+前置完成：
+- 5.4.1: CameraCollision_Occlusion.h ✅
+- 5.4.2: OcclusionBase + OC01实现 ✅
+- 5.4.3: OC02 + OC03实现 ✅
+
+这是Step 5.4的最后一个Sub-Step！
+
+【任务目标】
+1. 在CameraCollision_Occlusion. cpp中实现OC04 DitherFade
+2. 在CameraCollisionResolver.cpp中注册所有4个Occlusion策略
+
+【⚠️ 重要提醒】
+
+1. **本Sub-Step更新两个文件：**
+   - CameraCollision_Occlusion.cpp - 添加OC04实现
+   - CameraCollisionResolver.  cpp - 注册Occlusion策略
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **方法签名（与头文件一致）：**
+   - ShouldExecute:  1个参数
+   - Execute: 3个参数
+
+4. **注册策略后需要添加include**
+
+【具体要求】
+
+---
+
+## 任务1：OC04 DitherFade实现
+
+**文件：** `Source/MyProject/Private/Camera/Collision/CameraCollision_Occlusion.cpp`
+
+**找到OC04的placeholder代码，替换为以下实现：**
+
+```cpp
+//========================================
+// OC04:  Dither Fade Implementation
+//========================================
+
+/**
+ * Constructor - Configure dither fade parameters
+ * 
+ * Dither fade provides a stylized transparency effect:  
+ * - Uses stipple/dither pattern instead of alpha blending
+ * - Avoids transparency sorting issues
+ * - Works well with deferred rendering
+ */
+UCameraCollision_OC04_DitherFade::UCameraCollision_OC04_DitherFade()
+    : TargetDitherAmount(0.7f)
+    , DitherFadeSpeed(10.0f)
+    , DitherPatternScale(1.0f)
+    , bScreenSpaceDither(true)
+    , DitherParameterName(TEXT("DitherAmount"))
+    , CurrentDitherAmount(0.0f)
+{
+    Priority = 120;  // Highest priority among occlusion strategies
+    OcclusionDelay = 0.05f;  // Shorter delay for responsive dither
+    FadeSpeed = 10.0f;
+}
+
+bool UCameraCollision_OC04_DitherFade:: ShouldExecute(const FStageExecutionContext& Context) const
+{
+    return bIsEnabled;
+}
+
+bool UCameraCollision_OC04_DitherFade:: Execute(
+    const FStageExecutionContext& Context,
+    const FCollisionDetectionResult& DetectionResult,
+    FCollisionResponseOutput& OutResponse)
+{
+    // Check if character is occluded
+    bool bIsOccluded = DetectionResult.bCharacterOccluded;
+    
+    // Track new occluding actors this frame
+    TArray<TWeakObjectPtr<AActor>> NewOccludingActors;
+    float TargetDither = 0.0f;
+    
+    if (bIsOccluded)
+    {
+        // Update occlusion time
+        OcclusionTime += CachedDeltaTime;
+        
+        // Only process after delay
+        if (OcclusionTime >= OcclusionDelay)
+        {
+            TargetDither = TargetDitherAmount;
+            
+            // Perform trace to get occluding actors
+            FVector CharacterLocation = GetCharacterLocation(Context);
+            TArray<FHitResult> Hits;
+            int32 HitCount = PerformOcclusionTrace(Context, CharacterLocation, Hits);
+            
+            // Process hits
+            for (const FHitResult& Hit : Hits)
+            {
+                AActor* HitActor = Hit.GetActor();
+                if (HitActor && ShouldHandleActor(HitActor))
+                {
+                    TWeakObjectPtr<AActor> WeakActor = HitActor;
+                    NewOccludingActors.Add(WeakActor);
+                    
+                    // Add to current occluding actors
+                    AddOccludingActor(HitActor);
+                    
+                    // Initialize dither amount if new
+                    if (! ActorDitherAmounts.Contains(WeakActor))
+                    {
+                        ActorDitherAmounts.Add(WeakActor, 0.0f);
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        // Not occluded - reset
+        OcclusionTime = 0.0f;
+        TargetDither = 0.0f;
+    }
+    
+    // Interpolate global dither amount
+    CurrentDitherAmount = FMath::FInterpTo(CurrentDitherAmount, TargetDither, CachedDeltaTime, DitherFadeSpeed);
+    
+    // Update dither for each tracked actor
+    TArray<TWeakObjectPtr<AActor>> ActorsToRemove;
+    
+    for (auto& Pair : ActorDitherAmounts)
+    {
+        TWeakObjectPtr<AActor> WeakActor = Pair.Key;
+        
+        if (!  WeakActor.  IsValid())
+        {
+            ActorsToRemove. Add(WeakActor);
+            continue;
+        }
+        
+        float& CurrentActorDither = Pair.Value;
+        float ActorTargetDither = 0.0f;
+        
+        // Check if this actor is still occluding
+        if (NewOccludingActors.Contains(WeakActor))
+        {
+            ActorTargetDither = TargetDitherAmount;
+        }
+        
+        // Interpolate this actor's dither
+        CurrentActorDither = FMath::FInterpTo(CurrentActorDither, ActorTargetDither, CachedDeltaTime, DitherFadeSpeed);
+        
+        // Apply dither to actor
+        ApplyDitherToActor(WeakActor. Get(), CurrentActorDither);
+        
+        // Remove if fully faded out
+        if (CurrentActorDither < 0.01f && ActorTargetDither < 0.01f)
+        {
+            RemoveDitherFromActor(WeakActor.Get());
+            ActorsToRemove.Add(WeakActor);
+            RemoveOccludingActor(WeakActor.  Get());
+        }
+    }
+    
+    // Clean up removed actors
+    for (const TWeakObjectPtr<AActor>& WeakActor : ActorsToRemove)
+    {
+        ActorDitherAmounts.Remove(WeakActor);
+    }
+    
+    // Update current occluding actors list
+    CurrentOccludingActors = NewOccludingActors;
+    
+    // Update active state
+    SetActive(ActorDitherAmounts.Num() > 0);
+    
+    UE_LOG(LogTemp, Verbose, TEXT("OC04 DitherFade:  Occluded=%d, Actors=%d, GlobalDither=%.2f"),
+        bIsOccluded ?  1 : 0, ActorDitherAmounts.Num(), CurrentDitherAmount);
+    
+    // Dither strategy doesn't produce camera adjustments
+    return false;
+}
+
+void UCameraCollision_OC04_DitherFade:: Update(float DeltaTime, const FStageExecutionContext& Context)
+{
+    Super::Update(DeltaTime, Context);
+    
+    // Clean up stale actor references from dither map
+    TArray<TWeakObjectPtr<AActor>> StaleActors;
+    
+    for (const auto& Pair :  ActorDitherAmounts)
+    {
+        if (!  Pair.Key. IsValid())
+        {
+            StaleActors.Add(Pair.Key);
+        }
+    }
+    
+    for (const TWeakObjectPtr<AActor>& WeakActor : StaleActors)
+    {
+        ActorDitherAmounts.Remove(WeakActor);
+    }
+}
+
+void UCameraCollision_OC04_DitherFade::  Reset()
+{
+    Super::Reset();
+    
+    // Remove dither from all tracked actors
+    for (const auto& Pair :  ActorDitherAmounts)
+    {
+        if (Pair.Key.IsValid())
+        {
+            RemoveDitherFromActor(Pair.Key.Get());
+        }
+    }
+    
+    CurrentDitherAmount = 0.0f;
+    ActorDitherAmounts.  Empty();
+}
+
+void UCameraCollision_OC04_DitherFade::ApplyDitherToActor(AActor* Actor, float DitherAmount)
+{
+    if (!Actor)
+    {
+        return;
+    }
+    
+    // Get all primitive components
+    TArray<UPrimitiveComponent*> PrimitiveComponents;
+    Actor->GetComponents<UPrimitiveComponent>(PrimitiveComponents);
+    
+    for (UPrimitiveComponent* Component : PrimitiveComponents)
+    {
+        if (! Component)
+        {
+            continue;
+        }
+        
+        int32 NumMaterials = Component->GetNumMaterials();
+        for (int32 i = 0; i < NumMaterials; ++i)
+        {
+            UMaterialInstanceDynamic* DynMaterial = GetDitherMaterial(Actor);
+            
+            if (! DynMaterial)
+            {
+                UMaterialInterface* Material = Component->GetMaterial(i);
+                if (Material)
+                {
+                    DynMaterial = Component->CreateDynamicMaterialInstance(i, Material);
+                }
+            }
+            
+            if (DynMaterial)
+            {
+                // Set dither amount parameter
+                DynMaterial->SetScalarParameterValue(DitherParameterName, DitherAmount);
+                
+                // Also try common parameter names
+                DynMaterial->SetScalarParameterValue(FName("DitherOpacity"), DitherAmount);
+                DynMaterial->SetScalarParameterValue(FName("ScreenDoor"), DitherAmount);
+                
+                // Set pattern scale if using screen space dither
+                if (bScreenSpaceDither)
+                {
+                    DynMaterial->SetScalarParameterValue(FName("DitherScale"), DitherPatternScale);
+                    DynMaterial->SetScalarParameterValue(FName("PatternScale"), DitherPatternScale);
+                }
+            }
+        }
+    }
+}
+
+void UCameraCollision_OC04_DitherFade::RemoveDitherFromActor(AActor* Actor)
+{
+    if (!Actor)
+    {
+        return;
+    }
+    
+    // Reset dither to 0 (fully visible)
+    TArray<UPrimitiveComponent*> PrimitiveComponents;
+    Actor->GetComponents<UPrimitiveComponent>(PrimitiveComponents);
+    
+    for (UPrimitiveComponent* Component :  PrimitiveComponents)
+    {
+        if (!Component)
+        {
+            continue;
+        }
+        
+        int32 NumMaterials = Component->GetNumMaterials();
+        for (int32 i = 0; i < NumMaterials; ++i)
+        {
+            UMaterialInterface* Material = Component->GetMaterial(i);
+            UMaterialInstanceDynamic* DynMaterial = Cast<UMaterialInstanceDynamic>(Material);
+            
+            if (DynMaterial)
+            {
+                // Reset dither parameters
+                DynMaterial->SetScalarParameterValue(DitherParameterName, 0.0f);
+                DynMaterial->SetScalarParameterValue(FName("DitherOpacity"), 0.0f);
+                DynMaterial->SetScalarParameterValue(FName("ScreenDoor"), 0.0f);
+            }
+        }
+    }
+}
+
+UMaterialInstanceDynamic* UCameraCollision_OC04_DitherFade::GetDitherMaterial(AActor* Actor)
+{
+    if (! Actor)
+    {
+        return nullptr;
+    }
+    
+    // Find first dynamic material instance on this actor
+    TArray<UPrimitiveComponent*> PrimitiveComponents;
+    Actor->GetComponents<UPrimitiveComponent>(PrimitiveComponents);
+    
+    for (UPrimitiveComponent* Component : PrimitiveComponents)
+    {
+        if (! Component)
+        {
+            continue;
+        }
+        
+        int32 NumMaterials = Component->GetNumMaterials();
+        for (int32 i = 0; i < NumMaterials; ++i)
+        {
+            UMaterialInterface* Material = Component->GetMaterial(i);
+            UMaterialInstanceDynamic* DynMaterial = Cast<UMaterialInstanceDynamic>(Material);
+            
+            if (DynMaterial)
+            {
+                return DynMaterial;
+            }
+        }
+    }
+    
+    return nullptr;
+}
+```
+
+---
+
+## 任务2：在Resolver中注册Occlusion策略
+
+**文件：** `Source/MyProject/Private/Camera/Collision/CameraCollisionResolver.cpp`
+
+**步骤1：在文件顶部添加include（在Response include之后）：**
+
+```cpp
+// Detection Strategies (Step 5.2)
+#include "Camera/Collision/CameraCollision_Detection. h"
+
+// Response Strategies (Step 5.3)
+#include "Camera/Collision/CameraCollision_Response. h"
+
+// Occlusion Strategies (Step 5.4)
+#include "Camera/Collision/CameraCollision_Occlusion.h"
+```
+
+**步骤2：在CreateAllStrategies()函数中，找到Occlusion策略的TODO，替换为：**
+
+```cpp
+    //========================================
+    // Occlusion Strategies (OC01-OC04) - 4 strategies
+    //========================================
+    
+    RegisterStrategy(NewObject<UCameraCollision_OC01_FadeOut>(Outer));
+    RegisterStrategy(NewObject<UCameraCollision_OC02_Hide>(Outer));
+    RegisterStrategy(NewObject<UCameraCollision_OC03_PullInFurther>(Outer));
+    RegisterStrategy(NewObject<UCameraCollision_OC04_DitherFade>(Outer));
+    
+    UE_LOG(LogTemp, Log, TEXT("  Occlusion strategies registered: 4"));
+```
+
+**步骤3：更新日志统计：**
+
+```cpp
+    UE_LOG(LogTemp, Log, TEXT("CameraCollisionResolver:   Registered %d strategies (20 when complete)"),
+        RegisteredStrategies. Num());
+        
+    // Current progress
+    UE_LOG(LogTemp, Log, TEXT("  Detection:    4/4 ✓"));
+    UE_LOG(LogTemp, Log, TEXT("  Response:     5/5 ✓"));
+    UE_LOG(LogTemp, Log, TEXT("  Occlusion:  4/4 ✓"));
+    UE_LOG(LogTemp, Log, TEXT("  Recovery:   0/3"));
+    UE_LOG(LogTemp, Log, TEXT("  Special:    0/4"));
+```
+
+---
+
+【代码设计说明】
+
+### 1. OC04 DitherFade 特性
+
+```
+抖动效果实现：
+├── 使用材质参数控制抖动量
+├── 多个常用参数名尝试
+│   ├── DitherAmount（可配置）
+│   ├── DitherOpacity
+│   └── ScreenDoor
+└── 支持图案缩放（DitherScale/PatternScale）
+
+Per-Actor追踪：
+├── ActorDitherAmounts:  TMap<WeakActor, float>
+├── 每个Actor独立插值
+└── 完全淡出后自动清理
+
+执行流程：
+├── 1.  检测遮挡状态
+├── 2. 延迟后执行遮挡检测
+├── 3. 更新全局抖动量
+├── 4. 更新每个Actor的抖动量
+├── 5. 应用抖动到材质
+└── 6. 清理完全恢复的Actor
+```
+
+### 2. 四种Occlusion策略对比
+
+| 策略 | 方法 | 产生Response | 优先级 | 最佳场景 |
+|------|------|--------------|--------|----------|
+| OC01 FadeOut | Alpha透明 | ❌ | 100 | 通用 |
+| OC02 Hide | 隐藏Actor | ❌ | 105 | 性能敏感 |
+| OC03 PullInFurther | 拉近相机 | ✅ | 110 | 无法修改材质 |
+| OC04 DitherFade | 抖动图案 | ❌ | 120 | 风格化/延迟渲染 |
+
+### 3. 抖动 vs Alpha透明
+
+```
+Alpha透明（OC01）：
+├── 优点：平滑过渡
+├── 缺点：透明排序问题
+└── 需求：材质支持透明
+
+抖动透明（OC04）：
+├── 优点：无排序问题
+├── 缺点：有图案感
+└── 需求：材质支持抖动参数
+```
+
+【Step 5.4 完成验证】
+
+```
+Step 5.4 Occlusion策略：
+├── 5.4.1: CameraCollision_Occlusion. h  ✅ 头文件
+├── 5.4.2: OcclusionBase + OC01         ✅ 基类 + FadeOut
+├── 5.4.3: OC02 + OC03                  ✅ Hide + PullInFurther
+└── 5.4.4: OC04 + 注册                  ✅ DitherFade + Resolver注册
+
+Occlusion策略清单：
+├── OC01_FadeOut      ✅ 实现完成
+├── OC02_Hide         ✅ 实现完成
+├── OC03_PullInFurther ✅ 实现完成
+└── OC04_DitherFade   ✅ 实现完成
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过（0 errors）
+   - [ ] 无链接错误
+
+2. **代码完整性：**
+   - [ ] OC04 DitherFade完整实现
+   - [ ] ApplyDitherToActor()实现
+   - [ ] RemoveDitherFromActor()实现
+   - [ ] GetDitherMaterial()实现
+   - [ ] Per-Actor抖动追踪
+
+3. **注册验证：**
+   - [ ] CameraCollisionResolver. cpp包含Occlusion. h
+   - [ ] CreateAllStrategies()注册4个Occlusion策略
+   - [ ] 日志显示"Occlusion strategies registered: 4"
+
+4. **运行时验证：**
+   - [ ] Resolver初始化后有13个策略（4+5+4）
+   - [ ] 日志显示正确的策略统计
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 5.4.4 完成报告
+================================================================================
+
+【更新的文件】
+1. CameraCollision_Occlusion.cpp
+   - 添加OC04 DitherFade完整实现
+
+2. CameraCollisionResolver.cpp
+   - 添加 #include "Camera/Collision/CameraCollision_Occlusion.h"
+   - 注册4个Occlusion策略
+
+【实现的内容】
+
+OC04 DitherFade：
+- ✅ Execute() - 完整抖动淡出实现
+- ✅ Update() - 清理过期追踪
+- ✅ Reset() - 移除所有抖动
+- ✅ ApplyDitherToActor() - 应用抖动到材质
+- ✅ RemoveDitherFromActor() - 移除抖动
+- ✅ GetDitherMaterial() - 获取动态材质
+- ✅ Per-Actor独立插值
+
+Resolver注册：
+- ✅ OC01_FadeOut
+- ✅ OC02_Hide
+- ✅ OC03_PullInFurther
+- ✅ OC04_DitherFade
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【运行时日志】
+- "Occlusion strategies registered: 4"
+- "Registered 13 strategies"
+
+【最终状态】
+✅ Step 5.4 Occlusion策略全部完成
+✅ 13个策略已注册到Resolver（4 Det + 5 Res + 4 Occ）
+
+================================================================================
+```
+
+【Step 5.4 总结】
+
+```
+================================================================================
+           Step 5.4 Occlusion策略 - 100%完成
+================================================================================
+
+文件统计：
+├── 头文件：1个 (CameraCollision_Occlusion.  h)
+└── 实现文件：1个 (CameraCollision_Occlusion.cpp)
+
+类统计：
+├── 基类：1个 (UCameraCollision_OcclusionBase)
+└── 策略类：4个 (OC01-OC04)
+
+策略功能：
+├── OC01 FadeOut       - Alpha透明淡出
+├── OC02 Hide          - 完全隐藏
+├── OC03 PullInFurther - 额外拉近相机
+└── OC04 DitherFade    - 抖动图案淡出
+
+================================================================================
+```
+
+【后续步骤】
+
+Step 5.4完成后：
+- [x] ✅ Step 5.1:   基础框架（4个Sub-Step）
+- [x] ✅ Step 5.2: Detection策略（4个Sub-Step）
+- [x] ✅ Step 5.3: Response策略（4个Sub-Step）
+- [x] ✅ Step 5.4: Occlusion策略（4个Sub-Step）
+- [ ] ⏳ Step 5.5: Recovery + Special策略
+
+**Phase 5进度：4/5 Steps = 80%**
+**已注册策略：13/20 = 65%**
+
+================================================================================

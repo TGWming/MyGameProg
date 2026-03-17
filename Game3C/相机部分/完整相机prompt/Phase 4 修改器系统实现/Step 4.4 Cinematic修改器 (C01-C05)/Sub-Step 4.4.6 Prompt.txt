@@ -1,0 +1,481 @@
+Sub-Step 4.4.6 Prompt
+
+================================================================================
+任务：在CameraModifier_Cinematic.cpp中添加C04 BossIntro实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4. 27 C++项目。
+C04是Boss登场的过场相机，展示Boss的威严和战斗区域。
+
+【C04 BossIntro设计】
+```
+触发场景：
+├── 首次进入Boss区域
+├── 穿过雾门后
+├── 触发Boss战开始
+└── Boss从隐藏状态现身
+
+相机行为（三阶段）：
+Phase 1 (0-25%): 建立镜头
+├── 从玩家身后开始
+├── 缓慢推向Boss
+└── 让玩家看到战场
+
+Phase 2 (25-70%): 揭示扫视
+├── 绕Boss侧面扫视
+├── 宽FOV展示Boss体型
+└── 仰视角度强调威严
+
+Phase 3 (70-100%): 回归战斗
+├── 过渡到战斗相机位置
+├── 视角从Boss转向双方
+└── 准备进入战斗
+```
+
+【当前进度】
+Phase 4 Step 4. 4 Sub-Step 4.4.6 (共190个Sub-Step中的第131个)
+前置完成：4.4.5 C03 Riposte实现 ✅
+
+【任务目标】
+在CameraModifier_Cinematic.cpp中添加C04 BossIntro的完整实现。
+
+【⚠️ 重要提醒】
+
+1. **本Sub-Step是更新现有文件，不创建新文件**
+   因此**不需要Regenerate**，直接编译即可。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **类名必须与头文件一致：**
+   `UCameraModifier_C04_Cinematic_BossIntro`
+
+4. **在C03实现之后添加代码**
+
+【具体要求】
+
+**在CameraModifier_Cinematic.cpp的C03实现之后添加：**
+
+```cpp
+//========================================
+// C04:  Boss Intro Camera Implementation
+//========================================
+
+/**
+ * Constructor - Configure boss intro camera parameters
+ * 
+ * Boss intro is the longest and most dramatic cinematic: 
+ * - Three-phase structure (establish → reveal → return)
+ * - Wide FOV to show boss scale
+ * - Sweeping camera motion around boss
+ * - Strong letterbox for cinematic impact
+ * - Highest priority among cinematics
+ */
+UCameraModifier_C04_Cinematic_BossIntro::UCameraModifier_C04_Cinematic_BossIntro()
+	: SweepAngle(100.0f)
+	, SweepHeight(180.0f)
+	, ArenaDistance(450.0f)
+	, Phase1Ratio(0.25f)
+	, Phase2Ratio(0.45f)
+	, StartPosition(FVector:: ZeroVector)
+	, BossRevealPosition(FVector::ZeroVector)
+	, IntroPhase(0.0f)
+{
+	// Configure cinematic settings
+	CameraOffset = FVector(-350.0f, 0.0f, 150.0f);
+	HeightOffset = 150.0f;
+	CameraDistance = 450.0f;
+	CinematicFOV = 75.0f;  // Wide FOV to show boss scale
+	
+	// Strong letterbox for maximum cinematic impact
+	bApplyLetterbox = true;
+	LetterboxAmount = 0.18f;
+	
+	// Slower camera for epic feel
+	TransformInterpSpeed = 4.0f;
+	
+	// Block player input during boss intro
+	bBlockPlayerInput = true;
+}
+
+/**
+ * OnTriggered - Initialize boss intro camera state
+ * 
+ * Calculates the camera path for the three-phase intro sequence. 
+ * The camera will sweep from behind the player, around the boss,
+ * then return to a combat-ready position.
+ */
+void UCameraModifier_C04_Cinematic_BossIntro:: OnTriggered(const FModifierTriggerData& InTriggerData)
+{
+	// Call parent to store basic positions
+	Super::OnTriggered(InTriggerData);
+	
+	// Get player location
+	if (InTriggerData. SourceActor. IsValid())
+	{
+		StoredPlayerLocation = InTriggerData. SourceActor->GetActorLocation();
+	}
+	
+	// Get boss location (target actor)
+	if (InTriggerData. TargetActor. IsValid())
+	{
+		StoredTargetLocation = InTriggerData. TargetActor->GetActorLocation();
+		StoredTargetActor = InTriggerData.TargetActor;
+	}
+	
+	// Calculate direction from player to boss
+	FVector ToBoss = StoredTargetLocation - StoredPlayerLocation;
+	ToBoss. Z = 0.0f;
+	if (! ToBoss.IsNearlyZero())
+	{
+		ActionDirection = ToBoss.GetSafeNormal();
+	}
+	else
+	{
+		ActionDirection = FVector::ForwardVector;
+	}
+	
+	// Calculate right vector for sweep
+	FVector Right = FVector::CrossProduct(FVector::UpVector, ActionDirection).GetSafeNormal();
+	
+	// Calculate start position (behind player, elevated)
+	StartPosition = StoredPlayerLocation;
+	StartPosition -= ActionDirection * 300.0f;  // Behind player
+	StartPosition += FVector(0.0f, 0.0f, 150.0f);  // Elevated
+	
+	// Calculate boss reveal position (where to look during reveal)
+	// Assuming large boss, look at upper body/head area
+	BossRevealPosition = StoredTargetLocation;
+	BossRevealPosition. Z += 200.0f;  // Boss head height (adjust based on boss size)
+	
+	// Reset intro phase
+	IntroPhase = 0.0f;
+	
+	UE_LOG(LogTemp, Verbose, TEXT("C04 BossIntro:  Triggered, Boss at (%. 0f, %.0f, %.0f), SweepAngle=%.1f"),
+		StoredTargetLocation. X, StoredTargetLocation.Y, StoredTargetLocation.Z, SweepAngle);
+}
+
+/**
+ * ComputeEffect - Calculate sweeping intro camera each frame
+ * 
+ * Three-phase camera movement: 
+ * Phase 1: Establish - Start behind player, push towards boss
+ * Phase 2: Reveal - Sweep around boss in an arc
+ * Phase 3: Return - Transition back to combat camera position
+ */
+void UCameraModifier_C04_Cinematic_BossIntro::ComputeEffect(float DeltaTime, const FStageExecutionContext& Context)
+{
+	// Calculate normalized time (0-1 over duration)
+	float NormalizedTime = 0.0f;
+	if (ActiveDuration > 0.0f)
+	{
+		NormalizedTime = FMath::Clamp(TotalActiveTime / ActiveDuration, 0.0f, 1.0f);
+	}
+	IntroPhase = NormalizedTime;
+	
+	// Calculate phase boundaries
+	float Phase1End = Phase1Ratio;                    // 0.25
+	float Phase2End = Phase1Ratio + Phase2Ratio;      // 0.70
+	// Phase 3 is the remainder                        // 0.70 - 1.00
+	
+	FVector DesiredPosition;
+	FVector LookAtPoint;
+	
+	//========================================
+	// Phase 1: Establishing Shot (0% - 25%)
+	//========================================
+	if (NormalizedTime < Phase1End)
+	{
+		float PhaseProgress = NormalizedTime / Phase1End;
+		float EasedProgress = FMath:: InterpEaseInOut(0.0f, 1.0f, PhaseProgress, 2.0f);
+		
+		// Start behind player, slowly push towards boss
+		FVector PushDirection = ActionDirection;
+		float PushDistance = 150.0f * EasedProgress;
+		
+		DesiredPosition = StartPosition + PushDirection * PushDistance;
+		
+		// Slight rise during establish
+		DesiredPosition.Z += 30.0f * EasedProgress;
+		
+		// Look at:  transition from player area to boss reveal point
+		FVector PlayerLookAt = StoredPlayerLocation + FVector(0.0f, 0.0f, 100.0f);
+		LookAtPoint = FMath::Lerp(PlayerLookAt, BossRevealPosition, EasedProgress);
+	}
+	//========================================
+	// Phase 2: Boss Reveal Sweep (25% - 70%)
+	//========================================
+	else if (NormalizedTime < Phase2End)
+	{
+		float PhaseProgress = (NormalizedTime - Phase1End) / Phase2Ratio;
+		float EasedProgress = FMath::InterpEaseInOut(0.0f, 1.0f, PhaseProgress, 2.0f);
+		
+		// Arc around the boss
+		float CurrentAngle = FMath:: Lerp(0.0f, SweepAngle, EasedProgress);
+		float AngleRad = FMath::DegreesToRadians(CurrentAngle);
+		
+		// Starting direction for sweep (perpendicular to player-boss line)
+		FVector Right = FVector::CrossProduct(FVector:: UpVector, ActionDirection).GetSafeNormal();
+		
+		// Calculate position on arc around boss
+		float CosAngle = FMath::Cos(AngleRad);
+		float SinAngle = FMath::Sin(AngleRad);
+		
+		// Orbit position relative to boss
+		FVector OrbitOffset;
+		OrbitOffset = -ActionDirection * ArenaDistance * CosAngle;  // Forward/back
+		OrbitOffset += Right * ArenaDistance * SinAngle;             // Side
+		
+		// Height varies during sweep (rises to peak, then descends)
+		float HeightCurve = FMath::Sin(PhaseProgress * PI);
+		float CurrentHeight = SweepHeight + HeightCurve * 80.0f;
+		OrbitOffset.Z = CurrentHeight;
+		
+		DesiredPosition = StoredTargetLocation + OrbitOffset;
+		
+		// Always look at boss reveal point during sweep
+		LookAtPoint = BossRevealPosition;
+	}
+	//========================================
+	// Phase 3: Return to Combat (70% - 100%)
+	//========================================
+	else
+	{
+		float PhaseProgress = (NormalizedTime - Phase2End) / (1.0f - Phase2End);
+		float EasedProgress = FMath::InterpEaseInOut(0.0f, 1.0f, PhaseProgress, 2.0f);
+		
+		// End position of sweep (where we are at end of Phase 2)
+		float EndAngleRad = FMath::DegreesToRadians(SweepAngle);
+		FVector Right = FVector::CrossProduct(FVector:: UpVector, ActionDirection).GetSafeNormal();
+		
+		FVector SweepEndPos = StoredTargetLocation;
+		SweepEndPos -= ActionDirection * ArenaDistance * FMath::Cos(EndAngleRad);
+		SweepEndPos += Right * ArenaDistance * FMath:: Sin(EndAngleRad);
+		SweepEndPos. Z = StoredTargetLocation.Z + SweepHeight;
+		
+		// Calculate combat-ready position (behind and above player, looking at boss)
+		FVector CombatPosition = StoredPlayerLocation;
+		CombatPosition -= ActionDirection * 350.0f;  // Behind player
+		CombatPosition += FVector(0.0f, 0.0f, 120.0f);  // Elevated
+		
+		// Interpolate from sweep end to combat position
+		DesiredPosition = FMath::Lerp(SweepEndPos, CombatPosition, EasedProgress);
+		
+		// Look at:  transition from boss to midpoint (combat framing)
+		FVector CombatLookAt = FMath::Lerp(StoredPlayerLocation, StoredTargetLocation, 0.6f);
+		CombatLookAt. Z += 80.0f;
+		LookAtPoint = FMath:: Lerp(BossRevealPosition, CombatLookAt, EasedProgress);
+	}
+	
+	// Calculate look-at rotation
+	FRotator DesiredRotation = CalculateLookAtRotation(DesiredPosition, LookAtPoint);
+	
+	// Create target transform
+	FTransform TargetTransform;
+	TargetTransform.SetLocation(DesiredPosition);
+	TargetTransform. SetRotation(DesiredRotation. Quaternion());
+	
+	// Smooth interpolation (slower for epic feel)
+	InterpolateCameraTransform(DeltaTime, TargetTransform, TransformInterpSpeed);
+	
+	// Set override transform
+	OverrideTransform = CurrentCameraTransform;
+	bIsOverriding = true;
+	
+	// Dynamic FOV - wider during boss reveal (Phase 2)
+	float FOVValue = CinematicFOV;
+	if (NormalizedTime > Phase1End && NormalizedTime < Phase2End)
+	{
+		float RevealProgress = (NormalizedTime - Phase1End) / Phase2Ratio;
+		float FOVPunch = FMath::Sin(RevealProgress * PI) * 10.0f;
+		FOVValue += FOVPunch;  // Wider during reveal
+	}
+	FOVEffect = FOVValue - Context.Output.FOV;
+	
+	// Strong letterbox for cinematic impact
+	if (bApplyLetterbox)
+	{
+		VignetteEffect = LetterboxAmount;
+	}
+	
+	// Time dilation:  slow at the very start for dramatic entrance
+	if (NormalizedTime < 0.10f)
+	{
+		// Dramatic slow-mo at start
+		TimeDilationEffect = 0.5f;
+	}
+	else if (NormalizedTime < 0.20f)
+	{
+		// Return to normal
+		float ReturnProgress = (NormalizedTime - 0.10f) / 0.10f;
+		TimeDilationEffect = FMath:: Lerp(0.5f, 1.0f, ReturnProgress);
+	}
+	else
+	{
+		TimeDilationEffect = 1.0f;
+	}
+	
+	// Slight desaturation during intro for dramatic effect
+	SaturationEffect = 0.9f;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 构造函数说明三阶段结构
+   - 每个阶段在ComputeEffect中有清晰注释
+   - 说明这是最长的Cinematic
+   - 所有注释英文
+
+2. **格式：**
+   - Tab缩进
+   - 三个阶段用明显的注释分隔
+   - 与其他Cinematic风格一致
+
+3. **关键实现点：**
+   - 调用`Super::OnTriggered`
+   - 使用`InterpEaseInOut`平滑各阶段
+   - 设置`OverrideTransform`和`bIsOverriding`
+   - 三阶段各有不同的相机行为
+
+【技术说明】
+
+### 1. 三阶段结构
+
+```
+Phase 1: Establishing (0-25%)
+├── 相机位置：玩家身后
+├── 运动：缓慢推向Boss
+├── 视角：从玩家区域过渡到Boss
+└── 目的：让玩家看到战场
+
+Phase 2:  Reveal Sweep (25-70%)
+├── 相机位置：绕Boss弧形运动
+├── 运动：扫视 0° → SweepAngle°
+├── 视角：始终看向Boss
+└── 目的：展示Boss威严
+
+Phase 3: Return (70-100%)
+├── 相机位置：过渡到战斗位置
+├── 运动：从扫视终点到玩家身后
+├── 视角：从Boss过渡到战斗构图
+└── 目的：准备进入战斗
+```
+
+### 2. 弧形扫视计算
+
+```cpp
+// 扫视角度从0到SweepAngle
+CurrentAngle = Lerp(0, SweepAngle, Progress)
+
+// 弧形位置计算
+OrbitOffset. Forward = -ActionDir * Distance * cos(Angle)
+OrbitOffset. Right = Right * Distance * sin(Angle)
+
+// 高度随扫视有波动（中间最高）
+HeightCurve = sin(Progress * PI)  // 0 → 1 → 0
+```
+
+### 3. 与其他Cinematic对比
+
+| 特性 | C01 | C02 | C03 | C04 |
+|------|-----|-----|-----|-----|
+| 持续时间 | 2.0s | 1.5s | 1.2s | **4.0s** |
+| FOV | 65° | 62° | 55° | **75°** |
+| Letterbox | 0.15 | 0.12 | 0.10 | **0.18** |
+| Interp速度 | 6. 0 | 8.0 | 12.0 | **4.0** |
+| 优先级 | 200 | 200 | 200 | **250** |
+
+### 4. 时间线
+
+```
+0%────25%──────────70%────────100%
+│Phase1│   Phase 2   │  Phase 3  │
+│建立  │   揭示扫视   │  回归战斗  │
+
+FOV变化：
+      ___________
+     /           \
+____/             \____
+   25%           70%
+   
+高度变化（Phase 2）：
+      ___
+     /   \
+____/     \____
+   25%    70%
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过（0 errors）
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] 构造函数初始化所有成员
+   - [ ] OnTriggered计算路径关键点
+   - [ ] ComputeEffect实现三阶段
+   - [ ] 设置OverrideTransform和bIsOverriding
+
+3. **效果验证：**
+   - [ ] Phase 1: 从玩家后方推进
+   - [ ] Phase 2: 绕Boss弧形扫视
+   - [ ] Phase 3: 过渡到战斗位置
+   - [ ] FOV在揭示阶段变宽
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 4.4.6 完成报告
+================================================================================
+
+【更新的文件】
+- 文件：CameraModifier_Cinematic. cpp
+- 添加位置：C03实现之后
+
+【实现的修改器】
+- ✅ UCameraModifier_C04_Cinematic_BossIntro
+  - 构造函数：SweepAngle=100, ArenaDistance=450, FOV=75
+  - OnTriggered：计算扫视路径
+  - ComputeEffect：三阶段（建立→揭示→回归）
+
+【关键特性】
+- 最长的Cinematic（4.0秒）
+- 最宽的FOV（75°）
+- 三阶段结构
+- 弧形扫视展示Boss
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【最终状态】
+✅ C04 BossIntro实现完成
+
+================================================================================
+```
+
+【后续步骤】
+
+C04完成后：
+- [x] ✅ 4.4.1:  CameraModifier_Cinematic. h
+- [x] ✅ 4.4.2: CinematicBase实现
+- [x] ✅ 4.4.3: C01 Execution实现
+- [x] ✅ 4.4.4: C02 Backstab实现
+- [x] ✅ 4.4.5: C03 Riposte实现
+- [x] ✅ 4.4.6: C04 BossIntro实现
+- [ ] ⏳ 4.4.7: C05 BossPhase实现
+- [ ] ⏳ 4.4.8: 注册到ModifierManager
+
+**Cinematic修改器进度：4/5 = 80%**
+
+================================================================================

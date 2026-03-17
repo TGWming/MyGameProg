@@ -1,0 +1,447 @@
+Sub-Step 4.6.4 Prompt
+
+================================================================================
+任务：更新CameraStage_ModifierApply - 使用ModifierManager
+================================================================================
+
+【⚠️ 重要说明】
+原始编号4.6.6，但由于：
+1. 4.6.4（X03 FinalBlow）已在4.6.2中完成
+2. 4.6.5（注册修改器）已在4.6.3中完成
+3. 因此本任务重新编号为4.6.4
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4. 27 C++项目。
+Stage 4（ModifierApply）需要使用ModifierManager来执行真正的修改器效果。
+
+【当前进度】
+Phase 4 Step 4. 6 Sub-Step 4. 6. 4 (共190个Sub-Step中的第145个)
+前置完成：
+- 4.6.1:   CameraModifier_Special.  h ✅
+- 4.6.2: SpecialBase + X01-X03实现 ✅
+- 4.6.3: 注册Special修改器 ✅
+
+【任务目标】
+更新以下文件以使Stage 4正确使用ModifierManager：
+1. `CameraStage_ModifierApply.  h` - 添加ModifierManager引用和SetModifierManager方法
+2. `CameraStage_ModifierApply. cpp` - 实现使用ModifierManager的函数
+
+【⚠️ 重要提醒】
+
+1. **本Sub-Step是更新现有文件，不创建新文件**
+   因此**不需要Regenerate**，直接编译即可。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **需要更新两个文件：**
+   - CameraStage_ModifierApply.  h（添加成员和方法）
+   - CameraStage_ModifierApply.  cpp（实现功能）
+
+【具体要求】
+
+---
+
+## 文件1：CameraStage_ModifierApply.h 更新
+
+**添加前向声明和成员变量：**
+
+```cpp
+// Copyright Epic Games, Inc.   All Rights Reserved.  
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Camera/Pipeline/CameraStageBase.h"
+#include "CameraStage_ModifierApply.generated.  h"
+
+// Forward declarations
+class UCameraModifierManager;
+class UCameraModifierBase;
+
+/**
+ * UCameraStage_ModifierApply
+ * 
+ * Stage 4: Modifier Application
+ * 
+ * This stage applies all active camera modifiers to the camera output.
+ * Modifiers include shakes, reactions, zooms, effects, cinematics, and specials.
+ * 
+ * The stage works with ModifierManager which maintains 26 registered modifiers.
+ * Each frame, active modifiers are updated and their effects are collected
+ * into ModifierOutputs for the blend stage to apply.
+ */
+UCLASS()
+class MYPROJECT_API UCameraStage_ModifierApply : public UCameraStageBase
+{
+	GENERATED_BODY()
+
+public:
+	UCameraStage_ModifierApply();
+
+	//========================================
+	// Stage Interface
+	//========================================
+
+	virtual void Initialize(USoulsCameraManager* InCameraManager) override;
+	virtual void Execute(FStageExecutionContext& Context) override;
+	virtual FString GetStageName() const override { return TEXT("ModifierApply"); }
+
+	//========================================
+	// Modifier Manager Connection
+	//========================================
+
+	/**
+	 * Set the modifier manager for this stage
+	 * Called by SoulsCameraManager during initialization
+	 * @param InModifierManager The modifier manager to use
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Camera|Stage")
+	void SetModifierManager(UCameraModifierManager* InModifierManager);
+
+	/**
+	 * Get the connected modifier manager
+	 * @return The modifier manager, or nullptr if not set
+	 */
+	UFUNCTION(BlueprintPure, Category = "Camera|Stage")
+	UCameraModifierManager* GetModifierManager() const { return ModifierManager; }
+
+	//========================================
+	// Modifier Query
+	//========================================
+
+	/**
+	 * Check if any modifiers are currently active
+	 * @return True if at least one modifier is active
+	 */
+	UFUNCTION(BlueprintPure, Category = "Camera|Stage")
+	bool HasActiveModifiers() const;
+
+	/**
+	 * Get the number of currently active modifiers
+	 * @return Number of active modifiers
+	 */
+	UFUNCTION(BlueprintPure, Category = "Camera|Stage")
+	int32 GetActiveModifierCount() const;
+
+protected:
+	//========================================
+	// Internal Methods
+	//========================================
+
+	/**
+	 * Update all modifiers for this frame
+	 * @param Context Current execution context
+	 */
+	void UpdateModifiers(FStageExecutionContext& Context);
+
+	/**
+	 * Collect outputs from all active modifiers
+	 * @param Context Current execution context
+	 */
+	void CollectModifierOutputs(FStageExecutionContext& Context);
+
+	/**
+	 * Handle override modifiers (cinematics, death cam)
+	 * @param Context Current execution context
+	 * @return True if an override modifier is active
+	 */
+	bool HandleOverrideModifiers(FStageExecutionContext& Context);
+
+	//========================================
+	// Members
+	//========================================
+
+	/** Reference to the modifier manager */
+	UPROPERTY()
+	UCameraModifierManager* ModifierManager;
+
+	/** Cached array of active modifiers (refreshed each frame) */
+	UPROPERTY()
+	TArray<UCameraModifierBase*> CachedActiveModifiers;
+};
+```
+
+---
+
+## 文件2：CameraStage_ModifierApply.cpp 更新
+
+**完整替换实现：**
+
+```cpp
+// Copyright Epic Games, Inc.  All Rights Reserved. 
+
+#include "Camera/Pipeline/CameraStage_ModifierApply.  h"
+#include "Camera/Core/SoulsCameraManager. h"
+#include "Camera/Modifiers/CameraModifierManager.h"
+#include "Camera/Modifiers/CameraModifierBase.h"
+
+UCameraStage_ModifierApply:: UCameraStage_ModifierApply()
+	: ModifierManager(nullptr)
+{
+	StageIndex = 4;
+}
+
+void UCameraStage_ModifierApply::Initialize(USoulsCameraManager* InCameraManager)
+{
+	Super::Initialize(InCameraManager);
+	
+	UE_LOG(LogTemp, Log, TEXT("Stage4_ModifierApply:   Initialized"));
+}
+
+void UCameraStage_ModifierApply:: SetModifierManager(UCameraModifierManager* InModifierManager)
+{
+	ModifierManager = InModifierManager;
+	
+	if (ModifierManager)
+	{
+		UE_LOG(LogTemp, Log, TEXT("Stage4_ModifierApply:  ModifierManager connected with %d modifiers"),
+			ModifierManager->GetAllModifiers().Num());
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Stage4_ModifierApply:   ModifierManager set to nullptr"));
+	}
+}
+
+void UCameraStage_ModifierApply:: Execute(FStageExecutionContext& Context)
+{
+	if (!bIsEnabled)
+	{
+		return;
+	}
+	
+	// Clear previous frame's modifier outputs
+	Context.ModifierOutputs.Reset();
+	
+	// Check if we have a valid modifier manager
+	if (!ModifierManager)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Stage4_ModifierApply:   No ModifierManager available"));
+		return;
+	}
+	
+	// Update all modifiers for this frame
+	UpdateModifiers(Context);
+	
+	// Check for override modifiers first (cinematics, death cam)
+	if (HandleOverrideModifiers(Context))
+	{
+		// Override modifier is active, it takes full control
+		return;
+	}
+	
+	// Collect outputs from all active non-override modifiers
+	CollectModifierOutputs(Context);
+}
+
+bool UCameraStage_ModifierApply:: HasActiveModifiers() const
+{
+	if (ModifierManager)
+	{
+		return ModifierManager->HasActiveModifiers();
+	}
+	return false;
+}
+
+int32 UCameraStage_ModifierApply::GetActiveModifierCount() const
+{
+	if (ModifierManager)
+	{
+		return ModifierManager->GetActiveModifierCount();
+	}
+	return 0;
+}
+
+void UCameraStage_ModifierApply::UpdateModifiers(FStageExecutionContext& Context)
+{
+	if (!ModifierManager)
+	{
+		return;
+	}
+	
+	// Update all modifiers (this updates their internal state)
+	ModifierManager->UpdateModifiers(Context. DeltaTime, Context);
+	
+	// Refresh cached active modifiers list
+	CachedActiveModifiers.Reset();
+	ModifierManager->GetActiveModifiers(CachedActiveModifiers);
+}
+
+void UCameraStage_ModifierApply::CollectModifierOutputs(FStageExecutionContext& Context)
+{
+	if (!ModifierManager)
+	{
+		return;
+	}
+	
+	// Get outputs from modifier manager (already sorted by priority)
+	ModifierManager->GetActiveModifierOutputs(Context, Context.ModifierOutputs);
+	
+	// Log active modifiers (verbose)
+	if (Context.ModifierOutputs.Num() > 0)
+	{
+		UE_LOG(LogTemp, Verbose, TEXT("Stage4_ModifierApply:   Collected %d modifier outputs"),
+			Context.ModifierOutputs.Num());
+		
+		for (const FModifierOutput& Output : Context.ModifierOutputs)
+		{
+			UE_LOG(LogTemp, Verbose, TEXT("  - %s:  Weight=%.2f, FOV=%.1f, Pos=(%.1f,%.1f,%.1f)"),
+				*UEnum::GetValueAsString(Output.  ModifierType),
+				Output. Weight,
+				Output.  FOVOffset,
+				Output. PositionOffset.X, Output.PositionOffset.Y, Output.PositionOffset.Z);
+		}
+	}
+}
+
+bool UCameraStage_ModifierApply::HandleOverrideModifiers(FStageExecutionContext& Context)
+{
+	// Check for override modifiers in the active list
+	for (UCameraModifierBase* Modifier : CachedActiveModifiers)
+	{
+		if (Modifier && Modifier->IsOverrideModifier() && Modifier->IsOverriding())
+		{
+			// Get the override output
+			FModifierOutput OverrideOutput;
+			if (Modifier->GetOutput(Context, OverrideOutput))
+			{
+				// Mark as override in context
+				Context. bHasOverrideModifier = true;
+				Context. OverrideTransform = Modifier->GetOverrideTransform();
+				
+				// Still add the output for visual effects (vignette, color, etc.)
+				Context.ModifierOutputs.Add(OverrideOutput);
+				
+				UE_LOG(LogTemp, Verbose, TEXT("Stage4_ModifierApply:  Override modifier active - %s"),
+					*Modifier->GetModifierDescription());
+				
+				return true;
+			}
+		}
+	}
+	
+	return false;
+}
+```
+
+---
+
+【代码设计说明】
+
+### 1. 执行流程
+
+```
+Execute()
+├── 清空上一帧的ModifierOutputs
+├── 检查ModifierManager有效性
+├── UpdateModifiers() - 更新所有修改器状态
+├── HandleOverrideModifiers() - 检查Override修改器
+│   └── 如果有Override，设置Context标记并返回
+└── CollectModifierOutputs() - 收集普通修改器输出
+```
+
+### 2. Override修改器处理
+
+```
+Override修改器（Cinematic/DeathCam）：
+├── IsOverrideModifier() = true
+├── IsOverriding() = true（激活时）
+├── 完全接管相机Transform
+└── 其他修改器的位置/旋转效果被忽略
+    （但视觉效果如晕影仍然应用）
+```
+
+### 3. 与Blend Stage（Stage 5）的协作
+
+```
+Stage 4 输出：
+├── Context.ModifierOutputs[]  - 所有活跃修改器的输出
+├── Context.bHasOverrideModifier - Override标记
+└── Context.OverrideTransform - Override变换
+
+Stage 5 处理：
+├── 如果 bHasOverrideModifier：
+│   └── 直接使用 OverrideTransform
+└── 否则：
+    └── 混合所有 ModifierOutputs
+```
+
+### 4. 需要确认的FStageExecutionContext成员
+
+```cpp
+// 确保 FStageExecutionContext 包含以下成员：
+struct FStageExecutionContext
+{
+    // ... 现有成员 ...
+    
+    // Modifier相关（应该已存在）
+    TArray<FModifierOutput> ModifierOutputs;
+    
+    // Override相关（可能需要添加）
+    bool bHasOverrideModifier = false;
+    FTransform OverrideTransform;
+};
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过（0 errors）
+   - [ ] 无未定义符号错误
+
+2. **功能验证：**
+   - [ ] SetModifierManager正确连接
+   - [ ] HasActiveModifiers返回正确值
+   - [ ] ModifierOutputs被正确填充
+   - [ ] Override修改器被正确处理
+
+3. **日志验证：**
+   - [ ] "Stage4_ModifierApply:   ModifierManager connected with 26 modifiers"
+   - [ ] 活跃修改器时显示Verbose日志
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 4.6.4 完成报告
+================================================================================
+
+【更新的文件】
+1. CameraStage_ModifierApply.h
+   - 添加 UCameraModifierManager* ModifierManager
+   - 添加 SetModifierManager() 方法
+   - 添加 GetActiveModifierCount() 方法
+   - 添加 HandleOverrideModifiers() 方法
+
+2. CameraStage_ModifierApply.  cpp
+   - 实现 SetModifierManager()
+   - 更新 Execute() 流程
+   - 实现 UpdateModifiers()
+   - 实现 CollectModifierOutputs()
+   - 实现 HandleOverrideModifiers()
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【最终状态】
+✅ Stage 4 已更新为使用ModifierManager
+
+================================================================================
+```
+
+【后续步骤】
+
+4. 6. 4完成后：
+- [x] ✅ 4.6.1:  CameraModifier_Special. h
+- [x] ✅ 4.6.2: SpecialBase + X01-X03实现
+- [x] ✅ 4.6.3: 注册Special修改器
+- [x] ✅ 4.6.4: 更新Stage 4（当前）
+- [ ] ⏳ 4.6.5: 更新SoulsCameraManager
+
+**Phase 4. 6进度：4/5**
+
+================================================================================

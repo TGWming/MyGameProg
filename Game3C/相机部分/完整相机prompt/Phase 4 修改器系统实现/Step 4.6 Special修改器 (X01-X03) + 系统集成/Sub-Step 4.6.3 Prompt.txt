@@ -1,0 +1,141 @@
+Sub-Step 4.6.3 Prompt
+
+================================================================================
+任务：在CameraModifier_Special.cpp中添加X02 HitStop实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+X02是顿帧效果，在命中时产生极短暂的时间暂停，增强打击感。
+
+【当前进度】
+Phase 4 Step 4.6 Sub-Step 4.6.3 (共190个Sub-Step中的第144个)
+前置完成：4.6.2 X01实现
+
+【任务目标】
+在CameraModifier_Special.cpp中添加X02实现。
+
+【具体要求】
+
+在X01实现之后添加：
+
+//========================================
+// X02: Hit Stop
+//========================================
+
+UCameraModifier_X02_HitStop::UCameraModifier_X02_HitStop()
+    : FreezeIntensity(0.02f)
+    , FreezeZoom(10.0f)
+    , HitDirection(FVector::ForwardVector)
+    , CurrentHitType(EHitType:: Medium)
+{
+}
+
+void UCameraModifier_X02_HitStop::OnTriggered(const FModifierTriggerData& TriggerData)
+{
+    // Determine hit type from intensity
+    if (TriggerData.Intensity >= 2.0f)
+    {
+        CurrentHitType = EHitType::Critical;
+        FreezeIntensity = 0.01f; // Near-frozen
+        FreezeZoom = 20.0f;
+        ActiveDuration = 0.12f;
+    }
+    else if (TriggerData.Intensity >= 1.5f)
+    {
+        CurrentHitType = EHitType::Heavy;
+        FreezeIntensity = 0.02f;
+        FreezeZoom = 15.0f;
+        ActiveDuration = 0.1f;
+    }
+    else if (TriggerData. Intensity >= 1.0f)
+    {
+        CurrentHitType = EHitType::Medium;
+        FreezeIntensity = 0.03f;
+        FreezeZoom = 10.0f;
+        ActiveDuration = 0.08f;
+    }
+    else
+    {
+        CurrentHitType = EHitType::Light;
+        FreezeIntensity = 0.05f;
+        FreezeZoom = 5.0f;
+        ActiveDuration = 0.05f;
+    }
+
+    // Get hit direction
+    if (! TriggerData. SourceLocation.IsZero())
+    {
+        HitDirection = TriggerData. SourceLocation. GetSafeNormal();
+    }
+    else
+    {
+        HitDirection = FVector::ForwardVector;
+    }
+
+    UE_LOG(LogTemp, Verbose, TEXT("X02 HitStop: %s hit, freeze %. 3f, duration %.3f"),
+        (CurrentHitType == EHitType::Critical) ? TEXT("Critical") :
+        (CurrentHitType == EHitType::Heavy) ? TEXT("Heavy") :
+        (CurrentHitType == EHitType::Medium) ? TEXT("Medium") : TEXT("Light"),
+        FreezeIntensity, ActiveDuration);
+}
+
+void UCameraModifier_X02_HitStop::ComputeEffect(float DeltaTime, const FStageExecutionContext& Context)
+{
+    float EffectiveWeight = CurrentWeight * CurrentIntensity;
+    float NormalizedTime = StateTime / ActiveDuration;
+
+    // Hit stop curve - instant freeze, quick release
+    float FreezeCurve;
+    if (NormalizedTime < 0.7f)
+    {
+        // Hold freeze
+        FreezeCurve = 1.0f;
+    }
+    else
+    {
+        // Quick release
+        float ReleaseTime = (NormalizedTime - 0.7f) / 0.3f;
+        FreezeCurve = FMath::InterpEaseIn(1.0f, 0.0f, ReleaseTime, 2.0f);
+    }
+
+    // Apply time freeze
+    float CurrentFreeze = FMath:: Lerp(1.0f, FreezeIntensity, FreezeCurve * EffectiveWeight);
+    TimeDilationEffect = CurrentFreeze;
+
+    // Zoom towards action during freeze
+    DistanceEffect = -FreezeZoom * FreezeCurve * EffectiveWeight;
+
+    // Slight FOV tightening
+    FOVEffect = -3.0f * FreezeCurve * EffectiveWeight;
+
+    // Push camera slightly in hit direction
+    PositionEffect = HitDirection * 5.0f * FreezeCurve * EffectiveWeight;
+
+    // Brief white flash at impact (first frame)
+    if (NormalizedTime < 0.1f)
+    {
+        float FlashIntensity = (1.0f - NormalizedTime / 0.1f) * 0.15f * EffectiveWeight;
+        ColorTintEffect = FLinearColor(
+            1.0f + FlashIntensity,
+            1.0f + FlashIntensity,
+            1.0f + FlashIntensity,
+            1.0f
+        );
+    }
+    else
+    {
+        ColorTintEffect = FLinearColor:: White;
+    }
+
+    // Strong vignette during freeze
+    VignetteEffect = 0.2f * FreezeCurve * EffectiveWeight;
+}
+
+【验证标准】
+- 编译通过
+- X02可触发顿帧效果
+
+【输出要求】
+输出X02的完整实现代码。
+================================================================================

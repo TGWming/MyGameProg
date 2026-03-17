@@ -1,0 +1,513 @@
+Sub-Step 3.7.7 Prompt
+
+================================================================================
+任务：更新CameraStage_ModuleCompute.cpp - 集成ModuleRegistry
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4. 27 C++项目。
+更新Stage 3（模块计算阶段）以使用ModuleRegistry执行真正的模块计算。
+这是Pipeline与Module系统的关键集成点。
+
+【Pipeline中的位置】
+```
+Camera Pipeline执行流程：
+├─ Stage 1:  Input Gather（输入收集）
+├─ Stage 2: State Evaluation（状态评估）
+├─ Stage 3: Module Compute ← 当前修改
+│   ├─ 从ModuleRegistry获取激活的模块
+│   ├─ 按优先级排序执行
+│   └─ 收集所有模块输出到Context.ModuleOutputs
+├─ Stage 4: Collision Resolution（碰撞处理）
+├─ Stage 5: Blend & Solve（混合求解）
+└─ Stage 6: Apply（应用结果）
+```
+
+【当前进度】
+Phase 3 Step 3.7 Sub-Step 3.7.7 (共190个Sub-Step中的第106个)
+前置完成：3.7.6 Registry更新 ✅
+
+【任务目标】
+1. 更新CameraStage_ModuleCompute.cpp，添加Registry相关的#include
+2. 修改ExecuteModules()函数以使用ModuleRegistry
+3. 添加CreateFallbackOutputs()作为无Registry时的回退方案
+4. 更新CameraStage_ModuleCompute.h添加新函数声明
+
+【⚠️ 重要提醒】
+
+1. **编译前必做步骤：**
+   本Sub-Step修改现有. cpp和.h文件，不添加新文件。
+   因此**不需要Regenerate**，可以直接编译。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **依赖确认：**
+   - ModuleRegistry类已存在
+   - FCameraStateConfig结构已定义
+   - FModuleOutput结构已定义
+
+【具体要求】
+
+================================================================================
+第一部分：更新CameraStage_ModuleCompute.h
+================================================================================
+
+**文件路径：** Source/[ProjectName]/Public/Camera/Pipeline/CameraStage_ModuleCompute.h
+
+**在类定义中添加protected函数声明：**
+
+找到类定义的protected或private部分，添加：
+
+```cpp
+protected:
+	//========================================
+	// Helper Functions
+	//========================================
+
+	/**
+	 * Create fallback outputs when ModuleRegistry is not available
+	 * 
+	 * This provides basic camera functionality using state config values
+	 * when the module system is not properly initialized. 
+	 * 
+	 * Creates outputs for:
+	 * - Position (follow character)
+	 * - Rotation (maintain previous)
+	 * - Distance (base distance)
+	 * - FOV (base FOV)
+	 * 
+	 * @param Context Current execution context (will be modified)
+	 * @param StateConfig Current camera state configuration
+	 */
+	void CreateFallbackOutputs(FStageExecutionContext& Context, const FCameraStateConfig& StateConfig);
+```
+
+---
+
+================================================================================
+第二部分：更新CameraStage_ModuleCompute.cpp
+================================================================================
+
+**文件路径：** Source/[ProjectName]/Private/Camera/Pipeline/CameraStage_ModuleCompute. cpp
+
+**1. 在文件顶部添加#include：**
+
+```cpp
+// Include module system
+#include "Camera/Modules/CameraModuleRegistry. h"
+#include "Camera/Modules/CameraModuleBase.h"
+```
+
+---
+
+**2. 替换ExecuteModules()函数：**
+
+找到现有的ExecuteModules()函数，替换为以下完整实现：
+
+```cpp
+/**
+ * ExecuteModules - Execute all active camera modules
+ * 
+ * This is the core function of Stage 3. It: 
+ * 1. Gets the current state configuration
+ * 2. Uses ModuleRegistry to get active modules
+ * 3. Executes each module in priority order
+ * 4. Collects all outputs into Context.ModuleOutputs
+ * 
+ * If ModuleRegistry is not available, falls back to basic outputs. 
+ * 
+ * @param Context Current execution context (will be modified)
+ */
+void UCameraStage_ModuleCompute::ExecuteModules(FStageExecutionContext& Context)
+{
+	// Clear previous module outputs
+	Context. ModuleOutputs. Empty();
+
+	//========================================
+	// Step 1: Get current state configuration
+	//========================================
+	
+	FCameraStateConfig StateConfig;
+	
+	if (Context.Manager)
+	{
+		USoulsCameraStateMachine* StateMachine = Context.Manager->GetStateMachine();
+		if (StateMachine)
+		{
+			StateMachine->GetCurrentStateConfig(StateConfig);
+		}
+	}
+
+	//========================================
+	// Step 2: Check ModuleRegistry availability
+	//========================================
+	
+	// Get ModuleRegistry from Manager
+	UCameraModuleRegistry* Registry = nullptr;
+	
+	if (Context. Manager)
+	{
+		Registry = Context.Manager->GetModuleRegistry();
+	}
+	
+	// If no registry available, use fallback outputs
+	if (!Registry)
+	{
+		CreateFallbackOutputs(Context, StateConfig);
+		return;
+	}
+
+	//========================================
+	// Step 3: Update module activation states
+	//========================================
+	
+	// Let registry update which modules should be active
+	// based on current context and state config
+	Registry->UpdateModuleStates(Context, StateConfig);
+
+	//========================================
+	// Step 4: Get active modules sorted by priority
+	//========================================
+	
+	TArray<UCameraModuleBase*> ActiveModules;
+	Registry->GetActiveModules(Context, StateConfig, ActiveModules);
+	
+	// If no active modules, use fallback
+	if (ActiveModules.Num() == 0)
+	{
+		CreateFallbackOutputs(Context, StateConfig);
+		return;
+	}
+
+	//========================================
+	// Step 5: Execute each active module
+	//========================================
+	
+	for (UCameraModuleBase* Module :  ActiveModules)
+	{
+		// Skip null modules
+		if (! Module)
+		{
+			continue;
+		}
+		
+		// Execute module computation
+		FModuleOutput Output;
+		bool bSuccess = Module->Compute(Context, StateConfig, Output);
+		
+		// Only add output if computation succeeded
+		if (bSuccess)
+		{
+			Context. ModuleOutputs. Add(Output);
+		}
+	}
+}
+```
+
+---
+
+**3. 添加CreateFallbackOutputs()函数：**
+
+在ExecuteModules()之后添加：
+
+```cpp
+/**
+ * CreateFallbackOutputs - Create basic outputs when ModuleRegistry is unavailable
+ * 
+ * This function provides minimal camera functionality when the module
+ * system is not properly initialized. It creates basic outputs for
+ * position, rotation, distance, and FOV based on state config values.
+ * 
+ * Use Cases:
+ * - ModuleRegistry not yet initialized
+ * - Error during module system setup
+ * - Testing without full module system
+ * 
+ * @param Context Current execution context (will be modified)
+ * @param StateConfig Current camera state configuration
+ */
+void UCameraStage_ModuleCompute::CreateFallbackOutputs(
+	FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig)
+{
+	//========================================
+	// Position Output (P01 equivalent)
+	//========================================
+	
+	FModuleOutput PositionOutput;
+	PositionOutput.ModuleType = ECameraModuleType::Module_P01_FollowTarget;
+	PositionOutput.Priority = 100;
+	PositionOutput. BlendPolicy = EBlendPolicy::Override;
+	PositionOutput.Weight = 1.0f;
+	
+	// Calculate focus point:  character location + configured offsets
+	FVector FocusPoint = Context.InputContext.CharacterLocation;
+	
+	// Add focus offset from config
+	FVector FocusOffset = StateConfig.StateBase.Offset.FocusOffset;
+	FocusPoint += FocusOffset;
+	
+	// Add vertical offset
+	float VerticalOffset = StateConfig.StateBase.Offset. VerticalOffset;
+	FocusPoint.Z += VerticalOffset;
+	
+	PositionOutput. PositionOutput = FocusPoint;
+	PositionOutput.bHasPositionOutput = true;
+	
+	Context.ModuleOutputs.Add(PositionOutput);
+
+	//========================================
+	// Rotation Output (R01 equivalent)
+	//========================================
+	
+	FModuleOutput RotationOutput;
+	RotationOutput. ModuleType = ECameraModuleType:: Module_R01_PlayerInput_Free;
+	RotationOutput.Priority = 100;
+	RotationOutput.BlendPolicy = EBlendPolicy::Override;
+	RotationOutput.Weight = 1.0f;
+	
+	// Use previous camera rotation to maintain continuity
+	// This prevents camera from snapping to a default orientation
+	RotationOutput.RotationOutput = Context.InputContext.PreviousCameraRotation;
+	RotationOutput.bHasRotationOutput = true;
+	
+	Context.ModuleOutputs.Add(RotationOutput);
+
+	//========================================
+	// Distance Output (D01 equivalent)
+	//========================================
+	
+	FModuleOutput DistanceOutput;
+	DistanceOutput. ModuleType = ECameraModuleType:: Module_D01_BaseDistance;
+	DistanceOutput. Priority = 100;
+	DistanceOutput.BlendPolicy = EBlendPolicy::Override;
+	DistanceOutput. Weight = 1.0f;
+	
+	// Get base distance from config
+	float BaseDistance = StateConfig.StateBase.Distance.BaseDistance;
+	
+	// Use default if not configured
+	if (BaseDistance <= 0.0f)
+	{
+		BaseDistance = 400.0f;  // Default:  4 meters
+	}
+	
+	DistanceOutput.DistanceOutput = BaseDistance;
+	DistanceOutput.bHasDistanceOutput = true;
+	
+	Context.ModuleOutputs.Add(DistanceOutput);
+
+	//========================================
+	// FOV Output (F01 equivalent)
+	//========================================
+	
+	FModuleOutput FOVOutput;
+	FOVOutput. ModuleType = ECameraModuleType:: Module_F01_BaseFOV;
+	FOVOutput.Priority = 100;
+	FOVOutput.BlendPolicy = EBlendPolicy::Override;
+	FOVOutput.Weight = 1.0f;
+	
+	// Get base FOV from config
+	float BaseFOV = StateConfig.StateBase.FOV. BaseFOV;
+	
+	// Use default if not configured
+	if (BaseFOV <= 0.0f)
+	{
+		BaseFOV = 90.0f;  // Default: 90 degrees
+	}
+	
+	FOVOutput.FOVOutput = BaseFOV;
+	FOVOutput.bHasFOVOutput = true;
+	
+	Context.ModuleOutputs.Add(FOVOutput);
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 每个Step都有注释说明
+   - 函数前有详细文档注释
+   - 所有注释英文
+
+2. **格式：**
+   - Tab缩进
+   - 清晰的区块分隔
+   - 方法间空两行
+
+3. **防御性编程：**
+   - 空指针检查
+   - 默认值处理
+   - 模块数量为0时回退
+
+【技术说明】
+
+**ExecuteModules()的执行流程：**
+
+### 1. 整体流程图
+
+```
+ExecuteModules()
+       │
+       ├─ 1. 清空之前的输出
+       │
+       ├─ 2. 获取StateConfig
+       │
+       ├─ 3. 获取ModuleRegistry
+       │      └─ 没有?  → CreateFallbackOutputs()
+       │
+       ├─ 4. 更新模块激活状态
+       │      └─ Registry->UpdateModuleStates()
+       │
+       ├─ 5. 获取激活的模块列表
+       │      └─ Registry->GetActiveModules()
+       │      └─ 没有激活模块? → CreateFallbackOutputs()
+       │
+       └─ 6. 执行每个模块
+              └─ Module->Compute() → ModuleOutputs
+```
+
+### 2. ModuleRegistry接口
+
+```cpp
+// 需要ModuleRegistry提供的接口：
+UCameraModuleRegistry* GetModuleRegistry();  // from Manager
+void UpdateModuleStates(Context, StateConfig);
+void GetActiveModules(Context, StateConfig, OutArray);
+```
+
+### 3. 回退输出的作用
+
+```
+正常流程：
+39个模块按优先级执行 → 多个ModuleOutput
+
+回退流程：
+4个基础Output → 保证相机能工作
+
+回退输出包括：
+- Position:  跟随角色
+- Rotation: 保持之前的朝向
+- Distance: 使用配置的基础距离
+- FOV: 使用配置的基础FOV
+```
+
+### 4. 与Stage 5的衔接
+
+```
+Stage 3输出：
+Context.ModuleOutputs = [Output1, Output2, ...]
+
+Stage 5读取：
+读取Context.ModuleOutputs
+按BlendPolicy混合
+生成最终Camera参数
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] . h文件添加函数声明
+   - [ ] .cpp文件添加#include
+   - [ ] ExecuteModules()完整实现
+   - [ ] CreateFallbackOutputs()完整实现
+
+3. **逻辑正确性：**
+   - [ ] 正确获取Registry
+   - [ ] 空Registry时回退
+   - [ ] 无激活模块时回退
+   - [ ] 模块输出正确收集
+
+4. **接口依赖：**
+   - [ ] Context.Manager->GetModuleRegistry()存在
+   - [ ] Context.Manager->GetStateMachine()存在
+   - [ ] Registry->UpdateModuleStates()存在
+   - [ ] Registry->GetActiveModules()存在
+
+【注意事项】
+
+1. **不需要Regenerate**
+
+2. **接口检查：**
+   确认以下接口已定义：
+   ```cpp
+   // 在SoulsCameraManager中
+   UCameraModuleRegistry* GetModuleRegistry() const;
+   
+   // 在CameraModuleRegistry中
+   void UpdateModuleStates(const FStageExecutionContext& Context, const FCameraStateConfig& StateConfig);
+   void GetActiveModules(const FStageExecutionContext& Context, const FCameraStateConfig& StateConfig, TArray<UCameraModuleBase*>& OutModules);
+   ```
+
+3. **UE_LOG已移除：**
+   原始PROMPT中的UE_LOG已移除。如需调试，可自行添加。
+
+4. **枚举名称：**
+   确认ECameraModuleType的枚举值名称：
+   - `Module_P01_FollowTarget`
+   - `Module_R01_PlayerInput_Free`
+   - `Module_D01_BaseDistance`
+   - `Module_F01_BaseFOV`
+
+5. **字段名称：**
+   - 原始PROMPT用`PositionOffset`，修改版用`PositionOutput`
+   - 请确认FModuleOutput中的实际字段名
+
+---
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 3.7.7 完成报告
+================================================================================
+
+【第一部分：头文件更新】
+- 文件：CameraStage_ModuleCompute.h
+- 添加：CreateFallbackOutputs()声明
+
+【第二部分：源文件更新】
+- 文件：CameraStage_ModuleCompute. cpp
+- 添加Include：2个
+- 修改函数：ExecuteModules()
+- 添加函数：CreateFallbackOutputs()
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误信息：[如有]
+
+【接口确认】
+- GetModuleRegistry()：[存在/需添加]
+- UpdateModuleStates()：[存在/需添加]
+- GetActiveModules()：[存在/需添加]
+
+【最终状态】
+✅ Stage 3与ModuleRegistry集成完成
+
+================================================================================
+```
+
+---
+
+【后续步骤】
+
+本Sub-Step完成后，Phase 3核心功能基本完成：
+- [x] ✅ 3.7.1-3.7.5:  所有Constraint模块实现
+- [x] ✅ 3.7.6: ModuleRegistry更新
+- [x] ✅ 3.7.7: Stage 3集成
+
+**可能的后续：**
+- 验证整个Pipeline的运行
+- 添加缺失的接口实现
+- 进入Phase 4或其他阶段
+
+================================================================================

@@ -1,0 +1,633 @@
+Sub-Step 5.5.   7 Prompt
+
+================================================================================
+任务：更新SoulsCameraManager - 创建和连接CollisionResolver
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.           27 C++项目。
+更新Manager以创建CollisionResolver并连接到Stage 6。
+
+【当前进度】
+Phase 5 Step 5.          5 Sub-Step 5.5.  7 (共190个Sub-Step中的第174个)
+前置完成：5.5.6 SP03-SP04 + 注册所有策略 ✅
+这是Step 5.5和Phase 5的最后一个Sub-Step！
+
+【任务目标】
+1. 更新SoulsCameraManager. h - 添加CollisionResolver声明和接口
+2. 更新SoulsCameraManager.cpp - 创建CollisionResolver并连接到Stage 6
+3. 更新CameraStage_CollisionResolve.h/. cpp - 添加Resolver引用
+
+【⚠️ 重要提醒】
+
+1. **本Sub-Step更新现有文件，不创建新文件**
+   因此**不需要Regenerate**，直接编译即可。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **枚举名称使用：**
+   - 使用 `ECollisionStrategyID` 而非 `ECameraCollisionType`
+
+4. **这是Phase 5的最后一步！**
+   完成后Phase 5碰撞系统100%完成。
+
+【具体要求】
+
+---
+
+## 第一部分：更新SoulsCameraManager.h
+
+**文件路径：** `Source/MyProject/Public/Camera/Core/SoulsCameraManager.h`
+
+**在文件顶部添加前向声明（在现有前向声明区域）：**
+
+```cpp
+// Forward declarations (add these if not present)
+class UCameraCollisionResolver;
+```
+
+**在类的protected或private区域添加成员变量：**
+
+```cpp
+protected:
+    //========================================
+    // Sub-Systems
+    //========================================
+
+    // ...  existing members ...
+
+    /** Collision resolver (20 strategies) */
+    UPROPERTY()
+    UCameraCollisionResolver* CollisionResolver;
+```
+
+**在类的public区域添加接口函数：**
+
+```cpp
+public:
+    //========================================
+    // Collision System Interface
+    //========================================
+
+    /**
+     * Get collision resolver
+     * @return Collision resolver instance
+     */
+    UFUNCTION(BlueprintPure, Category = "Camera|Collision")
+    UCameraCollisionResolver* GetCollisionResolver() const { return CollisionResolver; }
+
+    /**
+     * Check if collision is currently active
+     * @return True if camera is in collision
+     */
+    UFUNCTION(BlueprintPure, Category = "Camera|Collision")
+    bool IsCollisionActive() const;
+
+    /**
+     * Check if camera is in recovery mode
+     * @return True if recovering from collision
+     */
+    UFUNCTION(BlueprintPure, Category = "Camera|Collision")
+    bool IsInCollisionRecovery() const;
+
+    /**
+     * Check if character is currently occluded from camera view
+     * @return True if character is occluded
+     */
+    UFUNCTION(BlueprintPure, Category = "Camera|Collision")
+    bool IsCharacterOccluded() const;
+
+    /**
+     * Check if lock-on target is currently occluded from camera view
+     * @return True if target is occluded
+     */
+    UFUNCTION(BlueprintPure, Category = "Camera|Collision")
+    bool IsTargetOccluded() const;
+
+    /**
+     * Get current collision-adjusted camera distance
+     * @return Current safe distance
+     */
+    UFUNCTION(BlueprintPure, Category = "Camera|Collision")
+    float GetCollisionAdjustedDistance() const;
+
+    /**
+     * Enable or disable a specific collision strategy
+     * @param StrategyType Strategy to enable/disable
+     * @param bEnabled Whether to enable or disable
+     */
+    UFUNCTION(BlueprintCallable, Category = "Camera|Collision")
+    void SetCollisionStrategyEnabled(ECollisionStrategyID StrategyType, bool bEnabled);
+
+    /**
+     * Enable or disable collision debug visualization
+     * @param bEnabled Whether to enable debug drawing
+     */
+    UFUNCTION(BlueprintCallable, Category = "Camera|Collision|Debug")
+    void SetCollisionDebugEnabled(bool bEnabled);
+```
+
+---
+
+## 第二部分：更新SoulsCameraManager.cpp
+
+**文件路径：** `Source/MyProject/Private/Camera/Core/SoulsCameraManager.cpp`
+
+**在文件顶部添加include（如果还没有）：**
+
+```cpp
+// Collision System
+#include "Camera/Collision/CameraCollisionResolver.h"
+#include "Camera/Collision/CameraCollisionBase.h"
+
+// Stage 6 for Collision Resolver connection
+#include "Camera/Pipeline/CameraStage_CollisionResolve.h"
+```
+
+**找到CreateSubSystems()或初始化函数，添加CollisionResolver创建：**
+
+```cpp
+void USoulsCameraManager::CreateSubSystems()
+{
+    UE_LOG(LogTemp, Log, TEXT("SoulsCameraManager:   Creating sub-systems...  "));
+
+    // Create State Machine
+    StateMachine = NewObject<USoulsCameraStateMachine>(this);
+    if (StateMachine)
+    {
+        StateMachine->Initialize(this);
+    }
+
+    // Create Module Registry (39 modules)
+    ModuleRegistry = NewObject<UCameraModuleRegistry>(this);
+    if (ModuleRegistry)
+    {
+        ModuleRegistry->Initialize(this);
+    }
+
+    // Create Modifier Manager (26 modifiers)
+    ModifierManager = NewObject<UCameraModifierManager>(this);
+    if (ModifierManager)
+    {
+        ModifierManager->Initialize(this);
+    }
+
+    // Create Collision Resolver (20 strategies)
+    CollisionResolver = NewObject<UCameraCollisionResolver>(this);
+    if (CollisionResolver)
+    {
+        CollisionResolver->Initialize(this);
+    }
+
+    // Create Pipeline
+    Pipeline = NewObject<USoulsCameraPipeline>(this);
+    if (Pipeline)
+    {
+        Pipeline->Initialize(this);
+    }
+
+    // Create and register all stages
+    CreateAndRegisterStages();
+
+    UE_LOG(LogTemp, Log, TEXT("SoulsCameraManager:      All sub-systems created"));
+    UE_LOG(LogTemp, Log, TEXT("   - StateMachine:   Ready"));
+    UE_LOG(LogTemp, Log, TEXT("   - ModuleRegistry:   %d modules"), 
+        ModuleRegistry ?  ModuleRegistry->GetModuleCount() :   0);
+    UE_LOG(LogTemp, Log, TEXT("   - ModifierManager:   %d modifiers"), 
+        ModifierManager ? ModifierManager->GetModifierCount() :    0);
+    UE_LOG(LogTemp, Log, TEXT("   - CollisionResolver:    %d strategies"), 
+        CollisionResolver ? CollisionResolver->GetStrategyCount() :    0);
+    UE_LOG(LogTemp, Log, TEXT("   - Pipeline:  %d stages"), 
+        Pipeline ? Pipeline->GetStageCount() :    0);
+}
+```
+
+**更新CreateAndRegisterStages()中Stage 6的创建（如果该函数存在）：**
+
+```cpp
+void USoulsCameraManager::  CreateAndRegisterStages()
+{
+    if (! Pipeline)
+    {
+        return;
+    }
+
+    // ...  existing stages 1-5 ... 
+
+    // Stage 6: Collision Resolve
+    UCameraStage_CollisionResolve* Stage6 = NewObject<UCameraStage_CollisionResolve>(this);
+    if (Stage6)
+    {
+        Stage6->SetCollisionResolver(CollisionResolver);
+        Pipeline->RegisterStage(6, Stage6);
+        
+        UE_LOG(LogTemp, Verbose, TEXT("SoulsCameraManager:     Stage 6 (CollisionResolve) connected to CollisionResolver"));
+    }
+
+    // ...  existing stages 7-8 ...
+}
+```
+
+**实现碰撞系统接口函数：**
+
+```cpp
+//========================================
+// Collision System Interface Implementation
+//========================================
+
+bool USoulsCameraManager::IsCollisionActive() const
+{
+    if (CollisionResolver)
+    {
+        return CollisionResolver->IsCollisionActive();
+    }
+    return false;
+}
+
+bool USoulsCameraManager:: IsInCollisionRecovery() const
+{
+    if (CollisionResolver)
+    {
+        return CollisionResolver->IsInRecovery();
+    }
+    return false;
+}
+
+bool USoulsCameraManager::IsCharacterOccluded() const
+{
+    if (CollisionResolver)
+    {
+        const FCollisionState& State = CollisionResolver->GetCollisionState();
+        return State.bCharacterOccluded;
+    }
+    return false;
+}
+
+bool USoulsCameraManager::  IsTargetOccluded() const
+{
+    if (CollisionResolver)
+    {
+        const FCollisionState& State = CollisionResolver->GetCollisionState();
+        return State.bTargetOccluded;
+    }
+    return false;
+}
+
+float USoulsCameraManager::GetCollisionAdjustedDistance() const
+{
+    if (CollisionResolver)
+    {
+        const FCollisionState& State = CollisionResolver->GetCollisionState();
+        return State.CurrentDistance;
+    }
+    return 0.0f;
+}
+
+void USoulsCameraManager::SetCollisionStrategyEnabled(ECollisionStrategyID StrategyType, bool bEnabled)
+{
+    if (CollisionResolver)
+    {
+        UCameraCollisionBase* Strategy = CollisionResolver->GetStrategy(StrategyType);
+        if (Strategy)
+        {
+            Strategy->SetEnabled(bEnabled);
+            
+            UE_LOG(LogTemp, Verbose, TEXT("SoulsCameraManager:    Strategy %s %s"),
+                *UEnum::GetValueAsString(StrategyType),
+                bEnabled ?  TEXT("enabled") : TEXT("disabled"));
+        }
+    }
+}
+
+void USoulsCameraManager::  SetCollisionDebugEnabled(bool bEnabled)
+{
+    if (CollisionResolver)
+    {
+        CollisionResolver->SetDebugEnabled(bEnabled);
+        
+        UE_LOG(LogTemp, Log, TEXT("SoulsCameraManager:     Collision debug %s"),
+            bEnabled ?  TEXT("enabled") :    TEXT("disabled"));
+    }
+}
+```
+
+---
+
+## 第三部分：更新CameraStage_CollisionResolve.h
+
+**文件路径：** `Source/MyProject/Public/Camera/Pipeline/CameraStage_CollisionResolve. h`
+
+**添加前向声明和成员：**
+
+```cpp
+// Forward declaration
+class UCameraCollisionResolver;
+
+/**
+ * UCameraStage_CollisionResolve
+ * 
+ * Stage 6:  Camera collision detection and resolution
+ */
+UCLASS()
+class MYPROJECT_API UCameraStage_CollisionResolve :   public UObject, public ICameraStage
+{
+    GENERATED_BODY()
+
+public:
+    // ... existing interface methods ...
+
+    //========================================
+    // Collision Resolver Integration
+    //========================================
+
+    /**
+     * Set collision resolver reference
+     * @param InResolver Collision resolver to use
+     */
+    void SetCollisionResolver(UCameraCollisionResolver* InResolver);
+
+    /**
+     * Get collision resolver
+     * @return Current collision resolver
+     */
+    UCameraCollisionResolver* GetCollisionResolver() const { return CollisionResolver; }
+
+protected:
+    /** Reference to collision resolver */
+    UPROPERTY()
+    UCameraCollisionResolver* CollisionResolver;
+
+    /** Fallback collision detection when resolver not available */
+    void PerformBasicCollisionCheck(FStageExecutionContext& Context);
+};
+```
+
+---
+
+## 第四部分：更新CameraStage_CollisionResolve.cpp
+
+**文件路径：** `Source/MyProject/Private/Camera/Pipeline/CameraStage_CollisionResolve.cpp`
+
+**添加include：**
+
+```cpp
+#include "Camera/Collision/CameraCollisionResolver.h"
+```
+
+**实现SetCollisionResolver：**
+
+```cpp
+void UCameraStage_CollisionResolve::  SetCollisionResolver(UCameraCollisionResolver* InResolver)
+{
+    CollisionResolver = InResolver;
+    
+    if (CollisionResolver)
+    {
+        UE_LOG(LogTemp, Verbose, TEXT("Stage6_CollisionResolve:     CollisionResolver connected (%d strategies)"),
+            CollisionResolver->GetStrategyCount());
+    }
+}
+```
+
+**更新Execute方法使用CollisionResolver：**
+
+```cpp
+void UCameraStage_CollisionResolve::Execute(FStageExecutionContext& Context)
+{
+    if (!bEnabled)
+    {
+        return;
+    }
+
+    // Use CollisionResolver if available
+    if (CollisionResolver && CollisionResolver->IsInitialized())
+    {
+        // Let the resolver handle all collision logic
+        CollisionResolver->ResolveCollisions(Context);
+        
+        // Update resolver with delta time
+        CollisionResolver->Update(Context.DeltaTime, Context);
+    }
+    else
+    {
+        // Fallback to basic collision check
+        PerformBasicCollisionCheck(Context);
+    }
+}
+```
+
+**实现PerformBasicCollisionCheck fallback：**
+
+```cpp
+void UCameraStage_CollisionResolve::  PerformBasicCollisionCheck(FStageExecutionContext& Context)
+{
+    // Basic line trace fallback when CollisionResolver is not available
+    UWorld* World = GEngine ?  GEngine->GetWorldFromContextObject(this, EGetWorldErrorMode:: ReturnNull) :   nullptr;
+    if (! World)
+    {
+        return;
+    }
+
+    FVector FocusPoint = Context.Output. FocusPoint;
+    FVector CameraDirection = -Context.Output.  Rotation.Vector();
+    float TargetDistance = Context. Output.  Distance;
+    FVector TargetCameraPos = FocusPoint + CameraDirection * TargetDistance;
+
+    FCollisionQueryParams Params;
+    Params.  bTraceComplex = false;
+    Params. AddIgnoredActor(GetOuter());  // Ignore owner
+
+    FHitResult Hit;
+    if (World->LineTraceSingleByChannel(Hit, FocusPoint, TargetCameraPos, ECC_Camera, Params))
+    {
+        // Collision detected - adjust distance
+        float SafeDistance = FMath::Max(Hit.Distance - 10. 0f, 50.0f);
+        Context.Output. Distance = SafeDistance;
+        Context.Output. bCollisionAdjusted = true;
+
+        UE_LOG(LogTemp, Verbose, TEXT("Stage6_CollisionResolve:  Basic collision at %. 2f, safe distance %.  2f"),
+            Hit.Distance, SafeDistance);
+    }
+}
+```
+
+---
+
+【代码设计说明】
+
+### 1. Manager与CollisionResolver的关系
+
+```
+USoulsCameraManager
+├── CreateSubSystems()
+│   └── CollisionResolver = NewObject<UCameraCollisionResolver>()
+│       └── Initialize(this) → 创建20个策略
+├── CreateAndRegisterStages()
+│   └── Stage6->SetCollisionResolver(CollisionResolver)
+└── 公共接口
+    ├── GetCollisionResolver()
+    ├── IsCollisionActive()
+    ├── IsCharacterOccluded()
+    ├── SetCollisionStrategyEnabled()
+    └── SetCollisionDebugEnabled()
+```
+
+### 2. Stage 6执行流程
+
+```
+UCameraStage_CollisionResolve:: Execute()
+├── 检查CollisionResolver是否可用
+├── 如果可用：
+│   ├── CollisionResolver->ResolveCollisions(Context)
+│   └── CollisionResolver->Update(DeltaTime, Context)
+└── 如果不可用：
+    └── PerformBasicCollisionCheck(Context)  // Fallback
+```
+
+### 3. 提供的公共接口
+
+| 函数 | 作用 |
+|------|------|
+| `GetCollisionResolver()` | 获取Resolver实例 |
+| `IsCollisionActive()` | 查询碰撞状态 |
+| `IsInCollisionRecovery()` | 查询恢复状态 |
+| `IsCharacterOccluded()` | 查询角色遮挡 |
+| `IsTargetOccluded()` | 查询目标遮挡 |
+| `GetCollisionAdjustedDistance()` | 获取调整后距离 |
+| `SetCollisionStrategyEnabled()` | 启用/禁用策略 |
+| `SetCollisionDebugEnabled()` | 启用/禁用调试 |
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过（0 errors）
+   - [ ] 无链接错误
+
+2. **运行时验证：**
+   - [ ] CollisionResolver正确创建
+   - [ ] 20个策略正确注册
+   - [ ] Stage 6连接到Resolver
+   - [ ] 日志显示正确信息
+
+3. **功能验证：**
+   - [ ] 碰撞检测工作正常
+   - [ ] 遮挡处理工作正常
+   - [ ] 公共接口可调用
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 5.5.  7 完成报告
+================================================================================
+
+【更新的文件】
+
+文件1：SoulsCameraManager. h
+- 添加CollisionResolver成员变量
+- 添加8个碰撞系统公共接口
+
+文件2：SoulsCameraManager. cpp
+- 添加CollisionResolver创建代码
+- 添加Stage 6连接代码
+- 实现8个碰撞系统接口
+
+文件3：CameraStage_CollisionResolve. h
+- 添加CollisionResolver引用
+- 添加SetCollisionResolver方法
+- 添加PerformBasicCollisionCheck声明
+
+文件4：CameraStage_CollisionResolve.cpp
+- 实现SetCollisionResolver
+- 更新Execute使用Resolver
+- 实现fallback检测
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【运行时日志（预期）】
+- "CameraCollisionResolver:    Registered 20 strategies"
+- "SoulsCameraManager:     CollisionResolver:   20 strategies"
+- "Stage6_CollisionResolve:      CollisionResolver connected"
+
+【最终状态】
+✅ CollisionResolver创建并连接完成
+✅ Stage 6集成完成
+✅ 公共接口可用
+✅ Phase 5 碰撞系统 100% 完成！
+
+================================================================================
+```
+
+---
+
+【Phase 5 完成总结】
+
+```
+================================================================================
+           🎉 Phase 5 碰撞系统 - 100% 完成！ 🎉
+================================================================================
+
+【Step 5.1】碰撞基类与解析器
+├── ✅ CameraCollisionBase.h/.cpp
+└── ✅ CameraCollisionResolver.h/.cpp
+
+【Step 5.2】Detection策略 (4个)
+├── ✅ D01 SingleRay
+├── ✅ D02 SphereSweep
+├── ✅ D03 MultiRay
+└── ✅ D04 MultiSphereSweep
+
+【Step 5.3】Response策略 (5个)
+├── ✅ RS01 PullIn
+├── ✅ RS02 Slide
+├── ✅ RS03 Orbit
+├── ✅ RS04 FOVCompensate
+└── ✅ RS05 InstantSnap
+
+【Step 5.4】Occlusion策略 (4个)
+├── ✅ OC01 FadeOut
+├── ✅ OC02 Hide
+├── ✅ OC03 PullInFurther
+└── ✅ OC04 DitherFade
+
+【Step 5.5】Recovery + Special + 系统集成 (7个策略)
+├── ✅ RC01 DelayedRecovery
+├── ✅ RC02 SmoothRecovery
+├── ✅ RC03 StepRecovery
+├── ✅ SP01 TightSpace
+├── ✅ SP02 LowCeiling
+├── ✅ SP03 CliffEdge
+├── ✅ SP04 CornerCase
+└── ✅ Manager集成完成
+
+【Phase 5 统计】
+- 新创建文件：14个
+- 更新文件：4个
+- 碰撞策略：20个
+- Sub-Steps：7个
+
+【文件清单】
+Camera/Collision/
+├── CameraCollisionBase.h/. cpp
+├── CameraCollisionResolver. h/.cpp
+├── CameraCollision_Detection.h/.  cpp
+├── CameraCollision_Response.h/. cpp
+├── CameraCollision_Occlusion.h/. cpp
+├── CameraCollision_Recovery.h/.  cpp
+└── CameraCollision_Special.h/. cpp
+
+更新的文件：
+├── Camera/Core/SoulsCameraManager. h/. cpp
+└── Camera/Pipeline/CameraStage_CollisionResolve.h/. cpp
+
+================================================================================
+           Phase 5 碰撞系统全部完成！可进入Phase 6！
+================================================================================
+```
+
+================================================================================

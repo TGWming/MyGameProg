@@ -1,0 +1,149 @@
+Sub-Step 5.2.5 Prompt
+
+================================================================================
+任务：在CameraCollision_Detection.cpp中添加Det04 Predictive实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Det04是预测性碰撞检测，根据移动趋势提前检测即将发生的碰撞。
+
+【当前进度】
+Phase 5 Step 5.2 Sub-Step 5.2.5 (共190个Sub-Step中的第157个)
+前置完成：5.2.4 Det03实现
+这是Step 5.2的最后一个Sub-Step。
+
+【任务目标】
+在CameraCollision_Detection. cpp中添加Det04实现。
+
+【具体要求】
+
+在Det03实现之后添加：
+
+//========================================
+// Det04: Predictive
+//========================================
+
+UCameraCollision_Det04_Predictive:: UCameraCollision_Det04_Predictive()
+    : PredictionTime(0.2f)
+    , MinSpeedForPrediction(50.0f)
+    , PreviousCameraPosition(FVector::ZeroVector)
+    , PreviousFocusPoint(FVector::ZeroVector)
+    , CameraVelocity(FVector::ZeroVector)
+    , bHasPreviousData(false)
+{
+}
+
+bool UCameraCollision_Det04_Predictive::Execute(
+    const FStageExecutionContext& Context,
+    const FCameraStateConfig& StateConfig,
+    const FCollisionDetectionResult& DetectionResult,
+    FCollisionResponseOutput& OutResponse)
+{
+    FCollisionDetectionResult& MutableResult = const_cast<FCollisionDetectionResult&>(DetectionResult);
+
+    // Calculate current camera position
+    FVector FocusPoint = Context.Output. FocusPoint;
+    FVector CameraDirection = -Context. Output.Rotation.Vector();
+    float TargetDistance = Context.Output.Distance;
+    FVector CurrentCameraPosition = FocusPoint + CameraDirection * TargetDistance;
+
+    // Calculate camera velocity
+    if (bHasPreviousData && Context.DeltaTime > 0.0f)
+    {
+        CameraVelocity = (CurrentCameraPosition - PreviousCameraPosition) / Context.DeltaTime;
+    }
+    else
+    {
+        CameraVelocity = FVector:: ZeroVector;
+    }
+
+    // Store for next frame
+    PreviousCameraPosition = CurrentCameraPosition;
+    PreviousFocusPoint = FocusPoint;
+    bHasPreviousData = true;
+
+    // Check if moving fast enough for prediction
+    float Speed = CameraVelocity.Size();
+    if (Speed < MinSpeedForPrediction)
+    {
+        bIsActive = false;
+        return false;
+    }
+
+    // Calculate predicted position
+    FVector PredictedCameraPosition = CurrentCameraPosition + CameraVelocity * PredictionTime;
+    FVector PredictedFocusPoint = FocusPoint + (Context.InputContext.CharacterVelocity * PredictionTime);
+
+    // Setup trace
+    FCollisionQueryParams Params;
+    Params. bTraceComplex = false;
+    Params.AddIgnoredActor(Context.InputContext.CharacterActor.Get());
+    if (Context.InputContext.TargetActor.IsValid())
+    {
+        Params.AddIgnoredActor(Context.InputContext.TargetActor.Get());
+    }
+
+    // Check for collision along predicted path
+    FHitResult Hit;
+    bool bHit = LineTrace(CurrentCameraPosition, PredictedCameraPosition, Hit, Params);
+
+    if (!bHit)
+    {
+        // Also check from predicted focus to predicted camera
+        bHit = LineTrace(PredictedFocusPoint, PredictedCameraPosition, Hit, Params);
+    }
+
+    if (bHit)
+    {
+        // Collision predicted - calculate safe distance
+        MutableResult.bCollisionDetected = true;
+        MutableResult.HitResult = Hit;
+        MutableResult.CollisionNormal = Hit.ImpactNormal;
+
+        // Calculate time until collision
+        float DistanceToHit = FVector:: Dist(CurrentCameraPosition, Hit.ImpactPoint);
+        float TimeToCollision = (Speed > 0.0f) ? (DistanceToHit / Speed) : PredictionTime;
+
+        // Calculate safe distance based on how soon collision will occur
+        // Closer collision = more aggressive response
+        float Urgency = 1.0f - FMath::Clamp(TimeToCollision / PredictionTime, 0.0f, 1.0f);
+
+        float SafeOffset = StateConfig.Collision.Detection.CollisionPadding * (1.0f + Urgency);
+        MutableResult.SafeDistance = FMath::Max(
+            TargetDistance - (MutableResult.AdjustmentAmount * Urgency),
+            StateConfig. Collision.Detection.MinCameraDistance
+        );
+
+        // Safe location
+        MutableResult.SafeLocation = FocusPoint + CameraDirection * MutableResult.SafeDistance;
+
+        // Adjustment scaled by urgency
+        MutableResult.AdjustmentAmount = (TargetDistance - MutableResult. SafeDistance) * Urgency;
+
+        UE_LOG(LogTemp, Verbose, TEXT("Det04 Predictive:  Collision predicted in %.2fs, urgency %.2f"),
+            TimeToCollision, Urgency);
+
+        bIsActive = true;
+        return true;
+    }
+
+    bIsActive = false;
+    return false;
+}
+
+【Step 5.2 完成验证】
+Detection策略（Det01-Det04）全部实现：
+- Det01 RayCast:  简单射线检测
+- Det02 SphereSweep: 球体扫描检测
+- Det03 MultiRay: 多射线检测
+- Det04 Predictive: 预测性检测
+
+【验证标准】
+- 编译通过
+- 所有4个Detection策略可工作
+- 检测结果正确填充FCollisionDetectionResult
+
+【输出要求】
+输出Det04的完整实现代码。
+================================================================================

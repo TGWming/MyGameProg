@@ -1,0 +1,4 @@
+ModifierID,ModifierName,ChineseName,Category,TriggerEvent,Duration,BlendInTime,BlendOutTime,Priority,AffectsPosition,AffectsRotation,AffectsFOV,Description
+X01,Special_SlowMotion,慢动作补偿,Special,进入慢动作,慢动作持续,0.05,0.1,180,true,true,false,慢动作时相机的特殊处理
+X02,Special_HitStop,打击顿帧,Special,重攻击命中,0.05-0.1,0.0,0.02,190,false,false,false,命中时的短暂时间冻结配合
+X03,Special_DeathCam,死亡相机,Special,玩家死亡,2.0,0.1,0.0,255,true,true,true,死亡时的特殊相机行为

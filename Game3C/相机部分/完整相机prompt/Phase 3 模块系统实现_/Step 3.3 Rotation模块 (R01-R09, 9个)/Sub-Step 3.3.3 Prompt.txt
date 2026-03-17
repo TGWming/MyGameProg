@@ -1,0 +1,761 @@
+Sub-Step 3.3.3 Prompt
+
+================================================================================
+任务：在CameraModule_Rotation.cpp中添加R02 PlayerInput_Lagged实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+R02在R01基础上添加平滑/惯性效果，提供更电影化的相机移动体验。
+使用指数插值实现帧率无关的平滑旋转。
+
+【当前进度】
+Phase 3 Step 3.3 Sub-Step 3.3.3 (共190个Sub-Step中的第71个)
+前置完成：3.3.2 R01实现 ✅
+
+【任务目标】
+在CameraModule_Rotation.cpp中完整实现R02模块，替换现有的占位符。
+
+【⚠️ 重要提醒】
+
+1. **编译前必做步骤：**
+   本Sub-Step只修改现有. cpp文件，不添加新文件。
+   因此**不需要Regenerate**，可以直接编译。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   确认StateConfig的字段路径与项目实际结构一致。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_Rotation. cpp
+
+2. **定位修改位置：**
+
+在文件中找到R02的占位符实现部分：
+
+```cpp
+//========================================
+// R02: Player Input Lagged - Smoothed camera rotation
+//========================================
+
+// TODO: Will be implemented in Sub-Step 3.3.3
+// ...  占位符代码
+```
+
+**将上述占位符代码完整替换为下方的完整实现。**
+
+---
+
+3. **R02完整实现代码：**
+
+**A. 构造函数实现（已存在，保持或增强）：**
+
+**当前占位符代码：**
+```cpp
+UCameraModule_R02_PlayerInput_Lagged:: UCameraModule_R02_PlayerInput_Lagged()
+	: TargetRotation(FRotator::ZeroRotator)
+	, SmoothedRotation(FRotator::ZeroRotator)
+	, bInitialized(false)
+{
+}
+```
+
+**保持不变或增强注释：**
+```cpp
+/**
+ * Constructor - Initialize interpolation state
+ * 
+ * Sets up default values for smooth rotation interpolation. 
+ * TargetRotation and SmoothedRotation will be properly initialized
+ * when the module activates.
+ */
+UCameraModule_R02_PlayerInput_Lagged::UCameraModule_R02_PlayerInput_Lagged()
+	: TargetRotation(FRotator::ZeroRotator)
+	, SmoothedRotation(FRotator::ZeroRotator)
+	, bInitialized(false)
+{
+}
+```
+
+---
+
+**B. OnActivate() 实现（已存在，保持或增强）：**
+
+**当前占位符代码：**
+```cpp
+void UCameraModule_R02_PlayerInput_Lagged::OnActivate(const FStageExecutionContext& Context)
+{
+	Super::OnActivate(Context);
+	
+	// Initialize to previous camera rotation
+	TargetRotation = Context.InputContext.PreviousCameraRotation;
+	SmoothedRotation = Context.InputContext.PreviousCameraRotation;
+	bInitialized = true;
+}
+```
+
+**保持或增强注释：**
+```cpp
+/**
+ * OnActivate - Initialize rotation state when module becomes active
+ * 
+ * When R02 activates, we initialize both TargetRotation and SmoothedRotation
+ * to the previous camera rotation to avoid sudden jumps on the first frame.
+ * This ensures smooth transition when switching from another rotation module.
+ * 
+ * @param Context The current pipeline execution context
+ */
+void UCameraModule_R02_PlayerInput_Lagged:: OnActivate(const FStageExecutionContext& Context)
+{
+	Super::OnActivate(Context);
+	
+	// Initialize both rotations to previous camera rotation
+	// This avoids initial jump when module activates
+	TargetRotation = Context.InputContext.PreviousCameraRotation;
+	SmoothedRotation = Context. InputContext.PreviousCameraRotation;
+	
+	// Mark as initialized
+	bInitialized = true;
+}
+```
+
+---
+
+**C. ShouldActivate() 实现（需要完整实现）：**
+
+**当前占位符代码：**
+```cpp
+bool UCameraModule_R02_PlayerInput_Lagged::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Placeholder:  Will be properly implemented in Sub-Step 3.3.3
+	// For now, never activate (R01 takes precedence)
+	return false;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * ShouldActivate - Determine if lagged camera input should be active
+ * 
+ * R02 activates when:
+ * - Module is enabled
+ * - No target is locked (free camera, not lock-on)
+ * - Input is not explicitly ignored (StateConfig flag)
+ * - Rotation lag is explicitly enabled in StateConfig
+ * 
+ * R02 has the same priority as R01, so they are mutually exclusive.
+ * The StateConfig flag bEnableRotationLag determines which one activates.
+ * 
+ * Use Cases:
+ * - Cinematic camera movements
+ * - Smooth, less responsive controls (some players prefer this)
+ * - Reducing motion sickness
+ */
+bool UCameraModule_R02_PlayerInput_Lagged:: ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Don't activate when target is locked
+	// Lock-on rotation modules (R03-R05) handle that
+	if (Context.InputContext.bHasTarget)
+	{
+		return false;
+	}
+	
+	// Check if input is explicitly ignored (cinematic states, etc.)
+	if (StateConfig.StateBase.Flags.bIgnoreInput)
+	{
+		return false;
+	}
+	
+	// Check if rotation lag is explicitly enabled
+	// This is the key difference from R01
+	// If bEnableRotationLag is false, R01 will activate instead
+	if (!StateConfig.Module.Rotation.bEnableRotationLag)
+	{
+		return false;
+	}
+	
+	// All conditions met - activate lagged camera control
+	return true;
+}
+```
+
+**说明：**
+- 与R01相似的激活条件
+- 额外检查bEnableRotationLag标志
+- 与R01互斥（同优先级，由配置决定）
+
+**⚠️ StateConfig字段注意：**
+如果没有bEnableRotationLag字段，可以使用替代方案：
+```cpp
+// 替代方案1：检查LagSpeed是否>0
+float LagSpeed = StateConfig.StateBase.Lag. RotationLagSpeed;
+if (LagSpeed <= 0.0f)
+{
+	return false;
+}
+
+// 替代方案2：总是不激活，让R01处理
+return false;
+```
+
+---
+
+**D. Compute() 实现（需要完整实现）：**
+
+**当前占位符代码：**
+```cpp
+bool UCameraModule_R02_PlayerInput_Lagged::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Placeholder: Will be properly implemented in Sub-Step 3.3.3
+	OutOutput = CreateBaseOutput();
+	OutOutput.RotationOutput = SmoothedRotation;
+	OutOutput.bHasRotationOutput = true;
+	return true;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * Compute - Calculate smoothly lagged rotation from player input
+ * 
+ * This module provides cinematic smooth rotation using interpolation.
+ * Unlike R01 which directly applies input, R02 interpolates towards
+ * the target rotation, creating a lagged, smooth effect.
+ * 
+ * Steps:
+ * 1. Initialize if first frame
+ * 2. Get camera input from InputContext
+ * 3. Calculate target rotation from input (same as R01)
+ * 4. Clamp pitch and normalize yaw (same as R01)
+ * 5. Smoothly interpolate SmoothedRotation towards TargetRotation
+ * 6. Output the smoothed rotation
+ * 
+ * Key Difference from R01:
+ * - R01:  Input directly controls CurrentRotation (immediate response)
+ * - R02: Input controls TargetRotation, SmoothedRotation interpolates to it (delayed response)
+ * 
+ * The interpolation uses RInterpTo for proper rotational interpolation,
+ * which handles angle wrapping correctly (e.g., 359° → 1°).
+ * 
+ * @param Context The current pipeline execution context
+ * @param StateConfig The current camera state configuration
+ * @param OutOutput Output structure to fill with computed values
+ * @return True if computation succeeded
+ */
+bool UCameraModule_R02_PlayerInput_Lagged::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Step 1: Initialize if first frame (safety check)
+	// OnActivate should handle this, but double-check for safety
+	if (!bInitialized)
+	{
+		TargetRotation = Context.InputContext.PreviousCameraRotation;
+		SmoothedRotation = Context.InputContext.PreviousCameraRotation;
+		bInitialized = true;
+	}
+	
+	// Step 2: Get camera input from InputContext
+	FVector2D CameraInput = Context.InputContext.CameraInput;
+	
+	// Step 3: Get sensitivity from state config
+	float InputSensitivity = StateConfig. Module.Rotation.InputSensitivity;
+	
+	// If InputSensitivity not configured, use default
+	if (InputSensitivity <= 0.0f)
+	{
+		InputSensitivity = 1.0f;
+	}
+	
+	// Step 4: Calculate target rotation deltas from input
+	// This is identical to R01's input processing
+	float DeltaYaw = CameraInput.X * InputSensitivity;
+	float DeltaPitch = CameraInput.Y * InputSensitivity * -1.0f;  // Invert pitch
+	
+	// Step 5: Accumulate deltas to target rotation
+	// Input directly controls TargetRotation (not SmoothedRotation)
+	TargetRotation.Yaw += DeltaYaw;
+	TargetRotation. Pitch += DeltaPitch;
+	
+	// Step 6: Clamp pitch on target rotation
+	float MinPitch = StateConfig.StateBase.Rotation.MinPitch;
+	float MaxPitch = StateConfig.StateBase. Rotation.MaxPitch;
+	
+	// Validate pitch limits are reasonable
+	if (MinPitch >= MaxPitch)
+	{
+		MinPitch = -80.0f;
+		MaxPitch = 80.0f;
+	}
+	
+	TargetRotation.Pitch = FMath::Clamp(TargetRotation.Pitch, MinPitch, MaxPitch);
+	
+	// Step 7: Normalize yaw on target rotation
+	TargetRotation.Yaw = FMath::Fmod(TargetRotation.Yaw, 360.0f);
+	if (TargetRotation. Yaw < 0.0f)
+	{
+		TargetRotation.Yaw += 360.0f;
+	}
+	
+	// Step 8: Force roll to zero
+	TargetRotation.Roll = 0.0f;
+	
+	// Step 9: Get rotation lag speed from state config
+	float LagSpeed = StateConfig.StateBase.Lag.RotationLagSpeed;
+	
+	// If LagSpeed not configured or invalid, use default
+	if (LagSpeed <= 0.0f)
+	{
+		LagSpeed = 5.0f;  // Default:  moderate smoothing
+	}
+	
+	// Step 10: Smoothly interpolate SmoothedRotation towards TargetRotation
+	// Use RInterpTo for proper rotational interpolation
+	// RInterpTo handles angle wrapping correctly (e.g., 359° → 1° goes through 360°, not backwards)
+	SmoothedRotation = FMath::RInterpTo(
+		SmoothedRotation,      // Current rotation
+		TargetRotation,        // Target rotation
+		Context.DeltaTime,     // Delta time
+		LagSpeed               // Interpolation speed
+	);
+	
+	// Alternative: Use manual interpolation with GetInterpAlpha (same as Position modules)
+	// float InterpAlpha = GetInterpAlpha(Context.DeltaTime, LagSpeed);
+	// SmoothedRotation. Pitch = FMath::FInterpTo(SmoothedRotation.Pitch, TargetRotation.Pitch, Context.DeltaTime, LagSpeed);
+	// SmoothedRotation.Yaw = FMath::FInterpTo(SmoothedRotation.Yaw, TargetRotation. Yaw, Context.DeltaTime, LagSpeed);
+	// SmoothedRotation.Roll = 0.0f;
+	
+	// Step 11: Fill output structure
+	OutOutput.RotationOutput = SmoothedRotation;
+	OutOutput.bHasRotationOutput = true;
+	
+	return true;
+}
+```
+
+**说明：**
+- 双状态系统：TargetRotation（输入目标）+ SmoothedRotation（平滑输出）
+- 输入处理与R01相同（DeltaYaw/DeltaPitch）
+- 使用FMath::RInterpTo进行旋转插值
+- RInterpTo正确处理角度环绕（359°→1°）
+
+---
+
+4. **完整的R02代码块（用于复制粘贴）：**
+
+如果AGENT需要完整的代码块，提供以下版本：
+
+```cpp
+//========================================
+// R02: Player Input Lagged - Smoothed camera rotation
+//========================================
+
+/**
+ * Constructor - Initialize interpolation state
+ */
+UCameraModule_R02_PlayerInput_Lagged::UCameraModule_R02_PlayerInput_Lagged()
+	: TargetRotation(FRotator::ZeroRotator)
+	, SmoothedRotation(FRotator::ZeroRotator)
+	, bInitialized(false)
+{
+}
+
+/**
+ * OnActivate - Initialize rotation state when module becomes active
+ */
+void UCameraModule_R02_PlayerInput_Lagged::OnActivate(const FStageExecutionContext& Context)
+{
+	Super::OnActivate(Context);
+	
+	// Initialize both rotations to previous camera rotation
+	TargetRotation = Context.InputContext.PreviousCameraRotation;
+	SmoothedRotation = Context.InputContext.PreviousCameraRotation;
+	bInitialized = true;
+}
+
+/**
+ * ShouldActivate - Activate when rotation lag is enabled
+ */
+bool UCameraModule_R02_PlayerInput_Lagged::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Don't activate when target is locked
+	if (Context.InputContext.bHasTarget)
+	{
+		return false;
+	}
+	
+	// Check if input is explicitly ignored
+	if (StateConfig.StateBase.Flags.bIgnoreInput)
+	{
+		return false;
+	}
+	
+	// Check if rotation lag is explicitly enabled
+	if (! StateConfig.Module.Rotation. bEnableRotationLag)
+	{
+		return false;
+	}
+	
+	return true;
+}
+
+/**
+ * Compute - Calculate smoothly lagged rotation from player input
+ */
+bool UCameraModule_R02_PlayerInput_Lagged:: Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output
+	OutOutput = CreateBaseOutput();
+	
+	// Initialize if first frame (safety check)
+	if (!bInitialized)
+	{
+		TargetRotation = Context.InputContext.PreviousCameraRotation;
+		SmoothedRotation = Context.InputContext.PreviousCameraRotation;
+		bInitialized = true;
+	}
+	
+	// Get camera input
+	FVector2D CameraInput = Context.InputContext.CameraInput;
+	
+	// Get sensitivity
+	float InputSensitivity = StateConfig.Module. Rotation.InputSensitivity;
+	if (InputSensitivity <= 0.0f)
+	{
+		InputSensitivity = 1.0f;
+	}
+	
+	// Calculate target rotation deltas
+	float DeltaYaw = CameraInput. X * InputSensitivity;
+	float DeltaPitch = CameraInput.Y * InputSensitivity * -1.0f;
+	
+	// Accumulate to target rotation
+	TargetRotation.Yaw += DeltaYaw;
+	TargetRotation.Pitch += DeltaPitch;
+	
+	// Clamp pitch
+	float MinPitch = StateConfig.StateBase.Rotation.MinPitch;
+	float MaxPitch = StateConfig.StateBase. Rotation.MaxPitch;
+	if (MinPitch >= MaxPitch)
+	{
+		MinPitch = -80.0f;
+		MaxPitch = 80.0f;
+	}
+	TargetRotation.Pitch = FMath:: Clamp(TargetRotation.Pitch, MinPitch, MaxPitch);
+	
+	// Normalize yaw
+	TargetRotation.Yaw = FMath::Fmod(TargetRotation. Yaw, 360.0f);
+	if (TargetRotation.Yaw < 0.0f)
+	{
+		TargetRotation.Yaw += 360.0f;
+	}
+	
+	// Force roll to zero
+	TargetRotation.Roll = 0.0f;
+	
+	// Get lag speed
+	float LagSpeed = StateConfig.StateBase.Lag.RotationLagSpeed;
+	if (LagSpeed <= 0.0f)
+	{
+		LagSpeed = 5.0f;  // Default
+	}
+	
+	// Smoothly interpolate to target
+	SmoothedRotation = FMath::RInterpTo(
+		SmoothedRotation, 
+		TargetRotation, 
+		Context.DeltaTime, 
+		LagSpeed
+	);
+	
+	// Fill output
+	OutOutput. RotationOutput = SmoothedRotation;
+	OutOutput. bHasRotationOutput = true;
+	
+	return true;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 每个方法前添加详细的文档注释
+   - 说明与R01的区别
+   - 解释双状态系统（Target vs Smoothed）
+   - 所有注释使用英文
+
+2. **格式：**
+   - 使用Tab缩进（与现有代码一致）
+   - 方法之间空两行
+   - 与R01保持一致的代码风格
+
+3. **变量命名：**
+   - TargetRotation（目标旋转）
+   - SmoothedRotation（平滑后旋转）
+   - 清晰区分两者
+
+【技术说明】
+
+**R02的核心机制：**
+
+### 1. 双状态系统
+
+**R01 vs R02：**
+
+| 特性 | R01 (Free) | R02 (Lagged) |
+|------|-----------|-------------|
+| **状态数量** | 1个（CurrentRotation） | 2个（Target + Smoothed） |
+| **输入作用** | 直接修改CurrentRotation | 修改TargetRotation |
+| **输出** | CurrentRotation | SmoothedRotation |
+| **响应性** | 即时 | 延迟平滑 |
+
+**工作流程：**
+```
+R01:
+Input → CurrentRotation → Output
+      (直接)
+
+R02:
+Input → TargetRotation → [插值] → SmoothedRotation → Output
+      (直接)              (延迟)
+```
+
+### 2. RInterpTo的作用
+
+**为什么使用RInterpTo而非简单Lerp？**
+
+```cpp
+// 问题：角度环绕
+情况：SmoothedRotation.Yaw = 359°, TargetRotation. Yaw = 1°
+
+使用简单Lerp：
+Lerp(359, 1, 0.1) = 359 * 0.9 + 1 * 0.1 = 323.2°
+→ 相机向左旋转37°（错误！应该向右旋转2°）
+
+使用RInterpTo：
+RInterpTo内部处理角度环绕
+359° → 360° → 0° → 1°（正确路径）
+→ 相机向右旋转2°（正确！）
+```
+
+**RInterpTo的优势：**
+- ✅ 自动处理角度环绕
+- ✅ 选择最短旋转路径
+- ✅ 帧率无关
+- ✅ 专为FRotator设计
+
+### 3. 与P02的相似性
+
+**Position模块P02 vs Rotation模块R02：**
+
+| 特性 | P02 (Position Lagged) | R02 (Rotation Lagged) |
+|------|----------------------|----------------------|
+| **输入** | 角色位置 | 玩家输入 |
+| **目标** | TargetPosition | TargetRotation |
+| **平滑** | CurrentPosition | SmoothedRotation |
+| **插值** | FMath:: Lerp (FVector) | FMath::RInterpTo (FRotator) |
+| **特殊处理** | 无 | 角度环绕 |
+
+**设计一致性：** ✅ 两者使用相同的平滑策略模式
+
+### 4. 激活条件对比
+
+**R01 vs R02激活条件：**
+
+```cpp
+R01:
+- bIsEnabled ✅
+- ! bHasTarget ✅
+- ! bIgnoreInput ✅
+- (无额外条件)
+
+R02:
+- bIsEnabled ✅
+- !bHasTarget ✅
+- !bIgnoreInput ✅
+- bEnableRotationLag ✅ （额外条件）
+```
+
+**互斥关系：**
+- 同优先级（100）
+- 由bEnableRotationLag决定谁激活
+- 配置灵活切换
+
+### 5. LagSpeed的影响
+
+**不同LagSpeed的效果：**
+
+```
+LagSpeed = 1.0:
+- 非常慢的平滑
+- 相机"拖"在后面
+- 极度电影化
+
+LagSpeed = 5.0 (默认):
+- 适度平滑
+- 平衡响应性和平滑度
+- 推荐值
+
+LagSpeed = 10.0:
+- 快速平滑
+- 接近R01的响应性
+- 轻微柔和感
+
+LagSpeed = 50.0:
+- 几乎即时
+- 与R01相似
+- 基本无平滑
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过（0 errors, 0 warnings）
+   - [ ] 文件编码为UTF-8 Without BOM
+   - [ ] 所有注释为英文
+
+2. **代码完整性：**
+   - [ ] 构造函数实现完整
+   - [ ] OnActivate()实现完整
+   - [ ] ShouldActivate()实现完整
+   - [ ] Compute()实现完整
+   - [ ] 所有方法签名与. h一致
+
+3. **逻辑正确性：**
+   - [ ] 双状态系统正确（Target + Smoothed）
+   - [ ] 输入处理与R01一致
+   - [ ] 使用RInterpTo进行旋转插值
+   - [ ] Pitch限制和Yaw归一化正确
+   - [ ] 输出bHasRotationOutput=true
+
+4. **字段访问：**
+   - [ ] Context.InputContext.CameraInput
+   - [ ] Context.InputContext.PreviousCameraRotation
+   - [ ] StateConfig.Module.Rotation.bEnableRotationLag（或替代）
+   - [ ] StateConfig.StateBase.Lag. RotationLagSpeed
+
+【注意事项】
+
+1. **不需要Regenerate：**
+   本Sub-Step只修改现有. cpp文件内容，不添加新文件。
+   保存后可以直接编译，无需Regenerate。
+
+2. **bEnableRotationLag字段处理：**
+   ```cpp
+   // 如果StateConfig中没有bEnableRotationLag字段：
+   
+   // 方案1：检查LagSpeed
+   if (StateConfig.StateBase.Lag.RotationLagSpeed <= 0.0f)
+   {
+       return false;
+   }
+   
+   // 方案2：总是激活（与R01共存，由优先级决定）
+   return true;  // 需要调整R01或R02的优先级
+   
+   // 方案3：总是不激活（让R01处理）
+   return false;
+   ```
+
+3. **RInterpTo vs 手动插值：**
+   - 推荐使用RInterpTo（处理角度环绕）
+   - 如果需要，可以手动插值Pitch和Yaw
+
+4. **与P02的代码复用：**
+   - GetInterpAlpha()可以复用
+   - 但旋转最好用RInterpTo
+
+5. **测试建议：**
+   编译通过后，测试：
+   - 快速旋转时的平滑效果
+   - 359°→1°的环绕处理
+   - 不同LagSpeed的效果
+   - 与R01的切换
+
+【输出要求】
+
+完成修改后，请报告：
+
+```
+================================================================================
+Sub-Step 3.3. 3 完成报告
+================================================================================
+
+【修改内容】
+- 文件：CameraModule_Rotation.cpp
+- 修改位置：R02模块（构造函数、OnActivate、ShouldActivate、Compute）
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ 构造函数：初始化双状态
+- ✅ OnActivate：初始化Target和Smoothed
+- ✅ ShouldActivate：检查激活条件
+- ✅ Compute：平滑旋转插值
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误数：[数量]
+- 警告数：[数量]
+
+【遇到的问题】
+[如果有字段路径问题，详细描述]
+
+【最终状态】
+✅ R02模块完整实现，提供平滑的旋转效果
+
+================================================================================
+```
+
+【后续步骤】
+
+R02完成后，Rotation模块进度：
+- [x] ✅ 3.3.1:  CameraModule_Rotation.h
+- [x] ✅ 3.3.2: R01 - Player Input Free
+- [x] ✅ R02 - Player Input Lagged
+- [ ] ⏳ 3.3.4: R03 - LookAt Target（下一步）
+- [ ] ⏳ 3.3.5: R04 - LookAt Target Soft
+- [ ] ⏳ 3.3.6: R05 - LookAt Boss
+- [ ] ⏳ 3.3.7: R06 - AutoOrient Movement
+- [ ] ⏳ 3.3.8: R07 - AutoOrient Delayed
+- [ ] ⏳ 3.3.9: R08 - LookAt Point
+- [ ] ⏳ 3.3.10: R09 - Spline Rotation
+
+完成后准备进入Sub-Step 3.3.4（R03: LookAt Target - 硬锁定）。
+
+================================================================================

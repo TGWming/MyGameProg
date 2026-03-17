@@ -1,0 +1,116 @@
+Sub-Step 4.3.6 Prompt
+
+================================================================================
+任务：在CameraModifier_Reaction.cpp中添加R05 Counter_React实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+R05是成功反击时的相机反应，强调精准操作的奖励感。
+
+【当前进度】
+Phase 4 Step 4.3 Sub-Step 4.3.6 (共190个Sub-Step中的第124个)
+前置完成：4.3.5 R04实现
+
+【任务目标】
+在CameraModifier_Reaction.cpp中添加R05实现。
+
+【具体要求】
+
+在R04实现之后添加：
+
+//========================================
+// R05: Counter React
+//========================================
+
+UCameraModifier_R05_Counter_React::UCameraModifier_R05_Counter_React()
+    : QuickZoom(25.0f)
+    , TimeDilation(0.6f)
+{
+}
+
+void UCameraModifier_R05_Counter_React::OnTriggered(const FModifierTriggerData& TriggerData)
+{
+    // Counter reactions are quick and punchy
+    float IntensityScale = FMath::Clamp(TriggerData.Intensity, 0.8f, 1.5f);
+
+    QuickZoom = 25.0f * IntensityScale;
+    
+    // Perfect counters (high intensity) get more time dilation
+    if (IntensityScale > 1.2f)
+    {
+        TimeDilation = 0.4f;
+    }
+    else
+    {
+        TimeDilation = 0.6f;
+    }
+
+    UE_LOG(LogTemp, Verbose, TEXT("R05 Counter_React: Triggered with intensity %.2f"), TriggerData.Intensity);
+}
+
+void UCameraModifier_R05_Counter_React::ComputeEffect(float DeltaTime, const FStageExecutionContext& Context)
+{
+    float EffectiveWeight = CurrentWeight * CurrentIntensity;
+    float NormalizedTime = StateTime / ActiveDuration;
+
+    // Very quick zoom pulse
+    float ZoomCurve;
+    if (NormalizedTime < 0.15f)
+    {
+        // Snap zoom in
+        ZoomCurve = FMath::InterpEaseOut(0.0f, 1.0f, NormalizedTime / 0.15f, 3.0f);
+    }
+    else if (NormalizedTime < 0.3f)
+    {
+        // Brief hold
+        ZoomCurve = 1.0f;
+    }
+    else
+    {
+        // Quick release
+        float ReleaseTime = (NormalizedTime - 0.3f) / 0.7f;
+        ZoomCurve = FMath::InterpEaseIn(1.0f, 0.0f, ReleaseTime, 2.0f);
+    }
+
+    // Apply zoom (pull in)
+    DistanceEffect = -QuickZoom * ZoomCurve * EffectiveWeight;
+
+    // FOV reduction for focus
+    FOVEffect = -4.0f * ZoomCurve * EffectiveWeight;
+
+    // Time dilation during zoom
+    if (NormalizedTime < 0.35f)
+    {
+        TimeDilationEffect = TimeDilation;
+    }
+    else if (NormalizedTime < 0.5f)
+    {
+        // Smooth return to normal
+        float ReturnTime = (NormalizedTime - 0.35f) / 0.15f;
+        TimeDilationEffect = FMath::Lerp(TimeDilation, 1.0f, ReturnTime);
+    }
+    else
+    {
+        TimeDilationEffect = 1.0f;
+    }
+
+    // Subtle white flash via color tint
+    if (NormalizedTime < 0.1f)
+    {
+        float FlashStrength = (1.0f - NormalizedTime / 0.1f) * 0.1f * EffectiveWeight;
+        ColorTintEffect = FLinearColor(1.0f + FlashStrength, 1.0f + FlashStrength, 1.0f + FlashStrength, 1.0f);
+    }
+    else
+    {
+        ColorTintEffect = FLinearColor:: White;
+    }
+}
+
+【验证标准】
+- 编译通过
+- R05可触发反击奖励效果
+
+【输出要求】
+输出R05的完整实现代码。
+================================================================================

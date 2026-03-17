@@ -1,0 +1,550 @@
+Sub-Step 4.3.4 Prompt
+
+================================================================================
+任务：在CameraModifier_Reaction. cpp中添加R04-R06实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.  27 C++项目。
+本Sub-Step实现后3个Reaction修改器：
+- R04:  Knockback - 击退反馈
+- R05: Knockdown - 击倒反馈
+- R06: GuardBreak - 破防反馈
+
+【当前进度】
+Phase 4 Step 4.  3 Sub-Step 4.3.4 (共190个Sub-Step中的第122个)
+前置完成：4. 3. 3 R01-R03实现 ✅
+
+【任务目标】
+在CameraModifier_Reaction.  cpp中（R03实现之后）添加R04、R05、R06的完整实现。
+
+【⚠️ 重要提醒】
+
+1. **本Sub-Step是更新现有文件，不创建新文件**
+   因此**不需要Regenerate**，直接编译即可。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **在R03实现之后添加以下代码**
+
+【具体要求】
+
+**在CameraModifier_Reaction. cpp的R03实现之后添加：**
+
+```cpp
+//========================================
+// R04: Knockback Reaction Implementation
+//========================================
+
+/**
+ * Constructor - Configure knockback reaction parameters
+ * 
+ * Knockback follows the player's forced movement: 
+ * - Camera position lags behind player
+ * - Distance increases (zoom out)
+ * - Slight tilt in knockback direction
+ */
+UCameraModifier_R04_Reaction_Knockback::UCameraModifier_R04_Reaction_Knockback()
+	: KnockbackEmphasis(1.3f)
+	, DistanceIncrease(35.0f)
+	, TiltAngle(5.0f)
+{
+	// Configure base reaction settings
+	OffsetInterpSpeed = 20.0f;   // Fast response to knockback
+	RecoveryInterpSpeed = 8.0f;  // Medium recovery
+	bApplyDistanceEffect = true;
+	bApplyFOVEffect = true;
+	bApplyRotationEffect = true;  // Enable tilt
+}
+
+void UCameraModifier_R04_Reaction_Knockback:: OnTriggered(const FModifierTriggerData& InTriggerData)
+{
+	// Call parent
+	Super::OnTriggered(InTriggerData);
+	
+	// Scale effect based on knockback intensity
+	float IntensityScale = FMath::Clamp(CurrentIntensity, 0.5f, 2.0f);
+	KnockbackEmphasis = 1.3f * IntensityScale;
+	
+	UE_LOG(LogTemp, Verbose, TEXT("R04 Knockback:  Triggered with intensity %.2f"), CurrentIntensity);
+}
+
+void UCameraModifier_R04_Reaction_Knockback:: ComputeEffect(float DeltaTime, const FStageExecutionContext& Context)
+{
+	// Get knockback direction (from attacker towards player = knockback direction)
+	FVector AttackerDirection = GetReactionDirection(Context);
+	FVector KnockbackDir = -AttackerDirection;  // Opposite of attacker direction
+	KnockbackDir. Z = 0.0f;  // Keep horizontal
+	if (! KnockbackDir.IsNearlyZero())
+	{
+		KnockbackDir.Normalize();
+	}
+	ReactionDirection = KnockbackDir;
+	
+	// Calculate normalized time
+	float NormalizedTime = 0.0f;
+	if (ActiveDuration > 0.0f)
+	{
+		NormalizedTime = FMath::Clamp(TotalActiveTime / ActiveDuration, 0.0f, 1.0f);
+	}
+	
+	// Effect curve:  quick reaction, gradual recovery
+	float EffectCurve;
+	if (NormalizedTime < 0.15f)
+	{
+		// Quick onset (0-15%)
+		EffectCurve = FMath::InterpEaseOut(0.0f, 1.0f, NormalizedTime / 0.15f, 2.0f);
+	}
+	else
+	{
+		// Gradual recovery (15-100%)
+		float RecoveryProgress = (NormalizedTime - 0.15f) / 0.85f;
+		EffectCurve = FMath::InterpEaseOut(1.0f, 0.0f, RecoveryProgress, 1.5f);
+	}
+	
+	// Calculate position offset (camera lags behind knockback)
+	float OffsetDistance = 25.0f * KnockbackEmphasis * EffectCurve;
+	TargetOffset = -KnockbackDir * OffsetDistance;  // Opposite direction = lag behind
+	
+	// Apply distance increase (zoom out)
+	DistanceEffect = DistanceIncrease * EffectCurve;
+	
+	// Apply slight FOV increase for impact feel
+	FOVEffect = 4.0f * EffectCurve;
+	
+	// Apply tilt in knockback direction (roll effect)
+	float TiltAmount = TiltAngle * EffectCurve;
+	// Convert knockback direction to roll:  left = negative roll, right = positive roll
+	float RollDirection = FVector:: CrossProduct(FVector::ForwardVector, KnockbackDir).Z;
+	CurrentRotationOffset.Roll = TiltAmount * RollDirection;
+	CurrentRotationOffset. Pitch = -TiltAmount * 0.3f;  // Slight pitch back
+	CurrentRotationOffset. Yaw = 0.0f;
+	
+	// Brief shake at start of knockback
+	if (NormalizedTime < 0.1f)
+	{
+		float ShakeIntensity = (1.0f - NormalizedTime / 0.1f) * 2.0f;
+		CurrentRotationOffset. Pitch += FMath::PerlinNoise1D(WobbleTime * 25.0f) * ShakeIntensity;
+		CurrentRotationOffset.Yaw += FMath::PerlinNoise1D(WobbleTime * 25.0f + 100.0f) * ShakeIntensity * 0.5f;
+	}
+	
+	// Call base to apply weight and interpolation
+	Super::ComputeEffect(DeltaTime, Context);
+}
+
+
+//========================================
+// R05: Knockdown Reaction Implementation
+//========================================
+
+/**
+ * Constructor - Configure knockdown reaction parameters
+ * 
+ * Knockdown simulates player falling to ground:
+ * - Camera drops vertically
+ * - Wobble during fall
+ * - Distance and FOV increase (vulnerability)
+ */
+UCameraModifier_R05_Reaction_Knockdown:: UCameraModifier_R05_Reaction_Knockdown()
+	: DropDistance(40.0f)
+	, DropSpeed(15.0f)
+	, FallWobbleIntensity(2.5f)
+	, DistanceIncrease(50.0f)
+	, FOVIncrease(8.0f)
+{
+	// Configure base reaction settings
+	OffsetInterpSpeed = 12.0f;   // Medium speed for falling feel
+	RecoveryInterpSpeed = 5.0f;  // Slow recovery (getting up takes time)
+	bApplyDistanceEffect = true;
+	bApplyFOVEffect = true;
+	bApplyRotationEffect = true;  // Enable wobble
+}
+
+void UCameraModifier_R05_Reaction_Knockdown:: OnTriggered(const FModifierTriggerData& InTriggerData)
+{
+	// Call parent
+	Super::OnTriggered(InTriggerData);
+	
+	// Scale effect based on knockdown severity
+	float IntensityScale = FMath::Clamp(CurrentIntensity, 0.5f, 1.5f);
+	DropDistance = 40.0f * IntensityScale;
+	FallWobbleIntensity = 2.5f * IntensityScale;
+	
+	UE_LOG(LogTemp, Verbose, TEXT("R05 Knockdown: Triggered with intensity %.2f"), CurrentIntensity);
+}
+
+void UCameraModifier_R05_Reaction_Knockdown:: ComputeEffect(float DeltaTime, const FStageExecutionContext& Context)
+{
+	// Calculate normalized time
+	float NormalizedTime = 0.0f;
+	if (ActiveDuration > 0.0f)
+	{
+		NormalizedTime = FMath::Clamp(TotalActiveTime / ActiveDuration, 0.0f, 1.0f);
+	}
+	
+	// Drop curve:  quick fall, impact, slow recovery
+	float DropCurve;
+	float WobbleCurve;
+	if (NormalizedTime < 0.2f)
+	{
+		// Falling phase (0-20%): accelerating drop
+		float FallProgress = NormalizedTime / 0.2f;
+		DropCurve = FMath::InterpEaseIn(0.0f, 1.0f, FallProgress, 2.0f);
+		WobbleCurve = FallProgress;  // Wobble increases during fall
+	}
+	else if (NormalizedTime < 0.3f)
+	{
+		// Impact phase (20-30%): hold at bottom with strong wobble
+		DropCurve = 1.0f;
+		float ImpactProgress = (NormalizedTime - 0.2f) / 0.1f;
+		WobbleCurve = 1.0f - ImpactProgress * 0.3f;  // Wobble peaks then starts to reduce
+	}
+	else
+	{
+		// Recovery phase (30-100%): slowly rise back
+		float RecoveryProgress = (NormalizedTime - 0.3f) / 0.7f;
+		DropCurve = FMath:: InterpEaseOut(1.0f, 0.0f, RecoveryProgress, 1.5f);
+		WobbleCurve = FMath::InterpEaseOut(0.7f, 0.0f, RecoveryProgress, 2.0f);
+	}
+	
+	// Apply drop effect (vertical offset)
+	ApplyDropEffect(DeltaTime, DropDistance * DropCurve, DropSpeed);
+	
+	// Apply wobble during fall and impact
+	if (WobbleCurve > 0.1f)
+	{
+		ApplyWobbleEffect(DeltaTime, FallWobbleIntensity * WobbleCurve, 10.0f);
+	}
+	
+	// Apply distance increase (camera pulls back)
+	DistanceEffect = DistanceIncrease * DropCurve;
+	
+	// Apply FOV increase (vulnerability feel)
+	FOVEffect = FOVIncrease * DropCurve;
+	
+	// Slight vignette at impact
+	if (NormalizedTime >= 0.15f && NormalizedTime < 0.4f)
+	{
+		float VignetteProgress = (NormalizedTime < 0.25f) 
+			? (NormalizedTime - 0.15f) / 0.1f 
+			:  1.0f - (NormalizedTime - 0.25f) / 0.15f;
+		VignetteEffect = 0.2f * FMath:: Clamp(VignetteProgress, 0.0f, 1.0f);
+	}
+	else
+	{
+		VignetteEffect = 0.0f;
+	}
+	
+	// Call base to apply weight and interpolation
+	Super::ComputeEffect(DeltaTime, Context);
+}
+
+
+//========================================
+// R06: Guard Break Reaction Implementation
+//========================================
+
+/**
+ * Constructor - Configure guard break reaction parameters
+ * 
+ * Guard break is a dramatic vulnerability effect:
+ * - Strong push away from attacker
+ * - Large FOV punch (vulnerability)
+ * - Screen shake
+ * - Time dilation hint
+ */
+UCameraModifier_R06_Reaction_GuardBreak:: UCameraModifier_R06_Reaction_GuardBreak()
+	: PushAwayDistance(35.0f)
+	, GuardBreakFOVPunch(10.0f)
+	, DistanceIncrease(60.0f)
+	, ShakeIntensity(4.0f)
+	, TimeDilationHint(0.4f)
+{
+	// Configure base reaction settings
+	OffsetInterpSpeed = 30.0f;   // Very fast push
+	RecoveryInterpSpeed = 6.0f;  // Slow recovery (vulnerable state)
+	bApplyDistanceEffect = true;
+	bApplyFOVEffect = true;
+	bApplyRotationEffect = true;  // Enable shake
+}
+
+void UCameraModifier_R06_Reaction_GuardBreak::OnTriggered(const FModifierTriggerData& InTriggerData)
+{
+	// Call parent
+	Super:: OnTriggered(InTriggerData);
+	
+	// Guard break is always dramatic, intensity affects magnitude
+	float IntensityScale = FMath::Clamp(CurrentIntensity, 0.8f, 1.5f);
+	PushAwayDistance = 35.0f * IntensityScale;
+	GuardBreakFOVPunch = 10.0f * IntensityScale;
+	ShakeIntensity = 4.0f * IntensityScale;
+	
+	UE_LOG(LogTemp, Verbose, TEXT("R06 GuardBreak: Triggered with intensity %.2f"), CurrentIntensity);
+}
+
+void UCameraModifier_R06_Reaction_GuardBreak:: ComputeEffect(float DeltaTime, const FStageExecutionContext& Context)
+{
+	// Get direction from attacker
+	FVector AttackerDirection = GetReactionDirection(Context);
+	ReactionDirection = AttackerDirection;
+	
+	// Calculate normalized time
+	float NormalizedTime = 0.0f;
+	if (ActiveDuration > 0.0f)
+	{
+		NormalizedTime = FMath::Clamp(TotalActiveTime / ActiveDuration, 0.0f, 1.0f);
+	}
+	
+	// Effect curve: instant punch, hold briefly, slow recovery
+	float EffectCurve;
+	float ShakeCurve;
+	if (NormalizedTime < 0.1f)
+	{
+		// Instant punch (0-10%)
+		EffectCurve = FMath::InterpEaseOut(0.0f, 1.0f, NormalizedTime / 0.1f, 3.0f);
+		ShakeCurve = 1.0f;
+	}
+	else if (NormalizedTime < 0.3f)
+	{
+		// Hold peak (10-30%)
+		EffectCurve = 1.0f;
+		ShakeCurve = 1.0f - (NormalizedTime - 0.1f) / 0.2f;  // Shake fades
+	}
+	else
+	{
+		// Slow recovery (30-100%)
+		float RecoveryProgress = (NormalizedTime - 0.3f) / 0.7f;
+		EffectCurve = FMath::InterpEaseIn(1.0f, 0.0f, RecoveryProgress, 1.5f);
+		ShakeCurve = 0.0f;
+	}
+	
+	// Apply strong push effect (away from attacker)
+	ApplyPushEffect(DeltaTime, AttackerDirection, 1.5f, PushAwayDistance * EffectCurve);
+	
+	// Apply large FOV punch
+	FOVEffect = GuardBreakFOVPunch * EffectCurve;
+	
+	// Apply distance increase
+	DistanceEffect = DistanceIncrease * EffectCurve;
+	
+	// Apply screen shake during initial impact
+	if (ShakeCurve > 0.0f)
+	{
+		float ScaledShake = ShakeIntensity * ShakeCurve;
+		CurrentRotationOffset. Pitch = FMath::PerlinNoise1D(WobbleTime * 30.0f) * ScaledShake;
+		CurrentRotationOffset.Yaw = FMath::PerlinNoise1D(WobbleTime * 30.0f + 100.0f) * ScaledShake * 0.7f;
+		CurrentRotationOffset. Roll = FMath::PerlinNoise1D(WobbleTime * 30.0f + 200.0f) * ScaledShake * 0.3f;
+	}
+	
+	// Time dilation hint during peak effect
+	if (NormalizedTime >= 0.05f && NormalizedTime < 0.25f)
+	{
+		TimeDilationEffect = 1.0f - (TimeDilationHint * EffectCurve);
+	}
+	else
+	{
+		TimeDilationEffect = 1.0f;
+	}
+	
+	// Strong vignette for vulnerability feel
+	VignetteEffect = 0.3f * EffectCurve;
+	
+	// Call base to apply weight and interpolation
+	Super::ComputeEffect(DeltaTime, Context);
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 每个类的构造函数说明效果设计意图
+   - 关键算法有注释说明
+   - 所有注释英文
+
+2. **格式：**
+   - Tab缩进
+   - 类之间用分隔线和空行分开
+   - 方法间空一行
+
+3. **效果曲线设计：**
+   - R04: 快速反应，渐进恢复
+   - R05: 下落+冲击+缓慢恢复
+   - R06: 瞬时冲击，保持，缓慢恢复
+
+【技术说明】
+
+### 1. R04 Knockback效果设计
+
+```
+时间线：
+0%──15%────────────100%
+│React│    Recovery    │
+
+特点：
+- 相机位置滞后于击退方向
+- 距离增加（拉远）
+- 轻微倾斜（Roll）
+- 开始时短暂抖动
+```
+
+### 2. R05 Knockdown效果设计
+
+```
+时间线：
+0%──20%─30%──────────100%
+│Fall│Impact│  Recovery  │
+
+特点：
+- 垂直下落效果
+- 下落时晃动
+- 冲击时晃动峰值
+- 缓慢恢复（起身时间长）
+```
+
+### 3. R06 GuardBreak效果设计
+
+```
+时间线：
+0%─10%─30%───────────100%
+│Punch│Hold│  Recovery  │
+
+特点：
+- 瞬间冲击（最快的效果）
+- 强推开效果
+- 大FOV冲击
+- 强屏幕抖动
+- 时间膨胀暗示
+- 强暗角效果
+```
+
+### 4. 效果对比表
+
+| 参数 | R04 Knockback | R05 Knockdown | R06 GuardBreak |
+|------|---------------|---------------|----------------|
+| 优先级 | 135 | 140 | 145 |
+| 持续时间 | 0.5s | 0.8s | 0.5s |
+| 位置效果 | 滞后移动 | 垂直下落 | 强推开 |
+| 距离效果 | +35cm | +50cm | +60cm |
+| FOV效果 | +4° | +8° | +10° |
+| 旋转效果 | 倾斜+抖动 | 晃动 | 强抖动 |
+| 特殊效果 | - | 暗角 | 时间暗示+暗角 |
+
+### 5. Knockback方向计算
+
+```cpp
+// 攻击者方向（指向攻击者）
+FVector AttackerDirection = GetReactionDirection(Context);
+
+// 击退方向 = 攻击者方向的反方向
+FVector KnockbackDir = -AttackerDirection;
+KnockbackDir. Z = 0.0f;  // 保持水平
+KnockbackDir. Normalize();
+
+// 相机滞后 = 击退方向的反方向
+TargetOffset = -KnockbackDir * Distance;
+// 这样相机会"落后"于玩家的击退移动
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过（0 errors）
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] R04构造函数和OnTriggered和ComputeEffect
+   - [ ] R05构造函数和OnTriggered和ComputeEffect
+   - [ ] R06构造函数和OnTriggered和ComputeEffect
+   - [ ] 每个都正确调用Super方法
+   - [ ] 效果曲线实现正确
+
+3. **效果设计：**
+   - [ ] R04: 滞后+距离增加+倾斜+抖动
+   - [ ] R05: 下落+晃动+距离/FOV增加+暗角
+   - [ ] R06: 强推开+大FOV+强抖动+时间暗示+暗角
+
+【注意事项】
+
+1. **Knockback方向计算：**
+   - `AttackerDirection`: 从玩家指向攻击者
+   - `KnockbackDir = -AttackerDirection`: 击退方向（远离攻击者）
+   - `TargetOffset = -KnockbackDir`: 相机滞后方向
+
+2. **ApplyDropEffect使用：**
+   ```cpp
+   // 调用基类辅助方法
+   ApplyDropEffect(DeltaTime, DropDistance * DropCurve, DropSpeed);
+   // 这会设置 TargetOffset. Z = -DropDistance
+   ```
+
+3. **时间膨胀提示：**
+   ```cpp
+   // 只是视觉暗示，不实际改变游戏时间
+   TimeDilationEffect = 1.0f - (TimeDilationHint * EffectCurve);
+   // 值 < 1.0 暗示"慢动作"感觉
+   ```
+
+4. **Roll倾斜计算：**
+   ```cpp
+   // 使用叉积确定倾斜方向
+   float RollDirection = FVector::CrossProduct(FVector::ForwardVector, KnockbackDir).Z;
+   // 正值 = 向右倾斜，负值 = 向左倾斜
+   ```
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 4.3.4 完成报告
+================================================================================
+
+【更新的文件】
+- 文件：CameraModifier_Reaction.cpp
+- 添加位置：R03实现之后
+
+【实现的修改器】
+- ✅ R04: UCameraModifier_R04_Reaction_Knockback
+  - 构造函数：KnockbackEmphasis=1.3, DistanceIncrease=35
+  - OnTriggered：缩放效果
+  - ComputeEffect：滞后+距离+倾斜+抖动
+
+- ✅ R05: UCameraModifier_R05_Reaction_Knockdown
+  - 构造函数：DropDistance=40, FallWobble=2.5
+  - OnTriggered：缩放效果
+  - ComputeEffect：下落+晃动+距离/FOV+暗角
+
+- ✅ R06: UCameraModifier_R06_Reaction_GuardBreak
+  - 构造函数：PushDistance=35, FOVPunch=10
+  - OnTriggered：缩放效果
+  - ComputeEffect：强推开+大FOV+抖动+时间暗示+暗角
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【最终状态】
+✅ R04-R06实现完成
+✅ 全部6个Reaction修改器实现完成
+
+================================================================================
+```
+
+【后续步骤】
+
+R04-R06完成后：
+- [x] ✅ 4. 3.1:  CameraModifier_Reaction. h
+- [x] ✅ 4.3.2: CameraModifier_Reaction.cpp - ReactionBase
+- [x] ✅ 4.3.3: R01-R03实现
+- [x] ✅ 4.3.4: R04-R06实现
+- [ ] ⏳ 4.3.5: 注册到ModifierManager（下一步）
+
+**Reaction修改器进度：6/6 = 100%（实现完成，待注册）**
+**Phase 4修改器进度：11/26 = 42%**
+
+================================================================================

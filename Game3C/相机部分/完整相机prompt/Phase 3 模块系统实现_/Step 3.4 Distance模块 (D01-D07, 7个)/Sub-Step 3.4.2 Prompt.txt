@@ -1,0 +1,655 @@
+Sub-Step 3.4.2 Prompt
+
+================================================================================
+任务：创建CameraModule_Distance.cpp - D01 BaseDistance实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+D01是最基础的Distance模块，提供来自状态配置的基础臂长。
+这是所有Distance模块的基础，其他模块在此基础上添加偏移或乘数。
+
+【Pipeline中的位置】
+```
+Stage 3 - Module Compute: 
+├─ Position模块 → FVector (焦点位置) ✅
+├─ Rotation模块 → FRotator (相机朝向) ✅
+├─ Distance模块 → float (臂长距离) ← 当前
+│   ├─ D01: BaseDistance ← 本Sub-Step（基础值）
+│   ├─ D02-D07: 在D01基础上修改
+│   └─ 混合后输出最终距离
+├─ FOV模块 → float
+└─ Offset模块 → 偏移
+```
+
+【当前进度】
+Phase 3 Step 3.4 Sub-Step 3.4.2 (共190个Sub-Step中的第80个)
+前置完成：3.4.1 CameraModule_Distance.h ✅
+
+【任务目标】
+创建文件：Source/[ProjectName]/Private/Camera/Modules/CameraModule_Distance.cpp
+本Sub-Step实现文件框架和D01 BaseDistance模块。
+同时为D02-D07添加占位符stub。
+
+【⚠️ 重要提醒】
+
+1. **必须Regenerate：**
+   本Sub-Step创建新的. cpp文件。
+   创建文件后：
+   - 保存所有文件
+   - 右键. uproject → Generate Visual Studio project files
+   - 重新加载解决方案
+   - 然后编译
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   确认StateConfig的字段路径与项目实际结构一致。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_Distance.cpp
+
+2. **完整文件内容：**
+
+```cpp
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#include "Camera/Modules/CameraModule_Distance.h"
+#include "Camera/Core/SoulsCameraManager.h"
+
+/**
+ * CameraModule_Distance. cpp
+ * 
+ * This file contains the implementations of 7 Distance modules (D01-D07).
+ * Distance modules are responsible for calculating the camera arm length (float),
+ * which determines the distance between the camera and the focus point.
+ * 
+ * Output is passed through FModuleOutput. DistanceOutput field.
+ * 
+ * Distance Blend Policies:
+ * - Override: Replace with this value (D01)
+ * - Additive: Add offset to current value (D03, D04)
+ * - Multiplicative: Multiply current value (D02, D07)
+ * - Minimum: Use smaller of current and new (D05)
+ * - Blend: Weighted average (D06)
+ * 
+ * Module List:
+ * - D01: Base Distance - Foundation distance from state config (implemented)
+ * - D02: Target Size Multiplier - Adjust based on target size (TODO:  Sub-Step 3.4.3)
+ * - D03: Speed Offset - Increase distance when moving fast (TODO: Sub-Step 3.4.4)
+ * - D04: Combat Adjust - Combat-specific adjustments (TODO: Sub-Step 3.4.5)
+ * - D05: Environment Limit - Limit distance in tight spaces (TODO: Sub-Step 3.4.6)
+ * - D06: Proximity Adjust - Adjust based on target proximity (TODO: Sub-Step 3.4.7)
+ * - D07: Boss Phase - Boss phase-specific scaling (TODO: Sub-Step 3.4.8)
+ */
+
+
+//========================================
+// D01: Base Distance - Foundation distance from state config
+//========================================
+
+/**
+ * ShouldActivate - Base distance is always active
+ * 
+ * D01 is the foundation Distance module.  It should always be active
+ * as long as the module is enabled, providing the starting point for
+ * all distance calculations.
+ * 
+ * Other modules (D02-D07) build upon this base value using their
+ * respective blend policies (Additive, Multiplicative, etc.).
+ */
+bool UCameraModule_D01_BaseDistance::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Base distance is always active as the foundation
+	// Only check if module is enabled
+	return bIsEnabled;
+}
+
+/**
+ * Compute - Return base distance from state configuration
+ * 
+ * This module reads the configured base distance from StateConfig
+ * and outputs it directly. It serves as the starting point for
+ * distance calculations.
+ * 
+ * Steps:
+ * 1. Get base distance from state config
+ * 2. Get min/max limits from config
+ * 3. Clamp distance to valid range
+ * 4. Output the clamped distance
+ * 
+ * The output uses Override policy, meaning this value will be
+ * the starting point that other modules modify. 
+ * 
+ * Typical base distance values:
+ * - Exploration state: 400cm
+ * - Combat state: 350cm
+ * - Boss state: 500cm
+ * - Cinematic state: varies
+ * 
+ * @param Context The current pipeline execution context
+ * @param StateConfig The current camera state configuration
+ * @param OutOutput Output structure to fill with computed values
+ * @return True if computation succeeded
+ */
+bool UCameraModule_D01_BaseDistance:: Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Step 1: Get base distance from state configuration
+	// This is the foundation distance that other modules will modify
+	float BaseDistance = StateConfig.StateBase.Distance.BaseDistance;
+	
+	// If BaseDistance not configured, use default
+	if (BaseDistance <= 0.0f)
+	{
+		BaseDistance = 400.0f;  // Default:  4 meters (standard third-person)
+	}
+	
+	// Step 2: Get min/max distance limits from config
+	float MinDistance = StateConfig.StateBase.Distance.MinDistance;
+	float MaxDistance = StateConfig.StateBase.Distance.MaxDistance;
+	
+	// Validate limits
+	if (MinDistance <= 0.0f)
+	{
+		MinDistance = 100.0f;  // Default min: 1 meter
+	}
+	
+	if (MaxDistance <= 0.0f || MaxDistance <= MinDistance)
+	{
+		MaxDistance = 800.0f;  // Default max: 8 meters
+	}
+	
+	// Step 3: Clamp distance to valid range
+	BaseDistance = FMath::Clamp(BaseDistance, MinDistance, MaxDistance);
+	
+	// Step 4: Fill output structure
+	OutOutput. DistanceOutput = BaseDistance;
+	OutOutput.bHasDistanceOutput = true;
+	
+	// Mark that this is an absolute value, not a multiplier
+	// This helps Stage 5 know how to combine distance outputs
+	OutOutput. bDistanceIsMultiplier = false;
+	
+	return true;
+}
+
+
+//========================================
+// D02: Target Size Multiplier
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.4.3
+// Adjusts distance based on locked target size
+
+/**
+ * ShouldActivate - Placeholder implementation
+ */
+bool UCameraModule_D02_TargetSize_Multiplier::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Placeholder: Will be properly implemented in Sub-Step 3.4.3
+	// Should activate when target is locked
+	return false;
+}
+
+/**
+ * Compute - Placeholder implementation
+ */
+bool UCameraModule_D02_TargetSize_Multiplier::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Placeholder: Will be properly implemented in Sub-Step 3.4.3
+	OutOutput = CreateBaseOutput();
+	OutOutput. DistanceOutput = 1.0f;  // Multiplier of 1.0 = no change
+	OutOutput.bHasDistanceOutput = true;
+	OutOutput.bDistanceIsMultiplier = true;
+	return true;
+}
+
+
+//========================================
+// D03: Speed Offset
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.4.4
+// Increases distance when moving fast
+
+/**
+ * Constructor - Initialize smooth offset state
+ */
+UCameraModule_D03_Speed_Offset::UCameraModule_D03_Speed_Offset()
+	: CurrentSpeedOffset(0.0f)
+{
+}
+
+/**
+ * ShouldActivate - Placeholder implementation
+ */
+bool UCameraModule_D03_Speed_Offset::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Placeholder: Will be properly implemented in Sub-Step 3.4.4
+	// Should activate when character is moving
+	return false;
+}
+
+/**
+ * Compute - Placeholder implementation
+ */
+bool UCameraModule_D03_Speed_Offset:: Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Placeholder:  Will be properly implemented in Sub-Step 3.4.4
+	OutOutput = CreateBaseOutput();
+	OutOutput.DistanceOutput = 0.0f;  // Additive offset of 0 = no change
+	OutOutput.bHasDistanceOutput = true;
+	OutOutput.bDistanceIsMultiplier = false;
+	return true;
+}
+
+
+//========================================
+// D04: Combat Adjust
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.4.5
+// Combat-specific distance adjustment
+
+/**
+ * ShouldActivate - Placeholder implementation
+ */
+bool UCameraModule_D04_Combat_Adjust::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Placeholder: Will be properly implemented in Sub-Step 3.4.5
+	// Should activate during combat
+	return false;
+}
+
+/**
+ * Compute - Placeholder implementation
+ */
+bool UCameraModule_D04_Combat_Adjust::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Placeholder: Will be properly implemented in Sub-Step 3.4.5
+	OutOutput = CreateBaseOutput();
+	OutOutput. DistanceOutput = 0.0f;  // Additive offset of 0 = no change
+	OutOutput.bHasDistanceOutput = true;
+	OutOutput.bDistanceIsMultiplier = false;
+	return true;
+}
+
+
+//========================================
+// D05: Environment Limit
+//========================================
+
+// TODO:  Full implementation in Sub-Step 3.4.6
+// Limits distance based on environment
+
+/**
+ * ShouldActivate - Placeholder implementation
+ */
+bool UCameraModule_D05_Environment_Limit::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Placeholder:  Will be properly implemented in Sub-Step 3.4.6
+	// Should activate when environment limit is defined
+	return false;
+}
+
+/**
+ * Compute - Placeholder implementation
+ */
+bool UCameraModule_D05_Environment_Limit:: Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Placeholder: Will be properly implemented in Sub-Step 3.4.6
+	OutOutput = CreateBaseOutput();
+	OutOutput. DistanceOutput = 9999.0f;  // Very large = no limit
+	OutOutput. bHasDistanceOutput = true;
+	OutOutput.bDistanceIsMultiplier = false;
+	return true;
+}
+
+
+//========================================
+// D06: Proximity Adjust
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.4.7
+// Adjusts distance based on target proximity
+
+/**
+ * ShouldActivate - Placeholder implementation
+ */
+bool UCameraModule_D06_Proximity_Adjust::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Placeholder: Will be properly implemented in Sub-Step 3.4.7
+	// Should activate when target is locked
+	return false;
+}
+
+/**
+ * Compute - Placeholder implementation
+ */
+bool UCameraModule_D06_Proximity_Adjust::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Placeholder: Will be properly implemented in Sub-Step 3.4.7
+	OutOutput = CreateBaseOutput();
+	OutOutput. DistanceOutput = 400.0f;  // Default distance
+	OutOutput. bHasDistanceOutput = true;
+	OutOutput.bDistanceIsMultiplier = false;
+	return true;
+}
+
+
+//========================================
+// D07: Boss Phase
+//========================================
+
+// TODO:  Full implementation in Sub-Step 3.4.8
+// Boss phase-specific distance scaling
+
+/**
+ * ShouldActivate - Placeholder implementation
+ */
+bool UCameraModule_D07_Boss_Phase:: ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Placeholder: Will be properly implemented in Sub-Step 3.4.8
+	// Should activate when locked onto boss
+	return false;
+}
+
+/**
+ * Compute - Placeholder implementation
+ */
+bool UCameraModule_D07_Boss_Phase:: Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Placeholder: Will be properly implemented in Sub-Step 3.4.8
+	OutOutput = CreateBaseOutput();
+	OutOutput. DistanceOutput = 1.0f;  // Multiplier of 1.0 = no change
+	OutOutput.bHasDistanceOutput = true;
+	OutOutput. bDistanceIsMultiplier = true;
+	return true;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 文件头注释说明所有模块
+   - 每个方法前添加文档注释
+   - 说明距离值的典型范围
+   - 所有注释使用英文
+
+2. **格式：**
+   - 使用Tab缩进（与现有代码一致）
+   - 每个模块用分隔注释分开
+   - 占位符标记清晰
+
+3. **占位符策略：**
+   - ShouldActivate返回false（不激活）
+   - Compute返回默认值（无影响）
+   - 乘法模块返回1.0
+   - 加法模块返回0.0
+   - Minimum模块返回很大的值
+
+【技术说明】
+
+**D01的核心机制：**
+
+### 1. Distance模块的特点
+
+**与Position/Rotation的区别：**
+```cpp
+// Position模块
+OutOutput.PositionOffset = FVector(... );  // 3D坐标
+OutOutput.bHasPositionOutput = true;
+
+// Rotation模块
+OutOutput. RotationOutput = FRotator(... );  // 3个角度
+OutOutput.bHasRotationOutput = true;
+
+// Distance模块
+OutOutput.DistanceOutput = 400.0f;  // 单个标量（厘米）
+OutOutput. bHasDistanceOutput = true;
+OutOutput.bDistanceIsMultiplier = false;  // 额外标记
+```
+
+### 2. bDistanceIsMultiplier标记
+
+**为什么需要这个标记？**
+
+```cpp
+// 绝对值模块（D01, D03, D04, D05, D06）
+OutOutput.DistanceOutput = 400.0f;  // 400cm
+OutOutput.bDistanceIsMultiplier = false;
+
+// 乘数模块（D02, D07）
+OutOutput.DistanceOutput = 1.2f;  // 1.2倍
+OutOutput. bDistanceIsMultiplier = true;
+
+// Stage 5混合时的区别：
+if (Output.bDistanceIsMultiplier)
+{
+    CurrentDistance *= Output.DistanceOutput;  // 乘法
+}
+else
+{
+    CurrentDistance = BlendValue(CurrentDistance, Output. DistanceOutput, Policy);
+}
+```
+
+### 3. 典型距离值
+
+**常见距离范围（单位：厘米）：**
+
+| 场景 | 距离 | 说明 |
+|------|------|------|
+| 室内/狭窄 | 200-300cm | 避免穿墙 |
+| 标准探索 | 350-450cm | 最常用 |
+| 战斗 | 300-400cm | 适中 |
+| Boss战 | 500-700cm | 展示Boss |
+| 过场 | 变化 | 按需求 |
+
+**默认值设计：**
+```cpp
+// D01默认值
+if (BaseDistance <= 0.0f)
+{
+    BaseDistance = 400.0f;  // 4米，标准第三人称
+}
+
+// 最小距离
+if (MinDistance <= 0.0f)
+{
+    MinDistance = 100.0f;  // 1米，防止太近
+}
+
+// 最大距离
+if (MaxDistance <= 0.0f)
+{
+    MaxDistance = 800.0f;  // 8米，防止太远
+}
+```
+
+### 4. 占位符的智慧设计
+
+**不同混合策略的占位符返回值：**
+
+```cpp
+// Override (D01): 返回实际值
+OutOutput.DistanceOutput = BaseDistance;  // 实际值
+
+// Multiplicative (D02, D07): 返回1.0
+OutOutput.DistanceOutput = 1.0f;  // 乘以1 = 无变化
+
+// Additive (D03, D04): 返回0.0
+OutOutput. DistanceOutput = 0.0f;  // 加0 = 无变化
+
+// Minimum (D05): 返回很大的值
+OutOutput. DistanceOutput = 9999.0f;  // min(x, 9999) = x
+
+// Blend (D06): 返回默认值
+OutOutput.DistanceOutput = 400.0f;  // 与D01相同
+```
+
+**这样设计的好处：**
+- 占位符不影响最终结果
+- 可以单独测试D01
+- 其他模块激活后才产生效果
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] Regenerate执行
+   - [ ] 编译通过（0 errors, 0 warnings）
+   - [ ] 文件编码为UTF-8 Without BOM
+   - [ ] 所有注释为英文
+
+2. **代码完整性：**
+   - [ ] D01实现完整（ShouldActivate + Compute）
+   - [ ] D02-D07占位符完整
+   - [ ] D03构造函数初始化CurrentSpeedOffset
+   - [ ] 所有方法签名与. h一致
+
+3. **逻辑正确性：**
+   - [ ] D01总是激活（bIsEnabled）
+   - [ ] BaseDistance默认值正确（400cm）
+   - [ ] MinDistance默认值正确（100cm）
+   - [ ] MaxDistance默认值正确（800cm）
+   - [ ] Clamp正确应用
+   - [ ] bDistanceIsMultiplier正确设置
+
+4. **字段访问：**
+   - [ ] StateConfig.StateBase. Distance.BaseDistance
+   - [ ] StateConfig.StateBase. Distance.MinDistance
+   - [ ] StateConfig.StateBase. Distance.MaxDistance
+
+**⚠️ 字段检查：**
+如果StateConfig中没有Distance结构，可能需要在CameraTypes.h中添加。
+参考现有的Offset、Rotation等结构。
+
+【注意事项】
+
+1. **必须Regenerate：**
+   创建新. cpp文件后必须Regenerate。
+
+2. **Distance字段处理：**
+   ```cpp
+   // 如果StateConfig. StateBase.Distance结构不存在
+   // 方案1：直接使用默认值
+   float BaseDistance = 400.0f;
+   float MinDistance = 100.0f;
+   float MaxDistance = 800.0f;
+   
+   // 方案2：在CameraTypes.h中添加Distance结构
+   // 参考Offset、Rotation等现有结构
+   ```
+
+3. **FModuleOutput字段：**
+   确认FModuleOutput结构中有：
+   - DistanceOutput (float)
+   - bHasDistanceOutput (bool)
+   - bDistanceIsMultiplier (bool)
+   
+   如果缺少，需要在定义处添加。
+
+4. **测试建议：**
+   编译通过后，测试：
+   - D01是否正确返回配置的距离
+   - 默认值是否正确应用
+   - Min/Max限制是否生效
+
+【输出要求】
+
+完成修改后，请报告：
+
+```
+================================================================================
+Sub-Step 3.4.2 完成报告
+================================================================================
+
+【创建的文件】
+- 文件：CameraModule_Distance. cpp
+- 路径：Source/[ProjectName]/Private/Camera/Modules/
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ D01:  BaseDistance（完整实现）
+- ⏳ D02: TargetSize_Multiplier（占位符）
+- ⏳ D03: Speed_Offset（占位符+构造函数）
+- ⏳ D04: Combat_Adjust（占位符）
+- ⏳ D05: Environment_Limit（占位符）
+- ⏳ D06: Proximity_Adjust（占位符）
+- ⏳ D07: Boss_Phase（占位符）
+
+【编译结果】
+- Regenerate：[已执行/未执行]
+- 编译状态：[成功/失败]
+- 错误数：[数量]
+- 警告数：[数量]
+
+【遇到的问题】
+[如有字段路径问题，详细描述]
+
+【最终状态】
+✅ Distance模块. cpp创建完成，D01实现完毕
+
+================================================================================
+```
+
+【后续步骤】
+
+D01完成后，Distance模块进度：
+- [x] ✅ 3.4.1:  CameraModule_Distance. h
+- [x] ✅ 3.4.2: D01 - Base Distance
+- [ ] ⏳ 3.4.3: D02 - Target Size Multiplier（下一步）
+- [ ] ⏳ 3.4.4: D03 - Speed Offset
+- [ ] ⏳ 3.4.5: D04 - Combat Adjust
+- [ ] ⏳ 3.4.6: D05 - Environment Limit
+- [ ] ⏳ 3.4.7: D06 - Proximity Adjust
+- [ ] ⏳ 3.4.8: D07 - Boss Phase
+
+**Distance模块完成度：1/7 (14.3%)**
+
+完成后准备进入Sub-Step 3.4.3（D02: Target Size Multiplier - 目标尺寸乘数）。
+
+================================================================================

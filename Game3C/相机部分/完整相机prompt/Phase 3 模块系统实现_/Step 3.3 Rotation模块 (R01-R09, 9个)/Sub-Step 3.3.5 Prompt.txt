@@ -1,0 +1,1115 @@
+Sub-Step 3.3.5 Part 1 Prompt - R04 代码实现
+
+================================================================================
+任务：在CameraModule_Rotation. cpp中添加R04 LookAt_Target_Soft实现
+================================================================================
+
+【⚠️ 重要说明】
+本Sub-Step分为2个Part：
+- **Part 1（本文件）**：代码实现 + 编译验证
+- **Part 2（另一文件）**：技术说明文档（供理解，不修改代码）
+
+请先完成Part 1，编译通过后再查看Part 2。
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+R04实现软锁定（Soft Lock-On），相机偏向目标但允许玩家输入微调视角。
+
+【当前进度】
+Phase 3 Step 3.3 Sub-Step 3.3.5 Part 1 (共190个Sub-Step中的第73个)
+前置完成：3.3.4 R03实现 ✅
+
+【任务目标】
+在CameraModule_Rotation.cpp中完整实现R04模块，替换现有的占位符。
+
+【⚠️ 编码格式要求】
+
+1. **文件编码：UTF-8 Without BOM（强制）**
+2. **注释规范：所有注释必须使用英文（强制）**
+3. **命名替换：** 确认StateConfig字段路径与项目实际结构一致
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_Rotation. cpp
+
+2. **定位修改位置：**
+
+在文件中找到R04的占位符实现部分：
+
+```cpp
+//========================================
+// R04: LookAt Target Soft - Soft lock-on rotation
+//========================================
+
+// TODO: Will be implemented in Sub-Step 3.3.5
+// ...  占位符代码
+```
+
+**将上述占位符代码完整替换为下方的完整实现。**
+
+---
+
+3. **R04完整实现代码：**
+
+```cpp
+//========================================
+// R04: LookAt Target Soft - Soft lock-on rotation
+//========================================
+
+/**
+ * Constructor - Initialize soft lock state
+ * 
+ * Sets up initial values for soft lock-on blending. 
+ * InputOffset tracks player's adjustment from lock-on direction.
+ * CurrentRotation stores the smoothed result.
+ */
+UCameraModule_R04_LookAt_Target_Soft::UCameraModule_R04_LookAt_Target_Soft()
+	: InputOffset(FRotator:: ZeroRotator)
+	, CurrentRotation(FRotator::ZeroRotator)
+{
+}
+
+/**
+ * OnActivate - Initialize soft lock state when module becomes active
+ * 
+ * When R04 activates, we initialize: 
+ * - CurrentRotation to previous camera rotation (smooth transition)
+ * - InputOffset to zero (start centered on target)
+ * 
+ * This ensures smooth activation without sudden camera jumps.
+ * 
+ * @param Context The current pipeline execution context
+ */
+void UCameraModule_R04_LookAt_Target_Soft::OnActivate(const FStageExecutionContext& Context)
+{
+	Super::OnActivate(Context);
+	
+	// Initialize current rotation to maintain continuity
+	CurrentRotation = Context.InputContext. PreviousCameraRotation;
+	
+	// Reset input offset (start centered on target)
+	InputOffset = FRotator::ZeroRotator;
+}
+
+/**
+ * ShouldActivate - Determine if soft lock-on rotation should be active
+ * 
+ * R04 activates when:
+ * - Module is enabled
+ * - Player has a locked-on target
+ * - Target is NOT a boss (boss uses R05)
+ * 
+ * R04 has slightly lower priority (140) than R03 (150).
+ * Uses Blend policy to work cooperatively with other rotation modules.
+ * 
+ * Use Cases:
+ * - Combat where player needs some camera freedom
+ * - Situations requiring target awareness + player control
+ */
+bool UCameraModule_R04_LookAt_Target_Soft::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if player has a locked target
+	if (!Context.InputContext.bHasTarget)
+	{
+		return false;
+	}
+	
+	// Don't activate for boss targets (R05 handles those)
+	if (Context.InputContext.bTargetIsBoss)
+	{
+		return false;
+	}
+	
+	// All conditions met - activate soft lock-on
+	return true;
+}
+
+/**
+ * Compute - Calculate soft lock rotation with player input adjustment
+ * 
+ * This module combines target tracking with player control by:
+ * 1. Calculating base look-at rotation to target (like R03)
+ * 2. Allowing player input to add offset from that base
+ * 3. Limiting offset range (can't look completely away)
+ * 4. Decaying offset back to center when no input
+ * 5. Smoothly interpolating the final rotation
+ * 
+ * @param Context The current pipeline execution context
+ * @param StateConfig The current camera state configuration
+ * @param OutOutput Output structure to fill with computed values
+ * @return True if computation succeeded
+ */
+bool UCameraModule_R04_LookAt_Target_Soft::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Step 1: Validate target exists
+	if (!Context.InputContext. bHasTarget)
+	{
+		OutOutput.bHasRotationOutput = false;
+		return false;
+	}
+	
+	// Step 2: Calculate base look-at rotation (same as R03)
+	FVector CameraFocusPoint = Context.Output.FocusPoint;
+	
+	// Fallback if FocusPoint is invalid
+	if (CameraFocusPoint. IsNearlyZero())
+	{
+		CameraFocusPoint = Context. InputContext.CharacterLocation;
+		CameraFocusPoint.Z += 100.0f;
+	}
+	
+	FVector TargetLocation = Context.InputContext. TargetLocation;
+	
+	// Apply height offset to target
+	float TargetSize = Context.InputContext.TargetSize;
+	if (TargetSize <= 0.0f)
+	{
+		TargetSize = 100.0f;
+	}
+	
+	float TargetHeightOffset = TargetSize * 0.3f;
+	TargetHeightOffset = FMath:: Clamp(TargetHeightOffset, 20.0f, 100.0f);
+	TargetLocation.Z += TargetHeightOffset;
+	
+	// Calculate look direction
+	FVector LookDirection = (TargetLocation - CameraFocusPoint).GetSafeNormal();
+	if (LookDirection.IsNearlyZero())
+	{
+		LookDirection = FVector:: ForwardVector;
+	}
+	
+	FRotator BaseLookAtRotation = LookDirection.Rotation();
+	
+	// Step 3: Process player input for offset
+	FVector2D CameraInput = Context.InputContext.CameraInput;
+	
+	// Get sensitivity (reduced for soft lock)
+	float InputSensitivity = StateConfig.Module.Rotation.InputSensitivity;
+	if (InputSensitivity <= 0.0f)
+	{
+		InputSensitivity = 1.0f;
+	}
+	
+	// Reduce sensitivity for soft lock (50% of normal)
+	float SoftLockSensitivity = InputSensitivity * 0.5f;
+	
+	// Calculate input deltas
+	float DeltaYaw = CameraInput.X * SoftLockSensitivity;
+	float DeltaPitch = CameraInput.Y * SoftLockSensitivity * -1.0f;
+	
+	// Step 4: Accumulate input offset (limited range)
+	InputOffset. Yaw += DeltaYaw;
+	InputOffset.Pitch += DeltaPitch;
+	
+	// Define maximum offset from lock-on direction
+	const float MaxOffsetYaw = 30.0f;    // ±30 degrees horizontal
+	const float MaxOffsetPitch = 15.0f;  // ±15 degrees vertical
+	
+	// Clamp offset to max range
+	InputOffset.Yaw = FMath::Clamp(InputOffset.Yaw, -MaxOffsetYaw, MaxOffsetYaw);
+	InputOffset.Pitch = FMath::Clamp(InputOffset.Pitch, -MaxOffsetPitch, MaxOffsetPitch);
+	
+	// Step 5: Decay offset back to center when no input
+	float InputMagnitude = CameraInput.Size();
+	
+	if (InputMagnitude < 0.1f)  // Threshold for "no input"
+	{
+		// Decay rate:  how fast offset returns to zero
+		const float DecayRate = 2.0f;
+		
+		// Interpolate offset towards zero
+		InputOffset.Yaw = FMath::FInterpTo(InputOffset. Yaw, 0.0f, Context.DeltaTime, DecayRate);
+		InputOffset.Pitch = FMath::FInterpTo(InputOffset.Pitch, 0.0f, Context.DeltaTime, DecayRate);
+	}
+	
+	// Step 6: Combine base look-at with input offset
+	FRotator TargetRotation = BaseLookAtRotation + InputOffset;
+	
+	// Step 7: Clamp final pitch to limits
+	float MinPitch = StateConfig.StateBase.Rotation.MinPitch;
+	float MaxPitch = StateConfig.StateBase.Rotation. MaxPitch;
+	
+	if (MinPitch >= MaxPitch)
+	{
+		MinPitch = -80.0f;
+		MaxPitch = 80.0f;
+	}
+	
+	TargetRotation.Pitch = FMath::Clamp(TargetRotation.Pitch, MinPitch, MaxPitch);
+	
+	// Force roll to zero
+	TargetRotation.Roll = 0.0f;
+	
+	// Step 8: Get interpolation speed for smooth rotation
+	float InterpSpeed = StateConfig.Module. Rotation.LookAtInterpSpeed;
+	
+	if (InterpSpeed <= 0.0f)
+	{
+		InterpSpeed = 5.0f;  // Default:  moderate smoothing
+	}
+	
+	// Smoothly interpolate current rotation towards target
+	CurrentRotation = FMath::RInterpTo(
+		CurrentRotation, 
+		TargetRotation, 
+		Context.DeltaTime, 
+		InterpSpeed
+	);
+	
+	// Step 9: Get soft lock strength (for blending with other modules)
+	float SoftLockStrength = StateConfig. Module.Rotation.SoftLockStrength;
+	
+	if (SoftLockStrength <= 0.0f || SoftLockStrength > 1.0f)
+	{
+		SoftLockStrength = 0.7f;  // Default: 70% influence
+	}
+	
+	// Step 10: Fill output structure
+	OutOutput. RotationOutput = CurrentRotation;
+	OutOutput. bHasRotationOutput = true;
+	
+	// Set weight for blending
+	OutOutput.Weight = SoftLockStrength;
+	
+	return true;
+}
+```
+
+---
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过（0 errors, 0 warnings）
+   - [ ] 文件编码为UTF-8 Without BOM
+   - [ ] 所有注释为英文
+
+2. **代码完整性：**
+   - [ ] 构造函数实现完整
+   - [ ] OnActivate()实现完整
+   - [ ] ShouldActivate()实现完整
+   - [ ] Compute()实现完整
+
+3. **逻辑正确性：**
+   - [ ] 基础Look-At计算正确
+   - [ ] 输入偏移累积和限制正确
+   - [ ] 衰减机制实现正确
+   - [ ] 平滑插值使用RInterpTo
+   - [ ] 输出Weight设置正确
+
+【注意事项】
+
+1. **不需要Regenerate：** 只修改. cpp文件，保存后直接编译
+
+2. **字段缺失处理：**
+   ```cpp
+   // 如果SoftLockStrength不存在
+   float SoftLockStrength = 0.7f;  // 直接使用默认值
+   
+   // 如果LookAtInterpSpeed不存在
+   float InterpSpeed = 5.0f;  // 直接使用默认值
+   ```
+
+3. **关键常量：**
+   - MaxOffsetYaw = 30.0f（可根据实际效果调整）
+   - MaxOffsetPitch = 15.0f（垂直限制更小）
+   - DecayRate = 2.0f（约0.5秒回中）
+   - SoftLockSensitivity = 50%（降低灵敏度）
+
+【输出要求】
+
+完成修改后，请报告：
+
+```
+================================================================================
+Sub-Step 3.3.5 Part 1 完成报告
+================================================================================
+
+【修改内容】
+- 文件：CameraModule_Rotation.cpp
+- 修改位置：R04模块（构造函数、OnActivate、ShouldActivate、Compute）
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ 构造函数：初始化软锁定状态
+- ✅ OnActivate：初始化CurrentRotation和InputOffset
+- ✅ ShouldActivate：检查激活条件
+- ✅ Compute：软锁定计算（Look-At + 输入偏移 + 衰减）
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误数：[数量]
+- 警告数：[数量]
+
+【最终状态】
+✅ Part 1完成，R04模块代码实现完毕
+
+【下一步】
+请查看Part 2（技术说明文档）以深入理解R04的设计原理
+
+================================================================================
+```
+
+【后续步骤】
+
+Part 1完成后：
+- [x] ✅ 3.3.5 Part 1:  R04代码实现
+- [ ] ⏳ 3.3.5 Part 2: R04技术说明（另一文件）
+- [ ] ⏳ 3.3.6:  R05 - LookAt Boss
+
+**完成Part 1后，请继续查看Part 2文档！**
+
+================================================================================
+
+
+
+
+
+
+
+
+
+
+
+
+Sub-Step 3.3.5 Part 2 Prompt - R04 技术说明
+
+================================================================================
+R04 LookAt Target Soft - 技术原理与设计分析
+================================================================================
+
+【⚠️ 重要说明】
+本文件是Sub-Step 3.3.5的Part 2（技术说明文档）。
+- **不需要修改代码**
+- **仅供理解R04的设计原理**
+- **Part 1已完成代码实现和编译**
+
+本文档详细解释R04软锁定的数学原理、设计决策和使用场景。
+
+================================================================================
+1. 软锁定的核心机制
+================================================================================
+
+### 1.1 数学模型
+
+**基本公式：**
+```
+FinalRotation = BaseLookAtRotation + InputOffset
+
+其中：
+- BaseLookAtRotation:  指向目标的旋转（如R03）
+- InputOffset:  玩家输入的偏移量（有限制）
+- FinalRotation: 最终输出（混合结果）
+```
+
+**工作流程：**
+```
+1. 计算BaseLookAtRotation
+   TargetLocation (目标位置)
+   CameraFocusPoint (相机焦点)
+   LookDirection = TargetLocation - CameraFocusPoint
+   BaseLookAtRotation = LookDirection.Rotation()
+
+2. 处理玩家输入
+   CameraInput (摇杆输入)
+   DeltaYaw = CameraInput.X * Sensitivity * 0.5
+   DeltaPitch = CameraInput.Y * Sensitivity * 0.5 * -1.0
+   
+3. 累积偏移（带限制）
+   InputOffset. Yaw += DeltaYaw
+   Clamp(InputOffset.Yaw, -30°, +30°)
+   
+4. 合成最终旋转
+   FinalRotation = BaseLookAtRotation + InputOffset
+```
+
+**示例场景：**
+```
+目标在正前方：
+BaseLookAtRotation = (Yaw=0°, Pitch=0°)
+
+玩家向右推摇杆：
+CameraInput. X = +1.0
+DeltaYaw = 1.0 * 1.0 * 0.5 = 0.5°/帧
+InputOffset.Yaw = 0 + 0.5 = 0.5°
+
+FinalRotation = (Yaw=0.5°, Pitch=0°)
+→ 相机稍微向右偏离目标
+
+持续10帧：
+InputOffset.Yaw = 5.0°
+FinalRotation = (Yaw=5°, Pitch=0°)
+→ 相机偏离5度，目标仍在视野内
+```
+
+### 1.2 与R01/R03的对比
+
+| 特性 | R01 (Free) | R03 (Hard Lock) | R04 (Soft Lock) |
+|------|-----------|-----------------|-----------------|
+| **状态数量** | 1个 | 0个（无状态） | 2个（Target+Current） |
+| **玩家输入** | 完全控制 | 完全忽略 | 有限控制 |
+| **目标跟踪** | 无 | 完全跟踪 | 部分跟踪 |
+| **响应性** | 即时 | 即时 | 延迟平滑 |
+| **优先级** | 100 | 150 | 140 |
+| **混合策略** | Override | Override | Blend |
+
+================================================================================
+2. 偏移限制机制
+================================================================================
+
+### 2.1 为什么需要限制？
+
+**不限制的问题：**
+```
+MaxOffset = 无限制
+
+场景：玩家持续向右旋转
+InputOffset.Yaw: 0° → 30° → 60° → 90° → 180°
+
+结果：
+- 相机可以转到目标背后
+- 目标完全离开视野
+- 失去"锁定"的意义
+- 变成完全自由相机（R01）
+
+❌ 不是软锁定
+```
+
+**限制到±30°的效果：**
+```
+MaxOffsetYaw = 30.0f
+
+场景：玩家持续向右旋转
+InputOffset.Yaw: 0° → 10° → 20° → 30° → 30° (停止增长)
+
+结果：
+- 相机最多偏离30度
+- 目标始终在视野内
+- 保持"锁定"特性
+- 允许适度调整
+
+✅ 这是软锁定
+```
+
+### 2.2 不同限制值的效果对比
+
+| MaxOffset | 水平范围 | 效果描述 | 适用场景 |
+|-----------|---------|---------|---------|
+| ±10° | 非常窄 | 接近硬锁定，几乎无自由度 | 高精度战斗 |
+| ±20° | 较窄 | 有限自由度，目标居中 | 紧张战斗 |
+| **±30°** | **适中** | **平衡锁定和自由** | **✅ 推荐** |
+| ±45° | 较宽 | 较大自由度，接近自由 | 探索+战斗 |
+| ±60° | 很宽 | 很大自由度，轻度吸附 | 开放世界 |
+
+**实际视觉效果：**
+```
+屏幕宽度假设为1920像素
+
+±30° Yaw偏移：
+- 目标在屏幕中心：X = 960
+- 最大向右偏移：目标在 X ≈ 700
+- 最大向左偏移：目标在 X ≈ 1220
+→ 目标始终在屏幕中央1/3区域
+
+±15° Pitch偏移：
+- 垂直偏移更小（防止看天/看地）
+- 保持目标在屏幕中部
+```
+
+### 2.3 垂直偏移限制更小的原因
+
+```cpp
+const float MaxOffsetYaw = 30.0f;    // 水平：±30°
+const float MaxOffsetPitch = 15.0f;  // 垂直：±15°（一半）
+```
+
+**为什么Pitch限制更小？**
+
+```
+1. 游戏视角特点：
+   - 第三人称主要是水平视角
+   - 垂直视角变化较少
+   - 过大的Pitch会不舒适
+
+2. 目标跟踪需求：
+   - 敌人主要在水平方向移动
+   - 垂直移动较少（除非飞行/跳跃）
+   - 水平偏移更重要
+
+3. 玩家体验：
+   - 水平自由度：玩家期望较高
+   - 垂直自由度：玩家期望较低
+   - 过度上下看会导致眩晕
+
+结论：Pitch限制为Yaw的50%是合理的设计
+```
+
+================================================================================
+3. 衰减机制（Decay）
+================================================================================
+
+### 3.1 衰减的作用
+
+**场景模拟：**
+```
+时间轴：玩家向右调整30°，然后松开摇杆
+
+不衰减（假设）：
+T=0s:   InputOffset.Yaw = 0°
+T=1s:  玩家推摇杆，InputOffset. Yaw = 30°
+T=2s:  松开摇杆，InputOffset.Yaw = 30°（保持）
+T=5s:  InputOffset.Yaw = 30°（仍然保持）
+
+问题：
+- 相机一直偏向右侧
+- 玩家需要手动反向推摇杆回中
+- 操作繁琐，体验差
+
+有衰减（实际）：
+T=0s:  InputOffset.Yaw = 0°
+T=1s:   玩家推摇杆，InputOffset.Yaw = 30°
+T=2s:  松开摇杆，InputOffset.Yaw = 30°
+T=2.5s: 开始衰减，InputOffset. Yaw = 15°
+T=3s:  InputOffset.Yaw = 3°
+T=3.5s: InputOffset.Yaw ≈ 0°（回中）
+
+效果：
+- 相机自动回中到目标
+- 无需手动操作
+- 自然流畅
+```
+
+### 3.2 衰减速率分析
+
+**衰减公式：**
+```cpp
+InputOffset.Yaw = FMath::FInterpTo(
+    InputOffset.Yaw,  // 当前值
+    0.0f,             // 目标值（回中）
+    DeltaTime,        // 时间步长
+    DecayRate         // 衰减速率
+);
+```
+
+**不同DecayRate的效果：**
+
+| DecayRate | 衰减时间 | 效果描述 | 适用场景 |
+|-----------|---------|---------|---------|
+| 1.0 | ~1. 0秒 | 慢速衰减，偏移持久 | 探索模式 |
+| **2.0** | **~0.5秒** | **适度衰减，平衡** | **✅ 推荐** |
+| 5.0 | ~0.2秒 | 快速衰减，强吸附 | 紧张战斗 |
+| 10.0 | ~0.1秒 | 极快衰减，接近硬锁定 | 高精度需求 |
+
+**数学原理（指数衰减）：**
+```
+FInterpTo使用指数插值：
+Value(t) = Current + (Target - Current) * (1 - e^(-Rate * DeltaTime))
+
+30°衰减到0°，DecayRate=2.0，DeltaTime=0.016s (60FPS)：
+T=0.00s: 30.0°
+T=0.25s: 15.0°（50%）
+T=0.50s: 7.5°（25%）
+T=0.75s: 3.75°（12.5%）
+T=1.00s: ≈0° (完全衰减)
+
+→ 约0.5秒回中（DecayRate=2.0）
+```
+
+### 3.3 输入检测阈值
+
+```cpp
+if (InputMagnitude < 0.1f)  // "无输入"阈值
+{
+    // 开始衰减
+}
+```
+
+**为什么阈值是0.1而非0？**
+
+```
+1. 摇杆死区：
+   - 物理摇杆有死区
+   - 完全静止时可能有微小值（0.01-0.05）
+   - 0.1可以过滤这些噪音
+
+2. 玩家意图判断：
+   - < 0.1: 玩家没有明确输入 → 衰减
+   - ≥ 0.1: 玩家有输入 → 不衰减
+
+3. 体验优化：
+   - 防止误触发衰减
+   - 轻微推摇杆时保持偏移
+   - 完全松开才衰减
+```
+
+================================================================================
+4. 降低灵敏度策略
+================================================================================
+
+### 4.1 为什么降低灵敏度？
+
+**R01 vs R04灵敏度对比：**
+
+```
+R01 (自由相机):
+Sensitivity = 100%
+DeltaYaw = CameraInput.X * 1.0
+
+用途：
+- 玩家完全控制相机
+- 需要快速响应
+- 大范围旋转
+
+R04 (软锁定):
+Sensitivity = 50%
+DeltaYaw = CameraInput.X * 0.5
+
+用途：
+- 玩家微调视角
+- 需要精确控制
+- 小范围调整
+```
+
+**实际效果：**
+```
+相同输入（CameraInput.X = 1.0）：
+
+R01:
+DeltaYaw = 1.0 * 1.0 = 1.0°/帧
+60FPS → 60°/秒
+感觉：快速响应
+
+R04:
+DeltaYaw = 1.0 * 0.5 = 0.5°/帧
+60FPS → 30°/秒
+感觉：精确微调
+
+结论：R04响应速度是R01的一半，更适合微调
+```
+
+### 4.2 灵敏度调整建议
+
+| 场景 | 推荐倍率 | 说明 |
+|------|---------|------|
+| 精确瞄准 | 0.3x | 极精确，适合远程武器 |
+| 软锁定 | 0.5x | ✅ 推荐，平衡微调 |
+| 半自由 | 0.7x | 较自由，轻度吸附 |
+| 接近自由 | 1.0x | 完全自由（不是软锁定） |
+
+================================================================================
+5. 动态权重系统
+================================================================================
+
+### 5.1 Weight的作用
+
+**Blend策略 + Weight：**
+```cpp
+OutOutput. BlendPolicy = EBlendPolicy::Blend;  // 在. h中设置
+OutOutput.Weight = SoftLockStrength;  // 例如0.7
+```
+
+**在Stage 5混合时：**
+```
+假设同时激活：
+- R01: Weight=1.0, Rotation=(Yaw=30°, Pitch=0°)  // 玩家向右看
+- R04: Weight=0.7, Rotation=(Yaw=5°, Pitch=0°)   // 软锁定（目标在前偏左）
+
+混合计算：
+TotalWeight = 1.0 + 0.7 = 1.7
+
+FinalRotation = (R01 * 1.0 + R04 * 0.7) / 1.7
+              = (30° * 1.0 + 5° * 0.7) / 1.7
+              = (30 + 3.5) / 1.7
+              = 33.5 / 1.7
+              = 19.7°
+
+效果：
+- 如果只有R01：Yaw=30°（完全跟随输入）
+- 如果只有R04：Yaw=5°（完全跟随锁定）
+- 实际混合：Yaw=19.7°（偏向输入，但被目标拉回）
+
+→ 目标有影响，但玩家输入仍是主导
+```
+
+### 5.2 不同SoftLockStrength的效果
+
+| SoftLockStrength | 目标影响 | 玩家影响 | 描述 |
+|------------------|---------|---------|------|
+| 0.3 | 23% | 77% | 轻微吸附，主要自由 |
+| 0.5 | 33% | 67% | 平衡，双方较平等 |
+| **0.7** | **41%** | **59%** | **✅ 推荐，适度吸附** |
+| 0.9 | 47% | 53% | 强吸附，接近硬锁定 |
+| 1.0 | 50% | 50% | 完全平等（如果R01也是1.0） |
+
+**注意：** 百分比基于R01的Weight为1.0的假设
+
+### 5.3 为什么R04使用Blend而非Override？
+
+**Override策略（R03）：**
+```
+R03激活 → 完全控制旋转
+R01/R02的输出被忽略
+玩家输入无效
+
+适用：硬锁定，需要完全跟随目标
+```
+
+**Blend策略（R04）：**
+```
+R04激活 → 贡献旋转（权重0.7）
+R01/R02同时贡献（权重1.0）
+Stage 5混合两者
+
+适用：软锁定，平衡目标和输入
+```
+
+**实际体验差异：**
+```
+场景：玩家向右推摇杆，同时锁定目标
+
+R03 (Hard Lock, Override):
+- 摇杆输入被忽略
+- 相机只看目标
+- 玩家感觉失控
+
+R04 (Soft Lock, Blend):
+- 摇杆输入有效（权重1.0）
+- 目标吸附生效（权重0.7）
+- 相机向右偏移，但被目标拉回一些
+- 玩家感觉有控制权 + 目标辅助
+
+✅ R04提供更好的控制感
+```
+
+================================================================================
+6. 与R03的详细对比
+================================================================================
+
+| 特性 | R03 (Hard Lock) | R04 (Soft Lock) |
+|------|----------------|-----------------|
+| **优先级** | 150 | 140 |
+| **混合策略** | Override | Blend |
+| **玩家输入** | 完全忽略 | 允许（限制±30°） |
+| **响应性** | 即时跟随目标 | 平滑+偏移 |
+| **权重** | 1.0（隐式） | 0.7（可配置） |
+| **灵敏度** | 无（忽略输入） | 50%（降低） |
+| **衰减** | 无 | 有（2.0速率） |
+| **状态** | 无状态 | 2个状态 |
+| **适用场景** | 精确战斗，硬锁定 | 灵活战斗，软锁定 |
+| **Dark Souls** | 类似锁定系统 | - |
+| **Monster Hunter** | - | 类似软锁定 |
+
+**激活互斥关系：**
+```
+场景：玩家锁定普通敌人
+
+情况1：StateConfig启用R03
+- R03优先级150 → 激活
+- R04优先级140 → 即使满足条件也不激活
+- 结果：硬锁定
+
+情况2：StateConfig启用R04（禁用R03）
+- R03不满足激活条件（未启用）
+- R04优先级140 → 激活
+- 结果：软锁定
+
+实践：
+- 战斗状态A:  启用R03（需要精确锁定）
+- 战斗状态B: 启用R04（需要灵活视角）
+- 设计师选择
+```
+
+================================================================================
+7. 实际使用场景
+================================================================================
+
+### 场景1：普通战斗（软锁定）
+
+**配置：**
+```cpp
+StateConfig.bEnableR03 = false;  // 禁用硬锁定
+StateConfig. bEnableR04 = true;   // 启用软锁定
+StateConfig.Module. Rotation.SoftLockStrength = 0.7f;
+```
+
+**玩家体验：**
+```
+1. 锁定敌人
+2. 相机自动偏向敌人
+3. 玩家可以向右看（查看周围）
+   - 相机向右偏移最多30°
+   - 敌人仍在视野内（左侧）
+4. 松开摇杆
+   - 相机自动回中（0.5秒）
+   - 重新对准敌人
+
+感觉：
+- 有目标辅助
+- 保持控制权
+- 灵活应对
+```
+
+### 场景2：多敌人战斗
+
+**问题：**
+```
+使用R03（硬锁定）：
+- 相机死盯锁定的敌人A
+- 敌人B从右侧偷袭
+- 玩家无法查看右侧
+- 被偷袭
+
+使用R04（软锁定）：
+- 相机偏向敌人A
+- 玩家可以向右看查看敌人B
+- 敌人A仍在视野内（偏左）
+- 同时注意两个敌人
+- 更好的战场意识
+```
+
+### 场景3：探索+战斗混合
+
+**需求：**
+```
+- 战斗时需要目标跟踪
+- 但也要欣赏环境
+- 需要一定相机自由度
+
+R03：
+- 锁定时只看敌人
+- 看不到环境
+- 沉浸感降低
+
+R04：
+- 锁定时偏向敌人
+- 可以看周围环境
+- 保持沉浸感
+- 平衡战斗和探索
+```
+
+================================================================================
+8. 调试和调优建议
+================================================================================
+
+### 8.1 关键参数调优
+
+**参数1：MaxOffsetYaw/MaxOffsetPitch**
+```cpp
+const float MaxOffsetYaw = 30.0f;    // 可调整
+const float MaxOffsetPitch = 15.0f;  // 可调整
+
+调优指南：
+- 太小（<20°）：限制太严，接近硬锁定
+- 合适（20-40°）：✅ 平衡
+- 太大（>50°）：限制太松，接近自由相机
+
+测试方法：
+1. 锁定目标
+2. 向一侧推满摇杆
+3. 观察目标是否仍在屏幕内
+4. 调整MaxOffset直到满意
+```
+
+**参数2：DecayRate**
+```cpp
+const float DecayRate = 2.0f;  // 可调整
+
+调优指南：
+- 太慢（<1.0）：回中太慢，感觉迟钝
+- 合适（1.5-3.0）：✅ 自然
+- 太快（>5.0）：回中太快，感觉突兀
+
+测试方法：
+1. 锁定目标
+2. 偏移相机30°
+3. 松开摇杆
+4. 计时回中（应该0.3-0.7秒）
+5. 调整DecayRate
+```
+
+**参数3：SoftLockSensitivity（50%）**
+```cpp
+float SoftLockSensitivity = InputSensitivity * 0.5f;  // 可调整倍率
+
+调优指南：
+- 太低（<0.3）：调整太慢，响应迟钝
+- 合适（0.4-0.6）：✅ 精确微调
+- 太高（>0.8）：调整太快，不够精确
+
+测试方法：
+1. 锁定目标
+2. 轻推摇杆
+3. 观察相机移动速度
+4. 调整倍率直到满意
+```
+
+**参数4：SoftLockStrength（权重）**
+```cpp
+OutOutput.Weight = 0.7f;  // 可调整
+
+调优指南：
+- 太低（<0.5）：目标影响太弱
+- 合适（0.6-0.8）：✅ 平衡
+- 太高（>0.9）：接近硬锁定
+
+测试方法：
+1. 锁定目标
+2. 推摇杆向一侧
+3. 观察相机是否被目标拉回
+4. 调整Weight直到平衡
+```
+
+### 8.2 调试日志建议
+
+**添加可选日志（调试时）：**
+```cpp
+// 在Compute()中添加
+#if ! UE_BUILD_SHIPPING
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(
+			-1, 0.0f, FColor::Yellow,
+			FString::Printf(TEXT("R04 - InputOffset:  Yaw=%.1f Pitch=%.1f | Weight=%.2f"),
+				InputOffset.Yaw, InputOffset.Pitch, OutOutput.Weight)
+		);
+	}
+#endif
+```
+
+**观察内容：**
+- InputOffset值（是否正确累积和限制）
+- 衰减效果（松开摇杆后是否归零）
+- Weight值（是否正确设置）
+
+================================================================================
+9. 常见问题和解决方案
+================================================================================
+
+### 问题1：相机回中太快/太慢
+
+**原因：** DecayRate不合适
+
+**解决：**
+```cpp
+// 太快（回中<0.2秒）
+const float DecayRate = 2.0f;  // 降低到1.5或1.0
+
+// 太慢（回中>1秒）
+const float DecayRate = 2.0f;  // 提高到3.0或4.0
+```
+
+### 问题2：无法充分调整视角
+
+**原因：** MaxOffset太小或灵敏度太低
+
+**解决：**
+```cpp
+// 增加偏移范围
+const float MaxOffsetYaw = 40.0f;  // 从30提高到40
+
+// 或提高灵敏度
+float SoftLockSensitivity = InputSensitivity * 0.6f;  // 从0.5提高到0.6
+```
+
+### 问题3：目标吸附感不明显
+
+**原因：** SoftLockStrength太低
+
+**解决：**
+```cpp
+// 提高权重
+float SoftLockStrength = 0.8f;  // 从0.7提高到0.8
+```
+
+### 问题4：与R03冲突（都激活了）
+
+**原因：** 优先级和激活条件有重叠
+
+**解决：**
+```cpp
+// 方案1：在ShouldActivate中互斥
+bool UCameraModule_R04_LookAt_Target_Soft::ShouldActivate(...)
+{
+	// ...  其他条件
+	
+	// 确保与R03互斥
+	if (StateConfig.bEnableHardLock)
+	{
+		return false;  // R03优先
+	}
+	
+	return true;
+}
+
+// 方案2：设计师配置确保只启用一个
+```
+
+================================================================================
+10. 总结
+================================================================================
+
+### R04软锁定的设计亮点：
+
+1. ✅ **目标跟踪 + 玩家控制** 的完美平衡
+2. ✅ **有限偏移** 确保目标始终可见
+3. ✅ **自动衰减** 提供流畅的自动回中
+4. ✅ **降低灵敏度** 实现精确微调
+5. ✅ **动态权重** 允许与其他模块协作
+6. ✅ **平滑插值** 避免突变，提升体验
+
+### 关键数值总结：
+
+| 参数 | 推荐值 | 作用 |
+|------|--------|------|
+| MaxOffsetYaw | 30.0° | 水平偏移限制 |
+| MaxOffsetPitch | 15.0° | 垂直偏移限制 |
+| DecayRate | 2.0 | 衰减速率（~0.5秒） |
+| SoftLockSensitivity | 50% | 灵敏度倍率 |
+| SoftLockStrength | 0.7 | 混合权重 |
+| InterpSpeed | 5.0 | 平滑速率 |
+
+### 适用游戏类型：
+
+- ✅ 动作RPG（需要目标跟踪+环境观察）
+- ✅ 动作冒险（平衡战斗和探索）
+- ✅ 第三人称射击（软瞄准辅助）
+- ✅ Monster Hunter风格（灵活战斗）
+- ❌ 不适合：需要绝对精确锁定的游戏（用R03）
+
+================================================================================
+【本Sub-Step完成】
+================================================================================
+
+**已完成内容：**
+- [x] ✅ Part 1: R04代码实现
+- [x] ✅ Part 2: R04技术说明
+
+**Rotation模块进度：**
+- [x] ✅ 3.3.1: CameraModule_Rotation. h
+- [x] ✅ 3.3.2: R01 - Player Input Free
+- [x] ✅ 3.3.3: R02 - Player Input Lagged
+- [x] ✅ 3.3.4: R03 - LookAt Target
+- [x] ✅ 3.3.5: R04 - LookAt Target Soft（完整完成）
+- [ ] ⏳ 3.3.6: R05 - LookAt Boss（下一步）
+
+**Rotation模块完成度：4/9 (44.4%)**
+
+**下一步：** Sub-Step 3.3.6 - R05 LookAt Boss
+
+================================================================================
+
+

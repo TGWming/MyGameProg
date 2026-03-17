@@ -1,0 +1,563 @@
+Sub-Step 3.5.3 Prompt
+
+================================================================================
+任务：在CameraModule_FOV.cpp中添加F02 Speed_FOV实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+F02根据角色移动速度动态增加FOV。
+快速移动时FOV增大，产生速度感和更宽的周边视野。
+
+【Pipeline中的位置】
+```
+FOV模块计算流程：
+1. F01: BaseFOV = 90° (Override，基础值)
+2. F02: +12° (Additive，速度FOV) ← 当前
+   → 90 + 12 = 102°（冲刺时更宽）
+3. F03-F06: 后续调整
+```
+
+【当前进度】
+Phase 3 Step 3.5 Sub-Step 3.5.3 (共190个Sub-Step中的第89个)
+前置完成：3.5.2 F01实现 ✅
+
+【任务目标】
+在CameraModule_FOV.cpp中完整实现F02模块，替换现有的占位符。
+
+【⚠️ 重要提醒】
+
+1. **编译前必做步骤：**
+   本Sub-Step只修改现有. cpp文件，不添加新文件。
+   因此**不需要Regenerate**，可以直接编译。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   确认StateConfig和InputContext的字段路径与项目实际结构一致。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_FOV.cpp
+
+2. **定位修改位置：**
+
+在文件中找到F02的占位符实现部分：
+
+```cpp
+//========================================
+// F02: Speed FOV
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.5.3
+// Increases FOV when moving fast
+... 占位符代码
+```
+
+**将上述占位符代码完整替换为下方的完整实现。**
+
+---
+
+3. **F02完整实现代码：**
+
+**A. 构造函数（保持不变）：**
+
+```cpp
+/**
+ * Constructor - Initialize smooth offset state
+ */
+UCameraModule_F02_Speed_FOV::UCameraModule_F02_Speed_FOV()
+	: CurrentSpeedFOVOffset(0.0f)
+{
+}
+```
+
+---
+
+**B. ShouldActivate() 实现：**
+
+```cpp
+/**
+ * ShouldActivate - Determine if speed-based FOV increase should be active
+ * 
+ * F02 activates when: 
+ * - Module is enabled
+ * - Character is moving (bIsMoving)
+ * - Character speed exceeds threshold
+ * 
+ * This module creates a sense of speed by increasing FOV during fast
+ * movement.  Common in action games to enhance the feeling of sprinting.
+ * 
+ * Priority 105 (after F01), uses Additive policy. 
+ * 
+ * Use Cases:
+ * - Sprinting through open areas
+ * - Running to objectives
+ * - Escape sequences
+ * - High-speed chase moments
+ */
+bool UCameraModule_F02_Speed_FOV::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if character is moving
+	if (!Context. InputContext.bIsMoving)
+	{
+		return false;
+	}
+	
+	// Get speed threshold from config
+	float SpeedThreshold = StateConfig.Module.FOV.SpeedFOVThreshold;
+	
+	// If threshold not configured, use default
+	if (SpeedThreshold <= 0.0f)
+	{
+		SpeedThreshold = 200.0f;  // Default:  2 m/s (walking speed)
+	}
+	
+	// Check if speed exceeds threshold
+	float CurrentSpeed = Context.InputContext.CharacterSpeed;
+	if (CurrentSpeed <= SpeedThreshold)
+	{
+		return false;  // Not fast enough to trigger
+	}
+	
+	// All conditions met - activate speed FOV
+	return true;
+}
+```
+
+---
+
+**C. Compute() 实现：**
+
+```cpp
+/**
+ * Compute - Calculate FOV increase based on movement speed
+ * 
+ * This module calculates an additive FOV offset based on how fast
+ * the character is moving.  Faster movement = larger FOV = wider view.
+ * 
+ * Steps:
+ * 1. Get current speed and config values
+ * 2. Calculate speed above threshold
+ * 3. Calculate speed ratio (0 to 1)
+ * 4. Apply curve for dramatic high-speed effect
+ * 5. Calculate target FOV offset
+ * 6. Smooth the offset transition
+ * 7. Output with Additive policy
+ * 
+ * Speed to FOV Mapping (with quadratic curve):
+ * - At threshold (200cm/s): offset = 0°
+ * - At run speed (400cm/s): offset ≈ +4°
+ * - At sprint speed (600cm/s): offset ≈ +15° (max)
+ * 
+ * The quadratic curve (ratio²) makes the effect more pronounced at
+ * higher speeds, giving a more dramatic speed sensation.
+ * 
+ * @param Context The current pipeline execution context
+ * @param StateConfig The current camera state configuration
+ * @param OutOutput Output structure to fill with computed values
+ * @return True if computation succeeded
+ */
+bool UCameraModule_F02_Speed_FOV::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Step 1: Get current speed and config values
+	float CurrentSpeed = Context.InputContext.CharacterSpeed;
+	
+	// Get speed threshold from config
+	float SpeedThreshold = StateConfig. Module.FOV. SpeedFOVThreshold;
+	if (SpeedThreshold <= 0.0f)
+	{
+		SpeedThreshold = 200.0f;  // Default: 2 m/s
+	}
+	
+	// Get maximum FOV increase from config
+	float MaxFOVIncrease = StateConfig.Module. FOV.SpeedFOVIncrease;
+	if (MaxFOVIncrease <= 0.0f)
+	{
+		MaxFOVIncrease = 15.0f;  // Default: 15 degrees max increase
+	}
+	
+	// Step 2: Calculate speed above threshold
+	float SpeedAboveThreshold = FMath:: Max(0.0f, CurrentSpeed - SpeedThreshold);
+	
+	// Step 3: Calculate speed ratio (0 to 1)
+	// Assume max effective speed range is 400cm/s above threshold
+	// (threshold + 400 = typical sprint speed of 600cm/s)
+	const float MaxSpeedRange = 400.0f;
+	float SpeedRatio = FMath:: Clamp(SpeedAboveThreshold / MaxSpeedRange, 0.0f, 1.0f);
+	
+	// Step 4: Apply quadratic curve for dramatic high-speed effect
+	// ratio² makes the effect more pronounced at higher speeds
+	// At 50% speed ratio: 25% of max FOV increase
+	// At 100% speed ratio: 100% of max FOV increase
+	float CurvedRatio = SpeedRatio * SpeedRatio;
+	
+	// Step 5: Calculate target FOV offset
+	float TargetFOVOffset = CurvedRatio * MaxFOVIncrease;
+	
+	// Step 6: Smooth the FOV transition
+	// This prevents jarring FOV changes
+	float InterpSpeed = 5.0f;  // Default smoothing speed
+	
+	// Try to get interp speed from config
+	float ConfigLagSpeed = StateConfig.StateBase. Lag.FOVLagSpeed;
+	if (ConfigLagSpeed > 0.0f)
+	{
+		InterpSpeed = ConfigLagSpeed;
+	}
+	
+	// Interpolate current offset towards target
+	CurrentSpeedFOVOffset = FMath::FInterpTo(
+		CurrentSpeedFOVOffset, 
+		TargetFOVOffset, 
+		Context.DeltaTime, 
+		InterpSpeed
+	);
+	
+	// If speed drops below threshold, smoothly return to zero
+	if (CurrentSpeed <= SpeedThreshold)
+	{
+		CurrentSpeedFOVOffset = FMath::FInterpTo(
+			CurrentSpeedFOVOffset, 
+			0.0f, 
+			Context.DeltaTime, 
+			InterpSpeed
+		);
+	}
+	
+	// Step 7: Fill output structure
+	OutOutput. FOVOutput = CurrentSpeedFOVOffset;
+	OutOutput.bHasFOVOutput = true;
+	
+	// Full weight for speed FOV
+	OutOutput.Weight = 1.0f;
+	
+	return true;
+}
+```
+
+---
+
+4. **完整的F02代码块（用于复制粘贴）：**
+
+```cpp
+//========================================
+// F02: Speed FOV
+//========================================
+
+/**
+ * Constructor - Initialize smooth offset state
+ */
+UCameraModule_F02_Speed_FOV::UCameraModule_F02_Speed_FOV()
+	: CurrentSpeedFOVOffset(0.0f)
+{
+}
+
+/**
+ * ShouldActivate - Activate when moving above threshold speed
+ */
+bool UCameraModule_F02_Speed_FOV::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if character is moving
+	if (!Context. InputContext.bIsMoving)
+	{
+		return false;
+	}
+	
+	// Get speed threshold
+	float SpeedThreshold = StateConfig. Module.FOV. SpeedFOVThreshold;
+	if (SpeedThreshold <= 0.0f)
+	{
+		SpeedThreshold = 200.0f;  // Default: 2 m/s
+	}
+	
+	// Check if speed exceeds threshold
+	float CurrentSpeed = Context. InputContext.CharacterSpeed;
+	if (CurrentSpeed <= SpeedThreshold)
+	{
+		return false;
+	}
+	
+	return true;
+}
+
+/**
+ * Compute - Calculate FOV increase based on movement speed
+ */
+bool UCameraModule_F02_Speed_FOV::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output
+	OutOutput = CreateBaseOutput();
+	
+	// Get current speed
+	float CurrentSpeed = Context.InputContext. CharacterSpeed;
+	
+	// Get threshold from config
+	float SpeedThreshold = StateConfig.Module.FOV.SpeedFOVThreshold;
+	if (SpeedThreshold <= 0.0f)
+	{
+		SpeedThreshold = 200.0f;
+	}
+	
+	// Get max FOV increase from config
+	float MaxFOVIncrease = StateConfig. Module.FOV. SpeedFOVIncrease;
+	if (MaxFOVIncrease <= 0.0f)
+	{
+		MaxFOVIncrease = 15.0f;  // Default: 15 degrees
+	}
+	
+	// Calculate speed above threshold
+	float SpeedAboveThreshold = FMath::Max(0.0f, CurrentSpeed - SpeedThreshold);
+	
+	// Calculate speed ratio (0 to 1)
+	const float MaxSpeedRange = 400.0f;
+	float SpeedRatio = FMath::Clamp(SpeedAboveThreshold / MaxSpeedRange, 0.0f, 1.0f);
+	
+	// Apply quadratic curve for dramatic effect
+	float CurvedRatio = SpeedRatio * SpeedRatio;
+	
+	// Calculate target FOV offset
+	float TargetFOVOffset = CurvedRatio * MaxFOVIncrease;
+	
+	// Get interp speed
+	float InterpSpeed = 5.0f;
+	float ConfigLagSpeed = StateConfig.StateBase.Lag.FOVLagSpeed;
+	if (ConfigLagSpeed > 0.0f)
+	{
+		InterpSpeed = ConfigLagSpeed;
+	}
+	
+	// Smooth transition
+	CurrentSpeedFOVOffset = FMath::FInterpTo(
+		CurrentSpeedFOVOffset, 
+		TargetFOVOffset, 
+		Context.DeltaTime, 
+		InterpSpeed
+	);
+	
+	// Return to zero if below threshold
+	if (CurrentSpeed <= SpeedThreshold)
+	{
+		CurrentSpeedFOVOffset = FMath:: FInterpTo(
+			CurrentSpeedFOVOffset, 
+			0.0f, 
+			Context.DeltaTime, 
+			InterpSpeed
+		);
+	}
+	
+	// Fill output
+	OutOutput.FOVOutput = CurrentSpeedFOVOffset;
+	OutOutput.bHasFOVOutput = true;
+	OutOutput.Weight = 1.0f;
+	
+	return true;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 说明速度到FOV的映射关系
+   - 解释二次曲线的作用
+   - 提供典型数值
+   - 所有注释英文
+
+2. **格式：**
+   - Tab缩进
+   - 清晰步骤标注
+   - 方法间空两行
+
+3. **防御性编程：**
+   - 配置值默认值处理
+   - Clamp确保有效范围
+   - 速度下降时平滑回归
+
+【技术说明】
+
+**F02的核心机制：**
+
+### 1. 二次曲线的作用
+
+**为什么使用 ratio² 而不是线性？**
+
+```
+线性映射：
+SpeedRatio = 0.5 → FOVOffset = 7.5°
+SpeedRatio = 1.0 → FOVOffset = 15°
+效果：平均增长
+
+二次曲线：
+SpeedRatio = 0.5 → CurvedRatio = 0.25 → FOVOffset = 3.75°
+SpeedRatio = 1.0 → CurvedRatio = 1.0 → FOVOffset = 15°
+效果：低速时变化小，高速时变化大
+
+好处：
+- 慢跑时FOV变化不明显
+- 冲刺时FOV变化明显
+- 更符合"速度感"的感知
+```
+
+### 2. 与D03(Speed Distance)的对比
+
+| 特性 | D03 (Distance) | F02 (FOV) |
+|------|----------------|-----------|
+| **触发条件** | 移动中+速度高 | 移动中+速度高 |
+| **效果** | 相机拉远 | 视野变宽 |
+| **曲线** | 线性 | 二次 |
+| **最大偏移** | +100cm | +15° |
+| **配合效果** | 拉远+变宽=更好视野 | 速度感增强 |
+
+### 3. 典型FOV值计算
+
+**计算示例：**
+
+| 速度状态 | 速度 | 比例 | 曲线比例 | FOV偏移 | 最终FOV |
+|---------|------|------|---------|---------|--------|
+| 站立 | 0 | 0 | 0 | 0° | 90° |
+| 走路 | 200 | 0 | 0 | 0° | 90° |
+| 快走 | 300 | 0.25 | 0.0625 | 0. 9° | 90.9° |
+| 跑步 | 400 | 0.5 | 0.25 | 3.75° | 93.75° |
+| 冲刺 | 600 | 1.0 | 1.0 | 15° | 105° |
+
+### 4. 成员变量的作用
+
+```cpp
+// 成员变量用于平滑过渡
+float CurrentSpeedFOVOffset;  // 当前偏移值
+
+// 每帧插值
+CurrentSpeedFOVOffset = FMath::FInterpTo(
+    CurrentSpeedFOVOffset,  // 当前
+    TargetFOVOffset,        // 目标
+    Context.DeltaTime,      // 帧时间
+    InterpSpeed             // 插值速度
+);
+
+// 效果：
+// - 开始冲刺：FOV渐变增大
+// - 停止冲刺：FOV渐变回归
+// - 无突变
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] 构造函数完整
+   - [ ] ShouldActivate()完整
+   - [ ] Compute()完整
+   - [ ] 使用成员变量CurrentSpeedFOVOffset
+
+3. **逻辑正确性：**
+   - [ ] 检查bIsMoving
+   - [ ] 检查速度阈值
+   - [ ] 二次曲线计算正确
+   - [ ] FInterpTo平滑正确
+   - [ ] 速度下降时回归零
+
+4. **字段访问：**
+   - [ ] Context.InputContext.bIsMoving
+   - [ ] Context. InputContext.CharacterSpeed
+   - [ ] StateConfig.Module.FOV.SpeedFOVThreshold
+   - [ ] StateConfig.Module.FOV.SpeedFOVIncrease
+   - [ ] StateConfig.StateBase.Lag.FOVLagSpeed（可选）
+
+【注意事项】
+
+1. **不需要Regenerate**
+
+2. **字段缺失处理：**
+   ```cpp
+   // 如果StateConfig. Module.FOV结构不存在
+   float SpeedThreshold = 200.0f;
+   float MaxFOVIncrease = 15.0f;
+   float InterpSpeed = 5.0f;
+   ```
+
+3. **默认值说明：**
+   - SpeedFOVThreshold = 200cm/s（走路速度）
+   - SpeedFOVIncrease = 15°（最大增加15度）
+   - MaxSpeedRange = 400cm/s（速度映射范围）
+   - InterpSpeed = 5.0（平滑速度）
+
+4. **测试建议：**
+   - 站立 → FOV应为基础值
+   - 走路 → FOV应无变化
+   - 跑步 → FOV应略微增大
+   - 冲刺 → FOV应明显增大
+   - 停止 → FOV应平滑回归
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 3.5.3 完成报告
+================================================================================
+
+【修改内容】
+- 文件：CameraModule_FOV. cpp
+- 修改位置：F02模块
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ 构造函数：初始化CurrentSpeedFOVOffset
+- ✅ ShouldActivate：检查移动+速度阈值
+- ✅ Compute：二次曲线速度FOV映射
+
+【编译结果】
+- 编译状态：[成功/失败]
+
+【最终状态】
+✅ F02完成，速度影响FOV
+
+================================================================================
+```
+
+【后续步骤】
+
+F02完成后，FOV模块进度：
+- [x] ✅ 3.5.1:  CameraModule_FOV.h
+- [x] ✅ 3.5.2: F01 - Base FOV
+- [x] ✅ 3.5.3: F02 - Speed FOV
+- [ ] ⏳ 3.5.4: F03 - Aim FOV（下一步）
+- [ ] ⏳ 3.5.5: F04 - Combat FOV
+- [ ] ⏳ 3.5.6: F05 - Boss FOV
+- [ ] ⏳ 3.5.7: F06 - Impact FOV
+
+**FOV模块完成度：2/6 (33.3%)**
+
+================================================================================

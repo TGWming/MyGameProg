@@ -1,0 +1,298 @@
+Sub-Step 3.2.1 Prompt
+
+================================================================================
+任务：创建CameraModule_Position.h - Position模块头文件
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Position模块负责计算相机焦点/跟随点的位置。
+这是8个Position模块的统一头文件声明。
+
+【当前进度】
+Phase 3 Step 3.2 Sub-Step 3.2.1 (共190个Sub-Step中的第60个)
+前置完成：Step 3.1 模块基类与注册系统 ✅
+
+【任务目标】
+创建文件：Source/[ProjectName]/Public/Camera/Modules/CameraModule_Position.h
+定义所有8个Position模块类（P01-P08）的声明。
+
+【⚠️ 编码格式要求 - CRITICAL】
+
+1. **文件编码：UTF-8 Without BOM（强制）**
+   - 创建文件后立即检查VS Code右下角编码
+   - 如果显示 "UTF-8 with BOM"，点击转换为 "UTF-8"
+   - 保存前再次确认
+
+2. **注释规范：所有注释必须使用英文（强制）**
+   - 禁止使用中文注释
+   - 参考标准：已完成的CameraModuleBase.h
+
+3. **命名替换：**
+   - 将 [ProjectName] 替换为实际项目名称
+   - 将 YOURPROJECT_API 替换为实际API宏（如 MYPROJECT_API）
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Public/Camera/Modules/CameraModule_Position.h
+
+2. **文件结构要求：**
+
+**A. 头部声明：**
+- 版权声明：// Copyright Epic Games, Inc. All Rights Reserved.   
+- #pragma once
+- 包含头文件（按顺序）：
+  * #include "CoreMinimal.h"
+  * #include "CameraModuleBase.h"
+  * #include "CameraModule_Position.generated.h" （必须最后）
+
+**B. 文件整体说明注释：**
+添加多行注释说明：
+- 此文件包含8个Position模块的声明
+- Position模块负责计算相机焦点位置（FocusPoint）
+- 这些模块在Stage 3中执行，输出在Stage 5中混合
+
+**C. 8个Position模块类定义：**
+
+所有类的共同要求：
+- 继承自 UCameraModuleBase
+- 使用 UCLASS(BlueprintType, Blueprintable)
+- 使用 YOURPROJECT_API 宏
+- 重写 GetModuleType() - 返回对应的 ECameraModuleType
+- 重写 GetModuleCategory() - 返回 EModuleCategory::  Position
+- 重写 GetModuleDescription() - 返回描述字符串
+- 可选重写 GetDefaultPriority() - 返回优先级（默认100）
+- 可选重写 GetDefaultBlendPolicy() - 返回混合策略（默认Blend）
+- 重写 Compute() - 主计算方法
+- 可选重写 ShouldActivate() - 激活条件
+- 可选重写 OnActivate/OnDeactivate - 生命周期钩子
+
+---
+
+### 模块1:  UCameraModule_P01_FollowTarget
+
+**类文档注释：**
+```
+P01: Follow Target - Basic character following
+Simply follows the character position with optional offset
+Simplest position module, directly uses character location
+```
+
+**必需重写的方法：**
+- GetModuleType() → ECameraModuleType:: P01_FollowTarget
+- GetModuleCategory() → EModuleCategory::Position
+- GetModuleDescription() → "Basic character following"
+- GetDefaultPriority() → 100
+- GetDefaultBlendPolicy() → EBlendPolicy::  Override
+- ShouldActivate() - 声明（实现在. cpp）
+- Compute() - 声明（实现在.cpp）
+
+**成员变量：** 无（使用基类成员）
+
+---
+
+### 模块2: UCameraModule_P02_FollowTarget_Lagged
+
+**类文档注释：**
+```
+P02: Follow Target Lagged - Character following with interpolation
+Provides smooth, delayed following for a more cinematic feel
+Uses exponential interpolation for frame-rate independent smoothing
+```
+
+**必需重写的方法：**
+- GetModuleType() → ECameraModuleType::P02_FollowTarget_Lagged
+- GetModuleCategory() → EModuleCategory::Position
+- GetModuleDescription() → "Smooth lagged character following"
+- GetDefaultPriority() → 100
+- Compute() - 声明
+- OnActivate() - 声明（用于重置插值状态）
+
+**构造函数：**
+- UCameraModule_P02_FollowTarget_Lagged() - 声明
+
+**protected成员变量：**
+- FVector CurrentPosition - 当前插值位置
+- bool bHasInitialPosition - 是否有有效的初始位置
+
+添加注释说明用途。
+
+---
+
+### 模块3: UCameraModule_P03_FollowTarget_Predictive
+
+**类文档注释：**
+```
+P03: Follow Target Predictive - Anticipates character movement
+Looks ahead based on velocity for smoother tracking during fast movement
+Calculates future position using character velocity
+```
+
+**必需重写的方法：**
+- GetModuleType() → ECameraModuleType::P03_FollowTarget_Predictive
+- GetModuleCategory() → EModuleCategory::Position
+- GetModuleDescription() → "Predictive character following"
+- GetDefaultPriority() → 100
+- ShouldActivate() - 声明（通常在高速移动时激活）
+- Compute() - 声明
+
+**成员变量：** 无（或根据需要添加速度缓存）
+
+---
+
+### 模块4: UCameraModule_P04_Orbit_LockOn
+
+**类文档注释：**
+```
+P04: Orbit Lock-On - Orbits around player when locked onto target
+Positions camera to keep both player and target visible
+Creates a dynamic orbit based on player-target relationship
+```
+
+**必需重写的方法：**
+- GetModuleType() → ECameraModuleType::P04_Orbit_LockOn
+- GetModuleCategory() → EModuleCategory::Position
+- GetModuleDescription() → "Lock-on orbit positioning"
+- GetDefaultPriority() → 150 （高于基础跟随）
+- ShouldActivate() - 声明（仅在锁定目标时激活）
+- Compute() - 声明
+
+**成员变量：** 无（或添加轨道状态缓存）
+
+---
+
+### 模块5: UCameraModule_P05_Orbit_Boss
+
+**类文档注释：**
+```
+P05: Orbit Boss - Special orbit behavior for boss fights
+Wider orbit radius to capture large boss enemies
+Adjusted positioning for cinematic boss encounters
+```
+
+**必需重写的方法：**
+- GetModuleType() → ECameraModuleType::P05_Orbit_Boss
+- GetModuleCategory() → EModuleCategory::Position
+- GetModuleDescription() → "Boss fight orbit positioning"
+- GetDefaultPriority() → 160 （高于普通锁定）
+- ShouldActivate() - 声明（仅在Boss战时激活）
+- Compute() - 声明
+
+**成员变量：** 无
+
+---
+
+### 模块6: UCameraModule_P06_FixedPoint
+
+**类文档注释：**
+```
+P06: Fixed Point - Camera focuses on a fixed world location
+Used for cinematic shots and specific gameplay moments
+Position is defined in state config or by external system
+```
+
+**必需重写的方法：**
+- GetModuleType() → ECameraModuleType::P06_FixedPoint
+- GetModuleCategory() → EModuleCategory:: Position
+- GetModuleDescription() → "Fixed world point focus"
+- GetDefaultPriority() → 200 （高优先级，用于特殊时刻）
+- ShouldActivate() - 声明（检查StateConfig是否定义了固定点）
+- Compute() - 声明
+
+**成员变量：** 无（固定点位置从StateConfig读取）
+
+---
+
+### 模块7: UCameraModule_P07_Spline_Follow
+
+**类文档注释：**
+```
+P07: Spline Follow - Camera follows a predefined spline path
+Used for cinematic sequences and scripted camera movements
+Spline reference and progress are provided by state config
+```
+
+**必需重写的方法：**
+- GetModuleType() → ECameraModuleType::P07_Spline_Follow
+- GetModuleCategory() → EModuleCategory:: Position
+- GetModuleDescription() → "Spline path following"
+- GetDefaultPriority() → 200
+- ShouldActivate() - 声明（检查是否有有效的Spline引用）
+- Compute() - 声明
+
+**protected成员变量：**
+- float CurrentSplinePosition - 当前样条曲线位置（0-1）
+
+添加注释：Normalized position along spline (0.0 to 1.0)
+
+---
+
+### 模块8: UCameraModule_P08_MidPoint_TwoTarget
+
+**类文档注释：**
+```
+P08: MidPoint Two Target - Focuses between player and target
+Keeps both characters visible with configurable bias
+Calculates weighted midpoint between two actors
+```
+
+**必需重写的方法：**
+- GetModuleType() → ECameraModuleType::P08_MidPoint_TwoTarget
+- GetModuleCategory() → EModuleCategory::  Position
+- GetModuleDescription() → "Mid-point between player and target"
+- GetDefaultPriority() → 140
+- ShouldActivate() - 声明（需要有有效目标）
+- Compute() - 声明
+
+**成员变量：** 无（或添加偏移比例缓存）
+
+---
+
+**D. 代码风格要求：**
+- 每个类之间空两行
+- 使用内联实现简单的Get方法（GetModuleType等）
+- 复杂方法仅声明，实现在.cpp
+- 每个类前添加详细的文档注释
+- 注释说明模块的用途、激活条件、计算内容
+- 所有方法标记 virtual override
+
+【注意事项】
+
+1. **枚举值命名：**
+   确保ECameraModuleType中包含所有8个Position模块的枚举值：
+   - P01_FollowTarget
+   - P02_FollowTarget_Lagged
+   - P03_FollowTarget_Predictive
+   - P04_Orbit_LockOn
+   - P05_Orbit_Boss
+   - P06_FixedPoint
+   - P07_Spline_Follow
+   - P08_MidPoint_TwoTarget
+
+   如果枚举值命名不同，使用实际定义的名称。
+
+2. **优先级设计：**
+   - 基础跟随：100
+   - 锁定轨道：140-160
+   - 特殊模式：200
+   - 高优先级可以覆盖低优先级
+
+3. **仅声明不实现：**
+   本文件只包含类声明，所有方法实现在对应的.cpp文件中
+
+4. **GENERATED_BODY宏：**
+   每个UCLASS必须包含GENERATED_BODY()宏
+
+【验证标准】
+1. 编译通过（0 errors, 0 warnings）
+2. 文件编码为 UTF-8 Without BOM
+3. 所有注释为英文
+4. 8个类都完整声明
+5. 所有Get方法内联实现
+6. 复杂方法仅声明
+7. YOURPROJECT_API宏已正确替换
+
+【输出要求】
+输出完整的CameraModule_Position.h文件代码，包含所有8个Position模块类的声明。
+
+================================================================================

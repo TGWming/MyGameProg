@@ -1,0 +1,494 @@
+Sub-Step 5.2.2 Prompt
+
+================================================================================
+任务：创建CameraCollision_Detection.  cpp - DetectionBase + Det01 LineTrace实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.  27 C++项目。
+Det01是最基础的碰撞检测，使用单条射线检测。
+
+【当前进度】
+Phase 5 Step 5. 2 Sub-Step 5.  2.2 (共190个Sub-Step中的第154个)
+前置完成：5. 2.1 CameraCollision_Detection.  h ✅
+
+【任务目标】
+创建文件：Source/MyProject/Private/Camera/Collision/CameraCollision_Detection.  cpp
+本Sub-Step实现DetectionBase基类和Det01 LineTrace。
+
+【⚠️ 重要提醒】
+
+1. **本Sub-Step创建新文件**
+   创建后需要：
+   - 保存文件
+   - 右键.   uproject → Generate Visual Studio project files
+   - 重新加载解决方案
+   - 编译
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **Execute方法签名：**
+   与头文件保持一致（3个参数，无StateConfig）：
+   ```cpp
+   virtual bool Execute(
+       const FStageExecutionContext& Context,
+       const FCollisionDetectionResult& DetectionResult,
+       FCollisionResponseOutput& OutResponse
+   ) override;
+   ```
+
+4. **Detection策略特殊处理：**
+   - Detection策略需要**修改**传入的DetectionResult
+   - 因此需要将其存储到Context或通过引用传递
+   - 本设计中，Detection策略直接返回结果到调用者
+
+【具体要求】
+
+**文件路径：** `Source/MyProject/Private/Camera/Collision/CameraCollision_Detection.  cpp`
+
+**完整文件内容：**
+
+```cpp
+// Copyright Epic Games, Inc.      All Rights Reserved.  
+
+#include "Camera/Collision/CameraCollision_Detection.  h"
+#include "Camera/Core/SoulsCameraManager.  h"
+#include "Engine/World. h"
+#include "DrawDebugHelpers.h"
+
+/**
+ * CameraCollision_Detection.  cpp
+ * 
+ * This file contains the implementations of the Detection base class
+ * and all 4 Detection strategies (Det01-Det04). 
+ * 
+ * Detection strategies are responsible for detecting collisions between
+ * the camera and the environment.    They populate FCollisionDetectionResult
+ * with information about what was hit.  
+ * 
+ * Implementation Structure:
+ * - DetectionBase: Common detection functionality
+ * - Det01: LineTrace - Single ray detection
+ * - Det02: SphereTrace - Sphere sweep detection
+ * - Det03: MultiRayTrace - Multiple ray detection
+ * - Det04: CapsuleTrace - Capsule sweep detection
+ */
+
+
+//========================================
+// DetectionBase - Common Detection Functionality
+//========================================
+
+UCameraCollision_DetectionBase::UCameraCollision_DetectionBase()
+    : SafetyMargin(10.0f)
+    , TraceExtension(5.0f)
+    , bDrawDebugTraces(false)
+{
+    // Detection strategies are enabled by default
+    bIsEnabled = true;
+    bCanBlend = false;  // Detection strategies don't blend
+}
+
+void UCameraCollision_DetectionBase:: CalculateTraceEndpoints(
+    const FStageExecutionContext& Context,
+    FVector& OutStart,
+    FVector& OutEnd) const
+{
+    // Start point is the focus point (where camera looks at)
+    OutStart = Context.  Output.FocusPoint;
+    
+    // Calculate camera direction (away from focus point)
+    FVector CameraDirection = -Context. Output.  Rotation.Vector();
+    
+    // End point is desired camera position (plus extension for early detection)
+    float TraceDistance = Context.  Output.  Distance + TraceExtension;
+    OutEnd = OutStart + CameraDirection * TraceDistance;
+}
+
+FVector UCameraCollision_DetectionBase:: CalculateSafePosition(
+    const FVector& Start,
+    const FVector& End,
+    const FHitResult& HitResult,
+    float InSafetyMargin) const
+{
+    if (! HitResult.  bBlockingHit)
+    {
+        return End;
+    }
+    
+    // Direction from start to end
+    FVector Direction = (End - Start). GetSafeNormal();
+    
+    // Safe position is at hit point minus safety margin
+    float SafeDistance = FMath::Max(0.0f, HitResult. Distance - InSafetyMargin);
+    
+    return Start + Direction * SafeDistance;
+}
+
+float UCameraCollision_DetectionBase:: CalculateSafeDistance(
+    const FStageExecutionContext& Context,
+    const FHitResult& HitResult) const
+{
+    if (!HitResult. bBlockingHit)
+    {
+        return Context. Output.Distance;
+    }
+    
+    // Safe distance is hit distance minus safety margin, clamped to minimum
+    float SafeDistance = FMath::Max(
+        MinDistance,
+        HitResult.Distance - SafetyMargin
+    );
+    
+    return SafeDistance;
+}
+
+void UCameraCollision_DetectionBase::FillDetectionResult(
+    const FStageExecutionContext& Context,
+    const FHitResult& HitResult,
+    FCollisionDetectionResult& OutDetectionResult) const
+{
+    if (!HitResult.  bBlockingHit)
+    {
+        return;
+    }
+    
+    OutDetectionResult.  bCollisionDetected = true;
+    OutDetectionResult.  HitResult = HitResult;
+    OutDetectionResult. CollisionNormal = HitResult.  ImpactNormal;
+    OutDetectionResult.  CollisionDistance = HitResult.  Distance;
+    
+    // Calculate safe distance
+    OutDetectionResult. SafeDistance = CalculateSafeDistance(Context, HitResult);
+    
+    // Calculate safe location
+    FVector Start, End;
+    CalculateTraceEndpoints(Context, Start, End);
+    OutDetectionResult.SafeLocation = CalculateSafePosition(Start, End, HitResult, SafetyMargin);
+    
+    // Store desired values for comparison
+    OutDetectionResult.DesiredDistance = Context. Output.  Distance;
+    OutDetectionResult. DesiredLocation = End;
+    
+    // Calculate adjustment ratio (0 = no adjustment, 1 = full adjustment needed)
+    if (Context. Output.  Distance > MinDistance)
+    {
+        float AdjustmentNeeded = Context.  Output.  Distance - OutDetectionResult.SafeDistance;
+        OutDetectionResult.  AdjustmentRatio = FMath::Clamp(
+            AdjustmentNeeded / (Context.Output. Distance - MinDistance),
+            0.0f,
+            1.0f
+        );
+    }
+    else
+    {
+        OutDetectionResult. AdjustmentRatio = 0.0f;
+    }
+}
+
+
+//========================================
+// Det01: Line Trace Implementation
+//========================================
+
+/**
+ * Constructor - Configure line trace detection parameters
+ * 
+ * Line trace is the simplest detection method: 
+ * - Single ray from focus point to camera
+ * - Fast but may miss thin geometry
+ * - Used as fallback or in simple environments
+ */
+UCameraCollision_Det01_LineTrace::UCameraCollision_Det01_LineTrace()
+    : DetectionOffset(10. 0f)
+{
+    // Lower priority - used as fallback
+    Priority = 100;
+    ProbeRadius = 0.0f;  // Line trace has no radius
+}
+
+bool UCameraCollision_Det01_LineTrace::Execute(
+    const FStageExecutionContext& Context,
+    const FCollisionDetectionResult& DetectionResult,
+    FCollisionResponseOutput& OutResponse)
+{
+    // Calculate trace endpoints
+    FVector TraceStart, TraceEnd;
+    CalculateTraceEndpoints(Context, TraceStart, TraceEnd);
+    
+    // Extend trace slightly past desired position for early detection
+    FVector Direction = (TraceEnd - TraceStart). GetSafeNormal();
+    TraceEnd += Direction * DetectionOffset;
+    
+    // Setup trace parameters
+    FCollisionQueryParams Params = GetDefaultTraceParams();
+    
+    // Perform line trace
+    FHitResult Hit;
+    bool bHit = LineTrace(TraceStart, TraceEnd, Hit, Params);
+    
+    // Debug visualization
+#if ENABLE_DRAW_DEBUG
+    if (bDrawDebugTraces)
+    {
+        UWorld* World = GetWorld();
+        if (World)
+        {
+            FColor TraceColor = bHit ? FColor::Red : FColor::Green;
+            DrawDebugLine(World, TraceStart, TraceEnd, TraceColor, false, 0.0f, 0, 1.0f);
+            
+            if (bHit)
+            {
+                DrawDebugSphere(World, Hit.  ImpactPoint, 5. 0f, 8, FColor::Red, false, 0.0f, 0, 1.0f);
+            }
+        }
+    }
+#endif
+    
+    if (bHit)
+    {
+        // Detection strategies update the detection result directly
+        // We need to cast away const because detection strategies modify the result
+        FCollisionDetectionResult& MutableResult = const_cast<FCollisionDetectionResult&>(DetectionResult);
+        
+        // Fill the detection result with hit information
+        FillDetectionResult(Context, Hit, MutableResult);
+        
+        UE_LOG(LogTemp, Verbose, TEXT("Det01 LineTrace: Hit at %. 1f, safe=%.1f, actor=%s"),
+            Hit. Distance,
+            MutableResult.  SafeDistance,
+            Hit.GetActor() ? *Hit.  GetActor()->GetName() : TEXT("None"));
+        
+        // Mark strategy as active
+        SetActive(true);
+        return true;
+    }
+    
+    SetActive(false);
+    return false;
+}
+
+
+//========================================
+// Det02: Sphere Trace - Will be implemented in Sub-Step 5. 2.3
+//========================================
+
+UCameraCollision_Det02_SphereTrace::  UCameraCollision_Det02_SphereTrace()
+    : SweepRadius(12.0f)
+    , MinSweepRadius(4.0f)
+    , bAdaptiveRadius(true)
+{
+    // Higher priority - preferred detection method
+    Priority = 120;
+    ProbeRadius = 12.0f;
+}
+
+bool UCameraCollision_Det02_SphereTrace::Execute(
+    const FStageExecutionContext& Context,
+    const FCollisionDetectionResult& DetectionResult,
+    FCollisionResponseOutput& OutResponse)
+{
+    // Placeholder - will be implemented in Sub-Step 5.2.3
+    UE_LOG(LogTemp, VeryVerbose, TEXT("Det02 SphereTrace:   Placeholder execution"));
+    return false;
+}
+
+
+//========================================
+// Det03: Multi-Ray Trace - Will be implemented in Sub-Step 5.2.3
+//========================================
+
+UCameraCollision_Det03_MultiRayTrace:: UCameraCollision_Det03_MultiRayTrace()
+    : NumRays(5)
+    , SpreadAngle(15.0f)
+    , CenterRayWeight(0.6f)
+    , bUseClosestHit(true)
+{
+    // Medium priority
+    Priority = 110;
+}
+
+bool UCameraCollision_Det03_MultiRayTrace::  Execute(
+    const FStageExecutionContext& Context,
+    const FCollisionDetectionResult& DetectionResult,
+    FCollisionResponseOutput& OutResponse)
+{
+    // Placeholder - will be implemented in Sub-Step 5.2.3
+    UE_LOG(LogTemp, VeryVerbose, TEXT("Det03 MultiRayTrace:  Placeholder execution"));
+    return false;
+}
+
+
+//========================================
+// Det04: Capsule Trace - Will be implemented in Sub-Step 5.2.4
+//========================================
+
+UCameraCollision_Det04_CapsuleTrace::UCameraCollision_Det04_CapsuleTrace()
+    : CapsuleRadius(12.0f)
+    , CapsuleHalfHeight(30.0f)
+    , bOrientAlongDirection(true)
+    , bVerticalCapsule(false)
+{
+    // Medium-high priority
+    Priority = 115;
+}
+
+bool UCameraCollision_Det04_CapsuleTrace::  Execute(
+    const FStageExecutionContext& Context,
+    const FCollisionDetectionResult& DetectionResult,
+    FCollisionResponseOutput& OutResponse)
+{
+    // Placeholder - will be implemented in Sub-Step 5.2.4
+    UE_LOG(LogTemp, VeryVerbose, TEXT("Det04 CapsuleTrace:   Placeholder execution"));
+    return false;
+}
+```
+
+---
+
+【代码设计说明】
+
+### 1. DetectionBase辅助方法
+
+```cpp
+CalculateTraceEndpoints()
+├── 起点：Context.Output.FocusPoint
+├── 方向：-Context.Output. Rotation.Vector()
+└── 终点：起点 + 方向 * (距离 + 扩展)
+
+CalculateSafePosition()
+├── 输入：起点、终点、HitResult、安全边距
+├── 计算：Hit距离 - 安全边距
+└── 输出：安全位置
+
+CalculateSafeDistance()
+├── 输入：Context、HitResult
+├── 计算：Max(MinDistance, Hit距离 - SafetyMargin)
+└── 输出：安全距离
+
+FillDetectionResult()
+├── 设置 bCollisionDetected = true
+├── 复制 HitResult
+├── 计算 SafeDistance 和 SafeLocation
+└── 计算 AdjustmentRatio
+```
+
+### 2. Det01 LineTrace执行流程
+
+```
+Execute()
+├── 1. CalculateTraceEndpoints() - 计算射线起止点
+├── 2. 延伸射线 DetectionOffset
+├── 3. GetDefaultTraceParams() - 获取查询参数
+├── 4. LineTrace() - 执行射线检测
+├── 5. 调试可视化（如果启用）
+├── 6. 如果命中：
+│   ├── FillDetectionResult() - 填充结果
+│   ├── SetActive(true)
+│   └── return true
+└── 7. 否则：
+    ├── SetActive(false)
+    └── return false
+```
+
+### 3. const_cast使用说明
+
+```cpp
+// Detection策略的特殊处理
+// DetectionResult参数是const引用，但Detection策略需要修改它
+// 这是设计决策：允许Detection策略直接填充结果
+FCollisionDetectionResult& MutableResult = const_cast<FCollisionDetectionResult&>(DetectionResult);
+```
+
+**设计理由：**
+- Detection策略的职责是**填充**检测结果
+- Response策略才是**读取**检测结果
+- const_cast是安全的，因为调用者知道Detection策略会修改结果
+
+### 4. Placeholder设计
+
+Det02-Det04包含构造函数和空Execute：
+- 确保编译通过
+- 可以被注册到Resolver
+- 实际实现在后续Sub-Step
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] Regenerate执行
+   - [ ] 编译通过（0 errors）
+   - [ ] 无链接错误
+
+2. **代码完整性：**
+   - [ ] DetectionBase构造函数和4个辅助方法
+   - [ ] Det01完整实现
+   - [ ] Det02-Det04构造函数和placeholder Execute
+
+3. **功能验证：**
+   - [ ] Det01可执行LineTrace
+   - [ ] 命中时正确填充DetectionResult
+   - [ ] 调试可视化正常
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 5.2.2 完成报告
+================================================================================
+
+【创建的文件】
+- 文件：CameraCollision_Detection.cpp
+- 路径：Source/MyProject/Private/Camera/Collision/
+
+【实现的类】
+
+DetectionBase：
+- ✅ 构造函数
+- ✅ CalculateTraceEndpoints()
+- ✅ CalculateSafePosition()
+- ✅ CalculateSafeDistance()
+- ✅ FillDetectionResult()
+
+Det01 LineTrace：
+- ✅ 构造函数
+- ✅ Execute() - 完整实现
+- ✅ 调试可视化
+
+Det02 SphereTrace：
+- ✅ 构造函数
+- ⏳ Execute() - Placeholder
+
+Det03 MultiRayTrace：
+- ✅ 构造函数
+- ⏳ Execute() - Placeholder
+
+Det04 CapsuleTrace：
+- ✅ 构造函数
+- ⏳ Execute() - Placeholder
+
+【编译结果】
+- Regenerate：[已执行]
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【最终状态】
+✅ DetectionBase + Det01 LineTrace实现完成
+⏳ Det02-Det04待实现
+
+================================================================================
+```
+
+【后续步骤】
+
+5. 2.2完成后：
+- [x] ✅ 5.2.1: CameraCollision_Detection.h
+- [x] ✅ 5.2.2: DetectionBase + Det01（当前）
+- [ ] ⏳ 5.2.3: Det02 + Det03实现
+- [ ] ⏳ 5.2.4: Det04实现 + 注册
+
+**Phase 5.2进度：2/4**
+
+================================================================================

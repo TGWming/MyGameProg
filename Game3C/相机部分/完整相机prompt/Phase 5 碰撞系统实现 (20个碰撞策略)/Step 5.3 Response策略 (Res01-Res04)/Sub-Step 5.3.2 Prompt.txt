@@ -1,0 +1,620 @@
+Sub-Step 5.3.2 Prompt
+
+================================================================================
+任务：创建CameraCollision_Response.cpp - ResponseBase + Res01 PullIn实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4. 27 C++项目。
+Res01是最常用的碰撞响应，简单地将相机拉近以避免碰撞。
+
+【当前进度】
+Phase 5 Step 5. 3 Sub-Step 5.3.2 (共190个Sub-Step中的第159个)
+前置完成：5.3.1 CameraCollision_Response.h ✅
+
+【任务目标】
+创建文件：Source/MyProject/Private/Camera/Collision/CameraCollision_Response.cpp
+本Sub-Step实现ResponseBase基类和Res01 PullIn。
+
+【⚠️ 重要提醒】
+
+1. **本Sub-Step创建新文件**
+   创建后需要：
+   - 保存文件
+   - 右键. uproject → Generate Visual Studio project files
+   - 重新加载解决方案
+   - 编译
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **方法签名（与头文件一致）：**
+   - ShouldExecute:  1个参数（只有Context）
+   - Execute:  3个参数（无StateConfig）
+
+4. **使用基类成员而非StateConfig：**
+   - 使用类成员变量而不是从StateConfig读取
+   - 所有配置都在构造函数中设置默认值
+
+【具体要求】
+
+**文件路径：** `Source/MyProject/Private/Camera/Collision/CameraCollision_Response.cpp`
+
+**完整文件内容：**
+
+```cpp
+// Copyright Epic Games, Inc.  All Rights Reserved. 
+
+#include "Camera/Collision/CameraCollision_Response.h"
+#include "Camera/Core/SoulsCameraManager.h"
+#include "Engine/World.h"
+#include "DrawDebugHelpers.h"
+
+/**
+ * CameraCollision_Response. cpp
+ * 
+ * This file contains the implementations of the Response base class
+ * and all 4 Response strategies (Res01-Res04).
+ * 
+ * Response strategies determine how the camera adjusts when collisions
+ * are detected. They read FCollisionDetectionResult and produce
+ * FCollisionResponseOutput with camera adjustments.
+ * 
+ * Implementation Structure:
+ * - ResponseBase: Common response functionality
+ * - Res01: PullIn - Simple distance reduction
+ * - Res02: Slide - Lateral movement along surface
+ * - Res03: Rotate - Rotation to find clear view
+ * - Res04: Hybrid - Intelligent combination
+ */
+
+
+//========================================
+// ResponseBase - Common Response Functionality
+//========================================
+
+UCameraCollision_ResponseBase::UCameraCollision_ResponseBase()
+    : BaseInterpSpeed(10.0f)
+    , ResponseBlendTime(0.2f)
+    , bOverrideOthers(false)
+    , ResponseTime(0.0f)
+    , bResponseActive(false)
+    , CachedDeltaTime(0.0f)
+{
+    // Response strategies can blend by default
+    bCanBlend = true;
+    bIsEnabled = true;
+}
+
+void UCameraCollision_ResponseBase:: Update(float DeltaTime, const FStageExecutionContext& Context)
+{
+    Super::Update(DeltaTime, Context);
+    
+    // Cache delta time for interpolation in Execute
+    CachedDeltaTime = DeltaTime;
+    
+    // Update response time if active
+    if (bResponseActive)
+    {
+        ResponseTime += DeltaTime;
+    }
+    else
+    {
+        ResponseTime = 0.0f;
+    }
+}
+
+void UCameraCollision_ResponseBase::Reset()
+{
+    Super::Reset();
+    
+    ResponseTime = 0.0f;
+    bResponseActive = false;
+    CachedDeltaTime = 0.0f;
+}
+
+float UCameraCollision_ResponseBase::InterpolateValue(float Current, float Target, float DeltaTime, float Speed) const
+{
+    if (FMath::IsNearlyEqual(Current, Target, 0.01f))
+    {
+        return Target;
+    }
+    
+    return FMath::FInterpTo(Current, Target, DeltaTime, Speed);
+}
+
+FVector UCameraCollision_ResponseBase::InterpolateVector(const FVector& Current, const FVector& Target, float DeltaTime, float Speed) const
+{
+    if (Current. Equals(Target, 0.1f))
+    {
+        return Target;
+    }
+    
+    return FMath::VInterpTo(Current, Target, DeltaTime, Speed);
+}
+
+FRotator UCameraCollision_ResponseBase::InterpolateRotator(const FRotator& Current, const FRotator& Target, float DeltaTime, float Speed) const
+{
+    if (Current.Equals(Target, 0.1f))
+    {
+        return Target;
+    }
+    
+    return FMath::RInterpTo(Current, Target, DeltaTime, Speed);
+}
+
+bool UCameraCollision_ResponseBase::IsResponseNeeded(const FCollisionDetectionResult& DetectionResult) const
+{
+    // Response is needed if collision was detected and adjustment is significant
+    return DetectionResult.bCollisionDetected && DetectionResult.AdjustmentRatio > 0.01f;
+}
+
+void UCameraCollision_ResponseBase::InitializeResponse(FCollisionResponseOutput& OutResponse) const
+{
+    OutResponse.Reset();
+    OutResponse.StrategyType = GetStrategyType();
+    OutResponse.Category = GetStrategyCategory();
+    OutResponse.Priority = GetPriority();
+    OutResponse.Weight = BlendWeight;
+    OutResponse.bOverride = bOverrideOthers;
+    OutResponse. BlendTime = ResponseBlendTime;
+    OutResponse.bIsActive = true;
+}
+
+
+//========================================
+// Res01: Pull In Implementation
+//========================================
+
+/**
+ * Constructor - Configure pull-in response parameters
+ * 
+ * Pull-in is the simplest and most common collision response: 
+ * - Reduces camera distance to avoid obstacle
+ * - Maintains camera angle
+ * - Simple and reliable
+ */
+UCameraCollision_Res01_PullIn::UCameraCollision_Res01_PullIn()
+    : PullInSpeed(300.0f)
+    , MinPullInTime(0.1f)
+    , bUseOvershoot(false)
+    , OvershootAmount(0.05f)
+    , CurrentDistanceAdjustment(0.0f)
+    , TargetDistanceAdjustment(0.0f)
+    , bIsAdjusting(false)
+{
+    // Default priority for basic pull-in
+    Priority = 100;
+    BaseInterpSpeed = 15.0f;
+}
+
+bool UCameraCollision_Res01_PullIn::ShouldExecute(const FStageExecutionContext& Context) const
+{
+    // Execute when enabled
+    return bIsEnabled;
+}
+
+bool UCameraCollision_Res01_PullIn::Execute(
+    const FStageExecutionContext& Context,
+    const FCollisionDetectionResult& DetectionResult,
+    FCollisionResponseOutput& OutResponse)
+{
+    // Check if response is needed
+    if (!IsResponseNeeded(DetectionResult))
+    {
+        // No collision - smoothly return adjustment to zero
+        if (FMath:: Abs(CurrentDistanceAdjustment) > 0.1f)
+        {
+            CurrentDistanceAdjustment = InterpolateValue(
+                CurrentDistanceAdjustment, 
+                0.0f, 
+                CachedDeltaTime, 
+                BaseInterpSpeed * 0.5f  // Return slower than pull-in
+            );
+            
+            // Still output the returning adjustment
+            InitializeResponse(OutResponse);
+            OutResponse.DistanceAdjustment = CurrentDistanceAdjustment;
+            OutResponse.ActiveDuration = ResponseTime;
+            
+            bResponseActive = true;
+            SetActive(true);
+            return true;
+        }
+        
+        bResponseActive = false;
+        bIsAdjusting = false;
+        SetActive(false);
+        return false;
+    }
+
+    bResponseActive = true;
+    bIsAdjusting = true;
+    SetActive(true);
+
+    // Calculate target adjustment (negative = closer)
+    float DesiredDistance = DetectionResult. DesiredDistance;
+    float SafeDistance = DetectionResult.SafeDistance;
+    TargetDistanceAdjustment = -(DesiredDistance - SafeDistance);
+    
+    // Apply overshoot if enabled (for more dynamic feel)
+    if (bUseOvershoot && ResponseTime < MinPullInTime)
+    {
+        float OvershootFactor = 1.0f + OvershootAmount;
+        TargetDistanceAdjustment *= OvershootFactor;
+    }
+    
+    // Calculate interpolation speed based on urgency
+    float Urgency = DetectionResult.AdjustmentRatio;
+    float EffectiveSpeed = BaseInterpSpeed * (1.0f + Urgency * 2.0f);  // Faster for urgent situations
+    
+    // Ensure minimum pull-in time
+    float TimeFactor = FMath:: Clamp(ResponseTime / MinPullInTime, 0.0f, 1.0f);
+    if (TimeFactor < 1.0f)
+    {
+        // During minimum time, use faster interpolation
+        EffectiveSpeed *= 2.0f;
+    }
+    
+    // Interpolate current adjustment towards target
+    CurrentDistanceAdjustment = InterpolateValue(
+        CurrentDistanceAdjustment,
+        TargetDistanceAdjustment,
+        CachedDeltaTime,
+        EffectiveSpeed
+    );
+
+    // Build response output
+    InitializeResponse(OutResponse);
+    OutResponse. DistanceAdjustment = CurrentDistanceAdjustment;
+    OutResponse. ActiveDuration = ResponseTime;
+
+    UE_LOG(LogTemp, Verbose, TEXT("Res01 PullIn: Adjustment=%.1f (target=%.1f, urgency=%.2f)"),
+        CurrentDistanceAdjustment, TargetDistanceAdjustment, Urgency);
+
+    return true;
+}
+
+void UCameraCollision_Res01_PullIn::Update(float DeltaTime, const FStageExecutionContext& Context)
+{
+    Super::Update(DeltaTime, Context);
+    
+    // Additional update logic if needed
+}
+
+void UCameraCollision_Res01_PullIn::Reset()
+{
+    Super::Reset();
+    
+    CurrentDistanceAdjustment = 0.0f;
+    TargetDistanceAdjustment = 0.0f;
+    bIsAdjusting = false;
+}
+
+
+//========================================
+// Res02: Slide - Will be implemented in Sub-Step 5.3.3
+//========================================
+
+UCameraCollision_Res02_Slide::UCameraCollision_Res02_Slide()
+    : MaxSlideDistance(80.0f)
+    , SlideSpeed(200.0f)
+    , bPreferHorizontalSlide(true)
+    , bVerifySlideDestination(true)
+    , CurrentSlideOffset(FVector:: ZeroVector)
+    , TargetSlideOffset(FVector::ZeroVector)
+    , SlideDirection(FVector::ZeroVector)
+{
+    Priority = 110;
+    BaseInterpSpeed = 12.0f;
+}
+
+bool UCameraCollision_Res02_Slide:: ShouldExecute(const FStageExecutionContext& Context) const
+{
+    return bIsEnabled;
+}
+
+bool UCameraCollision_Res02_Slide::Execute(
+    const FStageExecutionContext& Context,
+    const FCollisionDetectionResult& DetectionResult,
+    FCollisionResponseOutput& OutResponse)
+{
+    // Placeholder - will be implemented in Sub-Step 5.3.3
+    UE_LOG(LogTemp, VeryVerbose, TEXT("Res02 Slide:  Placeholder execution"));
+    return false;
+}
+
+void UCameraCollision_Res02_Slide::Update(float DeltaTime, const FStageExecutionContext& Context)
+{
+    Super::Update(DeltaTime, Context);
+}
+
+void UCameraCollision_Res02_Slide::Reset()
+{
+    Super::Reset();
+    CurrentSlideOffset = FVector::ZeroVector;
+    TargetSlideOffset = FVector::ZeroVector;
+    SlideDirection = FVector::ZeroVector;
+}
+
+
+//========================================
+// Res03: Rotate - Will be implemented in Sub-Step 5.3.3
+//========================================
+
+UCameraCollision_Res03_Rotate::UCameraCollision_Res03_Rotate()
+    : MaxRotationAngle(20.0f)
+    , RotationSpeed(90.0f)
+    , NumTestAngles(8)
+    , bPreferYawRotation(true)
+    , MaxPitchAdjustment(10.0f)
+    , CurrentRotationAdjustment(FRotator::ZeroRotator)
+    , TargetRotationAdjustment(FRotator::ZeroRotator)
+    , BestFoundRotation(FRotator::ZeroRotator)
+{
+    Priority = 105;
+    BaseInterpSpeed = 8.0f;
+}
+
+bool UCameraCollision_Res03_Rotate:: ShouldExecute(const FStageExecutionContext& Context) const
+{
+    return bIsEnabled;
+}
+
+bool UCameraCollision_Res03_Rotate::Execute(
+    const FStageExecutionContext& Context,
+    const FCollisionDetectionResult& DetectionResult,
+    FCollisionResponseOutput& OutResponse)
+{
+    // Placeholder - will be implemented in Sub-Step 5.3.3
+    UE_LOG(LogTemp, VeryVerbose, TEXT("Res03 Rotate: Placeholder execution"));
+    return false;
+}
+
+void UCameraCollision_Res03_Rotate::Update(float DeltaTime, const FStageExecutionContext& Context)
+{
+    Super::Update(DeltaTime, Context);
+}
+
+void UCameraCollision_Res03_Rotate::Reset()
+{
+    Super::Reset();
+    CurrentRotationAdjustment = FRotator:: ZeroRotator;
+    TargetRotationAdjustment = FRotator::ZeroRotator;
+    BestFoundRotation = FRotator::ZeroRotator;
+}
+
+FRotator UCameraCollision_Res03_Rotate::FindBestRotation(
+    const FStageExecutionContext& Context,
+    const FCollisionDetectionResult& DetectionResult)
+{
+    // Placeholder - will be implemented in Sub-Step 5.3.3
+    return FRotator::ZeroRotator;
+}
+
+bool UCameraCollision_Res03_Rotate::TestRotation(
+    const FStageExecutionContext& Context,
+    const FRotator& TestRotation) const
+{
+    // Placeholder - will be implemented in Sub-Step 5.3.3
+    return true;
+}
+
+
+//========================================
+// Res04: Hybrid - Will be implemented in Sub-Step 5.3.4
+//========================================
+
+UCameraCollision_Res04_Hybrid::UCameraCollision_Res04_Hybrid()
+    : BasePullInWeight(0.6f)
+    , BaseSlideWeight(0.3f)
+    , BaseRotateWeight(0.1f)
+    , MaxHybridSlide(50.0f)
+    , MaxHybridRotation(10.0f)
+    , HybridInterpSpeed(12.0f)
+    , bAdaptiveWeights(true)
+    , CurrentPullIn(0.0f)
+    , TargetPullIn(0.0f)
+    , CurrentSlide(FVector::ZeroVector)
+    , TargetSlide(FVector::ZeroVector)
+    , CurrentRotation(FRotator::ZeroRotator)
+    , TargetRotation(FRotator:: ZeroRotator)
+    , EffectivePullInWeight(0.6f)
+    , EffectiveSlideWeight(0.3f)
+    , EffectiveRotateWeight(0.1f)
+{
+    Priority = 120;  // Highest priority
+    BaseInterpSpeed = 12.0f;
+}
+
+bool UCameraCollision_Res04_Hybrid::ShouldExecute(const FStageExecutionContext& Context) const
+{
+    return bIsEnabled;
+}
+
+bool UCameraCollision_Res04_Hybrid::Execute(
+    const FStageExecutionContext& Context,
+    const FCollisionDetectionResult& DetectionResult,
+    FCollisionResponseOutput& OutResponse)
+{
+    // Placeholder - will be implemented in Sub-Step 5.3.4
+    UE_LOG(LogTemp, VeryVerbose, TEXT("Res04 Hybrid: Placeholder execution"));
+    return false;
+}
+
+void UCameraCollision_Res04_Hybrid::Update(float DeltaTime, const FStageExecutionContext& Context)
+{
+    Super:: Update(DeltaTime, Context);
+}
+
+void UCameraCollision_Res04_Hybrid::Reset()
+{
+    Super::Reset();
+    CurrentPullIn = 0.0f;
+    TargetPullIn = 0.0f;
+    CurrentSlide = FVector::ZeroVector;
+    TargetSlide = FVector::ZeroVector;
+    CurrentRotation = FRotator:: ZeroRotator;
+    TargetRotation = FRotator::ZeroRotator;
+    EffectivePullInWeight = BasePullInWeight;
+    EffectiveSlideWeight = BaseSlideWeight;
+    EffectiveRotateWeight = BaseRotateWeight;
+}
+
+void UCameraCollision_Res04_Hybrid:: CalculateAdaptiveWeights(const FCollisionDetectionResult& DetectionResult)
+{
+    // Placeholder - will be implemented in Sub-Step 5.3.4
+    EffectivePullInWeight = BasePullInWeight;
+    EffectiveSlideWeight = BaseSlideWeight;
+    EffectiveRotateWeight = BaseRotateWeight;
+}
+
+FVector UCameraCollision_Res04_Hybrid:: CalculateSlideDirection(
+    const FVector& CollisionNormal,
+    const FVector& CameraDirection) const
+{
+    // Placeholder - will be implemented in Sub-Step 5.3.4
+    return FVector::ZeroVector;
+}
+```
+
+---
+
+【代码设计说明】
+
+### 1. ResponseBase辅助方法
+
+```cpp
+InterpolateValue()     // 平滑插值单个数值
+InterpolateVector()    // 平滑插值向量
+InterpolateRotator()   // 平滑插值旋转
+IsResponseNeeded()     // 检查是否需要响应
+InitializeResponse()   // 初始化FCollisionResponseOutput
+```
+
+### 2. Res01 PullIn执行流程
+
+```
+Execute()
+├── 1. IsResponseNeeded() - 检查是否需要响应
+│   └── 如果不需要，平滑返回到0
+├── 2. 计算目标调整量
+│   ├── TargetDistanceAdjustment = -(DesiredDistance - SafeDistance)
+│   └── 应用Overshoot（如果启用）
+├── 3. 计算插值速度
+│   ├── 基于urgency调整速度
+│   └── 最小拉近时间内使用更快速度
+├── 4. 插值当前值到目标值
+│   └── CurrentDistanceAdjustment = Interpolate(...)
+└── 5. 构建响应输出
+    └── InitializeResponse() + 设置DistanceAdjustment
+```
+
+### 3. 平滑恢复设计
+
+```
+碰撞结束后的行为：
+├── 不立即归零
+├── 以较慢速度（0.5x）平滑返回
+└── 防止相机突然弹回
+
+代码位置：Execute()开头的 if (! IsResponseNeeded()) 分支
+```
+
+### 4. Urgency（紧急程度）机制
+
+```
+Urgency = DetectionResult.AdjustmentRatio (0-1)
+
+效果：
+├── 高Urgency → 更快的插值速度
+├── 公式：EffectiveSpeed = BaseSpeed * (1 + Urgency * 2)
+└── 例：Urgency=1 时，速度是基础的3倍
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] Regenerate执行
+   - [ ] 编译通过（0 errors）
+   - [ ] 无链接错误
+
+2. **代码完整性：**
+   - [ ] ResponseBase构造函数和5个辅助方法
+   - [ ] Res01完整实现（Execute + Update + Reset）
+   - [ ] Res02-Res04构造函数和placeholder
+
+3. **功能验证：**
+   - [ ] Res01可响应碰撞并拉近相机
+   - [ ] 碰撞结束后平滑恢复
+   - [ ] Urgency机制正常工作
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 5.3.2 完成报告
+================================================================================
+
+【创建的文件】
+- 文件：CameraCollision_Response.cpp
+- 路径：Source/MyProject/Private/Camera/Collision/
+
+【实现的类】
+
+ResponseBase：
+- ✅ 构造函数
+- ✅ Update()
+- ✅ Reset()
+- ✅ InterpolateValue()
+- ✅ InterpolateVector()
+- ✅ InterpolateRotator()
+- ✅ IsResponseNeeded()
+- ✅ InitializeResponse()
+
+Res01 PullIn：
+- ✅ 构造函数
+- ✅ ShouldExecute()
+- ✅ Execute() - 完整实现
+- ✅ Update()
+- ✅ Reset()
+
+Res02 Slide：
+- ✅ 构造函数 + Reset()
+- ⏳ Execute() - Placeholder
+
+Res03 Rotate：
+- ✅ 构造函数 + Reset()
+- ⏳ Execute() - Placeholder
+- ⏳ FindBestRotation() - Placeholder
+
+Res04 Hybrid：
+- ✅ 构造函数 + Reset()
+- ⏳ Execute() - Placeholder
+- ⏳ CalculateAdaptiveWeights() - Placeholder
+
+【编译结果】
+- Regenerate：[已执行]
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【最终状态】
+✅ ResponseBase + Res01 PullIn实现完成
+⏳ Res02-Res04待实现
+
+================================================================================
+```
+
+【后续步骤】
+
+5. 3.2完成后：
+- [x] ✅ 5.3.1: CameraCollision_Response.h
+- [x] ✅ 5.3.2: ResponseBase + Res01（当前）
+- [ ] ⏳ 5.3.3: Res02 + Res03实现
+- [ ] ⏳ 5.3.4: Res04实现 + 注册
+
+**Phase 5.3进度：2/4**
+
+================================================================================

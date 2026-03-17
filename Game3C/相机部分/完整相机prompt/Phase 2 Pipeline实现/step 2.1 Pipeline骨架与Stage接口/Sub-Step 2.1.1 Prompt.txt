@@ -1,0 +1,320 @@
+================================================================================
+任务：创建ICameraStage. h - Stage接口定义
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+ICameraStage是所有Pipeline Stage的接口基类。
+Pipeline包含8个Stage，每帧顺序执行。
+
+【当前进度】
+Phase 2 Step 2.1 Sub-Step 2.1.1 (共190个Sub-Step中的第36个)
+**这是Phase 2的第一个Sub-Step**
+
+前置完成：
+- Phase 1 全部完成 ✅
+  - Step 1.1: 枚举定义 (1. 1.1-1.1.7) ✅
+  - Step 1.2-1.4: 参数结构体 ✅
+  - Step 1.5: RuntimeTypes + StateMachine + Manager ✅
+
+【任务目标】
+创建文件：Source/[ProjectName]/Camera/Pipeline/ICameraStage.h
+定义Stage接口，所有8个Stage都将实现此接口。
+
+**这是Pipeline目录的第一个文件。**
+
+【具体要求】
+
+1. 文件路径：Source/[ProjectName]/Camera/Pipeline/ICameraStage. h
+
+2. 完整文件内容：
+
+```cpp
+// Copyright Epic Games, Inc. All Rights Reserved. 
+
+#pragma once
+
+#include "CoreMinimal. h"
+#include "UObject/Interface.h"
+#include "Camera/Core/SoulsCameraRuntimeTypes.h"
+#include "ICameraStage.generated.h"
+
+// Forward declarations
+class USoulsCameraManager;
+
+/**
+ * Pipeline stage execution context
+ * Contains all data needed for stage execution
+ * Stage间传递的执行上下文
+ */
+USTRUCT(BlueprintType)
+struct MYPROJECT_API FStageExecutionContext
+{
+    GENERATED_BODY()
+
+    /** Delta time for this frame */
+    UPROPERTY()
+    float DeltaTime;
+
+    /** Reference to camera manager */
+    UPROPERTY()
+    USoulsCameraManager* Manager;
+
+    /** Input context gathered in Stage 1 */
+    UPROPERTY()
+    FCameraInputContext InputContext;
+
+    /** Current camera output (modified by stages) */
+    UPROPERTY()
+    FSoulsCameraOutput Output;
+
+    /** Module outputs collected in Stage 3 */
+    TArray<FModuleOutput> ModuleOutputs;
+
+    /** Modifier outputs collected in Stage 4 */
+    TArray<FModifierOutput> ModifierOutputs;
+
+    /** Should skip remaining stages */
+    UPROPERTY()
+    bool bShouldAbort;
+
+    /** Stage that requested abort (1-8, -1 = none) */
+    UPROPERTY()
+    int32 AbortRequestedByStage;
+
+    /** Default constructor */
+    FStageExecutionContext()
+        : DeltaTime(0.0f)
+        , Manager(nullptr)
+        , bShouldAbort(false)
+        , AbortRequestedByStage(-1)
+    {}
+
+    /** Reset context to defaults */
+    void Reset()
+    {
+        DeltaTime = 0.0f;
+        InputContext.Reset();
+        Output = FSoulsCameraOutput();
+        ModuleOutputs.Empty();
+        ModifierOutputs. Empty();
+        bShouldAbort = false;
+        AbortRequestedByStage = -1;
+    }
+};
+
+/**
+ * Stage execution result
+ * Stage执行结果枚举
+ */
+UENUM(BlueprintType)
+enum class EStageResult :   uint8
+{
+    /** Stage executed successfully 成功执行 */
+    Success         UMETA(DisplayName = "Success"),
+    
+    /** Stage was skipped (optional stage) 跳过执行 */
+    Skipped         UMETA(DisplayName = "Skipped"),
+    
+    /** Stage failed but pipeline can continue 失败但继续 */
+    Failed          UMETA(DisplayName = "Failed"),
+    
+    /** Stage requests pipeline abort 请求中止 */
+    Abort           UMETA(DisplayName = "Abort")
+};
+
+/**
+ * ICameraStage - Interface for all pipeline stages
+ * Pipeline Stage接口基类
+ * 
+ * 8个Stage顺序执行：
+ * Stage 1: Input Gather - Collect player input and game state
+ * Stage 2: State Machine - Evaluate and update camera state
+ * Stage 3: Module Compute - Execute active camera modules
+ * Stage 4: Modifier Apply - Apply active camera modifiers (skippable)
+ * Stage 5: Blend & Solve - Blend outputs and resolve conflicts
+ * Stage 6: Collision Resolve - Handle camera collision (skippable)
+ * Stage 7: Post Process - Apply final adjustments (skippable)
+ * Stage 8: Render Apply - Apply output to components
+ */
+UINTERFACE(MinimalAPI, Blueprintable)
+class UCameraStage : public UInterface
+{
+    GENERATED_BODY()
+};
+
+class MYPROJECT_API ICameraStage
+{
+    GENERATED_BODY()
+
+public:
+    /**
+     * Get the stage index (1-8)
+     * @return Stage number (1=Input Gather, 8=Render Apply)
+     */
+    virtual int32 GetStageIndex() const = 0;
+
+    /**
+     * Get the stage name for debugging
+     * @return Human-readable stage name
+     */
+    virtual FName GetStageName() const = 0;
+
+    /**
+     * Check if this stage can be skipped
+     * @return True if stage is optional (e.g., Modifier Apply, Collision Resolve, Post Process)
+     */
+    virtual bool CanBeSkipped() const { return false; }
+
+    /**
+     * Check if this stage should execute this frame
+     * @param Context Execution context
+     * @return True if stage should execute
+     */
+    virtual bool ShouldExecute(const FStageExecutionContext& Context) const { return true; }
+
+    /**
+     * Execute the stage
+     * @param Context Execution context (modified in place)
+     * @return Execution result
+     */
+    virtual EStageResult Execute(FStageExecutionContext& Context) = 0;
+
+    /**
+     * Called when stage is about to execute (for debugging/profiling)
+     * @param Context Execution context
+     */
+    virtual void OnPreExecute(const FStageExecutionContext& Context) {}
+
+    /**
+     * Called after stage execution (for debugging/profiling)
+     * @param Context Execution context
+     * @param Result Execution result
+     */
+    virtual void OnPostExecute(const FStageExecutionContext& Context, EStageResult Result) {}
+
+    /** Virtual destructor */
+    virtual ~ICameraStage() = default;
+};
+```
+
+3. 代码风格：
+   - 使用UINTERFACE定义UE4接口
+   - FStageExecutionContext包含Stage间传递的所有数据
+   - EStageResult使用UMETA(DisplayName)提供蓝图友好名称
+   - 提供可选的Pre/Post执行钩子
+   - 支持Stage跳过机制
+   - 中英文双语注释
+
+【验证标准】
+- 编译通过（0 errors）
+- 接口可被其他类继承实现
+- MYPROJECT_API宏正确应用
+
+【注意事项】
+- **这是Pipeline目录的第一个文件，需要创建Pipeline文件夹**
+- 注意头文件路径：`Camera/Core/SoulsCameraRuntimeTypes.  h`
+- 确保MYPROJECT_API替换为你的项目名称（大写）
+- **添加新文件后需要重新Generate Visual Studio project files**
+- FStageExecutionContext需要MYPROJECT_API宏以便跨模块使用
+
+【输出要求】
+输出完整的ICameraStage.h文件代码。
+
+================================================================================
+                        上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+```
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：Sub-Step 2.1.1 创建ICameraStage. h - Stage接口定义
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断]
+
+【已完成内容】
+- [列出已完成的部分]
+
+【未完成内容】
+- [列出剩余部分]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存到ICameraStage.h，然后开启新对话。
+
+【文件创建注意】
+- 需要创建Pipeline文件夹
+- 添加新文件后需要Generate Visual Studio project files
+
+================================================================================
+                    继续任务 - 新对话PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Phase 2 Step 2.1 Sub-Step 2.1.1 续接任务。
+创建ICameraStage.  h接口文件。
+**这是Phase 2的第一个Sub-Step。**
+
+【前置完成】
+- Phase 1 全部完成 ✅
+- Sub-Step 2.1.1 部分完成：
+  - [列出已完成的部分] ✅
+
+【续接任务】
+继续完成ICameraStage.h文件：
+- [列出剩余部分]
+
+【目标文件】
+Source/[ProjectName]/Camera/Pipeline/ICameraStage.  h
+
+【文件结构要求】
+- 版权声明
+- 包含：CoreMinimal.h, UObject/Interface.h, SoulsCameraRuntimeTypes.  h
+- FStageExecutionContext结构体
+- EStageResult枚举
+- ICameraStage接口（包含8个虚函数）
+
+【编译注意】
+添加新.  h文件后需要：
+1. 创建Pipeline文件夹（如果不存在）
+2. 右键.  uproject → Generate Visual Studio project files
+3. 重新打开.  sln或Reload All
+4. 编译
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================
+```
+
+【交接信息要求】
+1. 交接PROMPT必须是**完全自包含**的
+2. 明确标注这是Phase 2第一个Sub-Step
+3. 包含完整文件结构要求
+4. 标明编译注意事项（创建Pipeline文件夹 + Generate VS project files）
+
+================================================================================

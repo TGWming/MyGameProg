@@ -1,0 +1,392 @@
+Sub-Step 3.3.1 Prompt
+
+================================================================================
+任务：创建CameraModule_Rotation.h - Rotation模块头文件
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Rotation模块负责计算相机的旋转/朝向（Pitch/Yaw/Roll），决定相机看向哪里。
+这是9个Rotation模块的统一头文件声明，与Position模块配合工作。
+
+【当前进度】
+Phase 3 Step 3.3 Sub-Step 3.3.1 (共190个Sub-Step中的第69个)
+前置完成：Step 3.2 Position模块（8个模块全部完成）✅
+
+【任务目标】
+创建文件：Source/[ProjectName]/Public/Camera/Modules/CameraModule_Rotation.h
+定义所有9个Rotation模块类（R01-R09）的声明。
+
+【⚠️ 编码格式要求 - CRITICAL】
+
+1. **文件编码：UTF-8 Without BOM（强制）**
+   - 创建文件后立即检查VS Code右下角编码
+   - 如果显示 "UTF-8 with BOM"，点击转换为 "UTF-8"
+   - 保存前再次确认
+
+2. **注释规范：所有注释必须使用英文（强制）**
+   - 禁止使用中文注释
+   - 参考标准：已完成的CameraModule_Position.h
+
+3. **命名替换：**
+   - 将 [ProjectName] 替换为实际项目名称
+   - 将 YOURPROJECT_API 替换为实际API宏（如 MYPROJECT_API）
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Public/Camera/Modules/CameraModule_Rotation.h
+
+2. **文件结构要求：**
+
+**A. 头部声明：**
+- 版权声明：// Copyright Epic Games, Inc. All Rights Reserved. 
+- #pragma once
+- 包含头文件（按顺序）：
+  * #include "CoreMinimal.h"
+  * #include "CameraModuleBase.h"
+  * #include "CameraModule_Rotation.generated.h" （必须最后）
+
+**B. 文件整体说明注释：**
+添加多行注释说明：
+- 此文件包含9个Rotation模块的声明
+- Rotation模块负责计算相机旋转（FRotator）
+- 这些模块在Stage 3中执行，输出在Stage 5中混合
+- 输出字段：RotationOffset（FRotator类型）
+
+**C. 9个Rotation模块类定义：**
+
+所有类的共同要求：
+- 继承自 UCameraModuleBase
+- 使用 UCLASS(BlueprintType, Blueprintable)
+- 使用 YOURPROJECT_API 宏
+- 重写 GetModuleType() - 返回对应的 ECameraModuleType
+- 重写 GetModuleCategory() - 返回 EModuleCategory::Rotation
+- 重写 GetModuleDescription() - 返回描述字符串
+- 可选重写 GetDefaultPriority() - 返回优先级（默认100）
+- 可选重写 GetDefaultBlendPolicy() - 返回混合策略（默认Blend）
+- 重写 Compute() - 主计算方法
+- 可选重写 ShouldActivate() - 激活条件
+- 可选重写 OnActivate/OnDeactivate - 生命周期钩子
+
+---
+
+### 模块1:  UCameraModule_R01_PlayerInput_Free
+
+**类文档注释：**
+```
+R01: Player Input Free - Free camera rotation from player input
+Standard third-person camera control without any restrictions
+Player has full control over camera yaw and pitch
+This is the foundation rotation module for exploration and combat
+```
+
+**必需重写的方法：**
+- GetModuleType() → ECameraModuleType:: Module_R01_PlayerInput_Free
+- GetModuleCategory() → EModuleCategory::  Rotation
+- GetModuleDescription() → "Free camera rotation from player input"
+- GetDefaultPriority() → 100
+- GetDefaultBlendPolicy() → EBlendPolicy::Override
+- ShouldActivate() - 声明
+- Compute() - 声明
+- OnActivate() - 声明（初始化状态）
+
+**构造函数：**
+- UCameraModule_R01_PlayerInput_Free() - 声明
+
+**protected成员变量：**
+- FRotator CurrentRotation - 当前累积的旋转
+- float BaseSensitivity - 基础灵敏度（可选）
+
+添加注释说明用途。
+
+---
+
+### 模块2: UCameraModule_R02_PlayerInput_Lagged
+
+**类文档注释：**
+```
+R02: Player Input Lagged - Player input with smoothing/lag
+Provides smoother camera movement with interpolation
+Reduces jittery input and creates more cinematic feel
+Uses exponential interpolation for frame-rate independence
+```
+
+**必需重写的方法：**
+- GetModuleType() → ECameraModuleType::Module_R02_PlayerInput_Lagged
+- GetModuleCategory() → EModuleCategory:: Rotation
+- GetModuleDescription() → "Smoothed camera rotation with lag"
+- GetDefaultPriority() → 100
+- ShouldActivate() - 声明
+- Compute() - 声明
+- OnActivate() - 声明（初始化插值状态）
+
+**构造函数：**
+- UCameraModule_R02_PlayerInput_Lagged() - 声明
+
+**protected成员变量：**
+- FRotator TargetRotation - 目标旋转（来自输入）
+- FRotator SmoothedRotation - 当前平滑后的旋转
+- bool bInitialized - 是否已初始化
+
+---
+
+### 模块3: UCameraModule_R03_LookAt_Target
+
+**类文档注释：**
+```
+R03: LookAt Target - Hard lock rotation to target
+Camera always faces the locked target directly
+Calculates rotation from camera position to target position
+Used for precise lock-on combat (Dark Souls style)
+```
+
+**必需重写的方法：**
+- GetModuleType() → ECameraModuleType::Module_R03_LookAt_Target
+- GetModuleCategory() → EModuleCategory:: Rotation
+- GetModuleDescription() → "Hard lock-on rotation to target"
+- GetDefaultPriority() → 150 （高于输入，战斗时优先）
+- GetDefaultBlendPolicy() → EBlendPolicy:: Override
+- ShouldActivate() - 声明（需要锁定目标）
+- Compute() - 声明
+
+**成员变量：** 无（无状态，每帧重新计算）
+
+---
+
+### 模块4: UCameraModule_R04_LookAt_Target_Soft
+
+**类文档注释：**
+```
+R04: LookAt Target Soft - Soft lock with player input override
+Camera biases towards target but allows player adjustment
+Provides target tracking while maintaining player control
+Blends between lock-on direction and player input offset
+```
+
+**必需重写的方法：**
+- GetModuleType() → ECameraModuleType::Module_R04_LookAt_Target_Soft
+- GetModuleCategory() → EModuleCategory:: Rotation
+- GetModuleDescription() → "Soft lock-on with player input adjustment"
+- GetDefaultPriority() → 140 （略低于硬锁定）
+- GetDefaultBlendPolicy() → EBlendPolicy:: Blend
+- ShouldActivate() - 声明（需要目标）
+- Compute() - 声明
+- OnActivate() - 声明（重置输入偏移）
+
+**构造函数：**
+- UCameraModule_R04_LookAt_Target_Soft() - 声明
+
+**protected成员变量：**
+- FRotator InputOffset - 玩家输入的偏移量
+- FRotator CurrentRotation - 当前混合后的旋转
+
+---
+
+### 模块5: UCameraModule_R05_LookAt_Boss
+
+**类文档注释：**
+```
+R05: LookAt Boss - Special look-at for boss targets
+Adjusts framing and rotation for large boss enemies
+May include offset to focus on boss weak points or head
+Provides cinematic boss encounter camera
+```
+
+**必需重写的方法：**
+- GetModuleType() → ECameraModuleType::Module_R05_LookAt_Boss
+- GetModuleCategory() → EModuleCategory::Rotation
+- GetModuleDescription() → "Boss-specific look-at behavior"
+- GetDefaultPriority() → 160 （最高优先级锁定）
+- GetDefaultBlendPolicy() → EBlendPolicy::Override
+- ShouldActivate() - 声明（需要Boss目标）
+- Compute() - 声明
+
+**成员变量：** 无
+
+---
+
+### 模块6: UCameraModule_R06_AutoOrient_Movement
+
+**类文档注释：**
+```
+R06: Auto Orient Movement - Auto-rotate to face movement direction
+Camera gradually aligns behind character when moving
+Provides natural camera behavior during exploration
+Only activates during movement, blends with player input
+```
+
+**必需重写的方法：**
+- GetModuleType() → ECameraModuleType::Module_R06_AutoOrient_Movement
+- GetModuleCategory() → EModuleCategory::Rotation
+- GetModuleDescription() → "Auto-orient camera to movement direction"
+- GetDefaultPriority() → 90 （低于输入，作为辅助）
+- GetDefaultBlendPolicy() → EBlendPolicy:: Blend
+- ShouldActivate() - 声明（需要移动）
+- Compute() - 声明
+
+**成员变量：** 无（可选：添加平滑状态）
+
+---
+
+### 模块7: UCameraModule_R07_AutoOrient_Delayed
+
+**类文档注释：**
+```
+R07: Auto Orient Delayed - Auto-center after input timeout
+Camera returns to default position after no input for a period
+Common in third-person games for improved navigation
+Delay prevents interference with intentional camera angles
+```
+
+**必需重写的方法：**
+- GetModuleType() → ECameraModuleType::Module_R07_AutoOrient_Delayed
+- GetModuleCategory() → EModuleCategory::Rotation
+- GetModuleDescription() → "Auto-center camera after input delay"
+- GetDefaultPriority() → 80 （最低输入优先级）
+- GetDefaultBlendPolicy() → EBlendPolicy::Blend
+- ShouldActivate() - 声明（检查输入超时）
+- Compute() - 声明
+
+**构造函数：**
+- UCameraModule_R07_AutoOrient_Delayed() - 声明
+
+**protected成员变量：**
+- float TimeSinceInput - 距离上次输入的时间
+- bool bIsAutoCentering - 是否正在自动居中
+
+---
+
+### 模块8: UCameraModule_R08_LookAt_Point
+
+**类文档注释：**
+```
+R08: LookAt Point - Look at a specific world point
+Used for points of interest and cinematic moments
+Similar to R03 but targets a fixed point instead of actor
+Configured via StateConfig for level-specific cameras
+```
+
+**必需重写的方法：**
+- GetModuleType() → ECameraModuleType::Module_R08_LookAt_Point
+- GetModuleCategory() → EModuleCategory::  Rotation
+- GetModuleDescription() → "Look at specific world point"
+- GetDefaultPriority() → 180 （高优先级，用于特殊时刻）
+- GetDefaultBlendPolicy() → EBlendPolicy::Override
+- ShouldActivate() - 声明（检查是否定义了注视点）
+- Compute() - 声明
+
+**成员变量：** 无（注视点从StateConfig读取）
+
+---
+
+### 模块9: UCameraModule_R09_Spline_Rotation
+
+**类文档注释：**
+```
+R09: Spline Rotation - Rotation along spline path
+Used with P07 (Spline Follow) for scripted camera paths
+Rotation can follow spline tangent or point at specific target
+Provides cinematic camera movements along rails
+```
+
+**必需重写的方法：**
+- GetModuleType() → ECameraModuleType::Module_R09_Spline_Rotation
+- GetModuleCategory() → EModuleCategory::Rotation
+- GetModuleDescription() → "Rotation along spline path"
+- GetDefaultPriority() → 200 （最高优先级，用于脚本化）
+- GetDefaultBlendPolicy() → EBlendPolicy::Override
+- ShouldActivate() - 声明（检查样条引用）
+- Compute() - 声明
+
+**protected成员变量：**
+- FRotator SplineRotation - 当前样条旋转值（可选）
+
+---
+
+**D. 代码风格要求：**
+- 每个类之间空两行
+- 使用内联实现简单的Get方法（GetModuleType等）
+- 复杂方法仅声明，实现在. cpp
+- 每个类前添加详细的文档注释
+- 注释说明模块的用途、激活条件、计算内容
+- 所有方法标记 virtual override
+
+【注意事项】
+
+1. **枚举值命名：**
+   确保ECameraModuleType中包含所有9个Rotation模块的枚举值：
+   - Module_R01_PlayerInput_Free
+   - Module_R02_PlayerInput_Lagged
+   - Module_R03_LookAt_Target
+   - Module_R04_LookAt_Target_Soft
+   - Module_R05_LookAt_Boss
+   - Module_R06_AutoOrient_Movement
+   - Module_R07_AutoOrient_Delayed
+   - Module_R08_LookAt_Point
+   - Module_R09_Spline_Rotation
+
+   如果枚举值命名不同，使用实际定义的名称。
+
+2. **优先级设计：**
+   - 自动旋转：80-90（最低，作为辅助）
+   - 玩家输入：100（基础）
+   - 软锁定：140（较高）
+   - 硬锁定：150-160（高）
+   - 特殊/脚本：180-200（最高）
+
+3. **仅声明不实现：**
+   本文件只包含类声明，所有方法实现在对应的.cpp文件中
+
+4. **GENERATED_BODY宏：**
+   每个UCLASS必须包含GENERATED_BODY()宏
+
+5. **与Position模块的对比：**
+   - Position模块输出：PositionOffset (FVector)
+   - Rotation模块输出：RotationOffset (FRotator)
+   - 两者在Stage 5中分别混合
+
+【验证标准】
+1. 编译通过（0 errors, 0 warnings）
+2. 文件编码为 UTF-8 Without BOM
+3. 所有注释为英文
+4. 9个类都完整声明
+5. 所有Get方法内联实现
+6. 复杂方法仅声明
+7. YOURPROJECT_API宏已正确替换
+
+【输出要求】
+输出完整的CameraModule_Rotation.h文件代码，包含所有9个Rotation模块类的声明。
+
+【Rotation模块概览】
+
+完成后将拥有以下Rotation模块：
+
+| 模块 | 名称 | 用途 | 优先级 |
+|------|------|------|--------|
+| **R01** | Player Input Free | 自由输入控制 | 100 |
+| **R02** | Player Input Lagged | 平滑输入控制 | 100 |
+| **R03** | LookAt Target | 硬锁定目标 | 150 |
+| **R04** | LookAt Target Soft | 软锁定目标 | 140 |
+| **R05** | LookAt Boss | Boss锁定 | 160 |
+| **R06** | AutoOrient Movement | 自动对齐移动 | 90 |
+| **R07** | AutoOrient Delayed | 延迟居中 | 80 |
+| **R08** | LookAt Point | 注视固定点 | 180 |
+| **R09** | Spline Rotation | 样条旋转 | 200 |
+
+【后续步骤】
+
+完成后，Rotation模块进度：
+- [x] ✅ 3. 3.1: CameraModule_Rotation.h（9个模块声明）
+- [ ] ⏳ 3.3.2: R01 - Player Input Free
+- [ ] ⏳ 3.3.3: R02 - Player Input Lagged
+- [ ] ⏳ 3.3.4: R03 - LookAt Target
+- [ ] ⏳ 3.3.5: R04 - LookAt Target Soft
+- [ ] ⏳ 3.3.6: R05 - LookAt Boss
+- [ ] ⏳ 3.3.7: R06 - AutoOrient Movement
+- [ ] ⏳ 3.3.8: R07 - AutoOrient Delayed
+- [ ] ⏳ 3.3.9: R08 - LookAt Point
+- [ ] ⏳ 3.3.10: R09 - Spline Rotation
+
+完成后准备进入Sub-Step 3.3.2（R01实现）。
+
+================================================================================

@@ -1,0 +1,353 @@
+================================================================================
+任务：创建CameraStage_StateMachine.h - Stage 2类声明
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Stage 2负责评估和更新相机状态，查询DataTable获取配置。
+
+【当前进度】
+Phase 2 Step 2.2 Sub-Step 2.2.3 (共190个Sub-Step中的第41个)
+**实现8个Stage中的第二个**
+
+前置完成：
+- Phase 1 全部完成 ✅
+- Sub-Step 2.1. 1-2.1.3:  Pipeline骨架 ✅
+- Sub-Step 2.2.1-2.2.2: Stage 1 (InputGather) ✅
+
+【任务目标】
+创建文件：Source/[ProjectName]/Camera/Pipeline/CameraStage_StateMachine.h
+定义Stage 2类。
+
+【Stage 2概述】
+- **名称**：State Machine（状态机）
+- **层级**：DECISION LAYER（决策层）
+- **索引**：2
+- **必需**：是
+- **可跳过**：否
+- **职责**：评估状态条件、请求状态切换、更新过渡混合、获取状态配置、设置初始输出值
+
+【具体要求】
+
+1. 文件路径：Source/[ProjectName]/Camera/Pipeline/CameraStage_StateMachine.h
+
+2. 完整文件内容：
+
+```cpp
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#pragma once
+
+#include "CoreMinimal. h"
+#include "UObject/NoExportTypes.h"
+#include "ICameraStage. h"
+#include "Camera/Core/SoulsCameraConfig.h"
+#include "Camera/Data/CameraStateEnums.h"
+#include "CameraStage_StateMachine.generated.h"
+
+// Forward declarations
+class USoulsCameraStateMachine;
+
+/**
+ * UCameraStage_StateMachine - Stage 2: State Machine Update
+ * 阶段2：状态机更新
+ * 
+ * Second stage in the pipeline.  Handles camera state management:
+ * Pipeline第二阶段，处理相机状态管理：
+ * 
+ * - Evaluates input context to determine desired state 评估输入上下文确定目标状态
+ * - Requests state changes when needed 需要时请求状态切换
+ * - Updates state transition blending 更新状态过渡混合
+ * - Retrieves state configuration from DataTable 从DataTable获取状态配置
+ * - Sets initial output values based on current state 基于当前状态设置初始输出值
+ * 
+ * Layer: DECISION (决策层)
+ * Required: Yes (必需)
+ * Skippable: No (不可跳过)
+ */
+UCLASS(BlueprintType)
+class MYPROJECT_API UCameraStage_StateMachine : public UObject, public ICameraStage
+{
+    GENERATED_BODY()
+
+public:
+    /** Constructor */
+    UCameraStage_StateMachine();
+
+    //========================================
+    // ICameraStage Interface 接口实现
+    //========================================
+
+    /** Get stage index (2 for StateMachine) */
+    virtual int32 GetStageIndex() const override { return 2; }
+    
+    /** Get stage name for debugging */
+    virtual FName GetStageName() const override { return FName(TEXT("StateMachine")); }
+    
+    /** This stage cannot be skipped */
+    virtual bool CanBeSkipped() const override { return false; }
+    
+    /** Execute the state machine stage */
+    virtual EStageResult Execute(FStageExecutionContext& Context) override;
+
+    /** Pre-execute hook for debugging */
+    virtual void OnPreExecute(const FStageExecutionContext& Context) override;
+
+    /** Post-execute hook for debugging */
+    virtual void OnPostExecute(const FStageExecutionContext& Context, EStageResult Result) override;
+
+    //========================================
+    // State Machine Reference 状态机引用
+    //========================================
+
+    /** 
+     * Set reference to the state machine
+     * @param InStateMachine State machine instance
+     */
+    void SetStateMachine(USoulsCameraStateMachine* InStateMachine);
+
+    /**
+     * Get the state machine reference
+     * @return State machine instance, or nullptr if not set
+     */
+    FORCEINLINE USoulsCameraStateMachine* GetStateMachine() const { return StateMachine; }
+
+protected:
+    //========================================
+    // State Evaluation 状态评估
+    //========================================
+
+    /** 
+     * Evaluate current state based on input context
+     * Determines if a state change is needed
+     * 评估当前状态，确定是否需要状态切换
+     */
+    void EvaluateState(FStageExecutionContext& Context);
+
+    /**
+     * Determine the desired state based on input context
+     * 基于输入上下文确定目标状态
+     * @param Context Execution context
+     * @return Desired state name
+     */
+    FName DetermineDesiredState(const FStageExecutionContext& Context) const;
+
+    //========================================
+    // State Transition 状态过渡
+    //========================================
+
+    /** 
+     * Update state transition blending
+     * 更新状态过渡混合
+     */
+    void UpdateTransition(FStageExecutionContext& Context);
+
+    /**
+     * Check if currently in a state transition
+     * @return True if transitioning between states
+     */
+    bool IsInTransition() const;
+
+    //========================================
+    // Configuration Application 配置应用
+    //========================================
+
+    /** 
+     * Apply state configuration to output
+     * Sets initial output values based on state config
+     * 应用状态配置到输出
+     */
+    void ApplyStateConfig(FStageExecutionContext& Context, const FCameraStateConfig& Config);
+
+    /** 
+     * Blend between two state configurations
+     * Used during state transitions
+     * 混合两个状态配置
+     */
+    void BlendStateConfigs(
+        FStageExecutionContext& Context,
+        const FCameraStateConfig& FromConfig,
+        const FCameraStateConfig& ToConfig,
+        float BlendAlpha
+    );
+
+    /**
+     * Apply blend curve to alpha value
+     * 应用混合曲线到alpha值
+     * @param Alpha Raw alpha (0-1)
+     * @param BlendType Type of blend curve
+     * @return Curved alpha value
+     */
+    float ApplyBlendCurve(float Alpha, ECameraBlendType BlendType) const;
+
+    //========================================
+    // State Priority 状态优先级
+    //========================================
+
+    /**
+     * Get priority for a state category
+     * Higher priority states override lower priority
+     * 获取状态类别的优先级
+     */
+    int32 GetStatePriority(ECameraStateCategory Category) const;
+
+private:
+    //========================================
+    // State Machine Reference
+    //========================================
+
+    /** Reference to state machine (owned by Manager) */
+    UPROPERTY()
+    USoulsCameraStateMachine* StateMachine;
+
+    //========================================
+    // Cached State Data 缓存的状态数据
+    //========================================
+
+    /** Cached current state config (reduces DataTable queries) */
+    FCameraStateConfig CurrentStateConfig;
+
+    /** Cached previous state config (for blending) */
+    FCameraStateConfig PreviousStateConfig;
+
+    /** Current state name */
+    FName CurrentStateName;
+
+    /** Previous state name (before transition) */
+    FName PreviousStateName;
+
+    /** Is current state config valid */
+    bool bCurrentConfigValid;
+
+    /** Is previous state config valid */
+    bool bPreviousConfigValid;
+
+    //========================================
+    // Transition State 过渡状态
+    //========================================
+
+    /** Current transition progress (0-1) */
+    float TransitionAlpha;
+
+    /** Current transition duration */
+    float TransitionDuration;
+
+    /** Elapsed transition time */
+    float TransitionElapsed;
+
+    /** Current blend type for transition */
+    ECameraBlendType CurrentBlendType;
+
+    /** Is currently transitioning */
+    bool bIsTransitioning;
+};
+```
+
+3. 代码风格：
+   - 继承UObject和ICameraStage
+   - 持有StateMachine引用
+   - 缓存配置减少DataTable查询
+   - 支持配置混合和过渡
+   - 中英文双语注释
+   - MYPROJECT_API宏
+
+【验证标准】
+- 编译通过（需要配合. cpp）
+- 类可在蓝图中看到
+
+【注意事项】
+- 依赖ICameraStage. h和SoulsCameraConfig. h
+- 依赖CameraStateEnums. h（ECameraBlendType）
+- 下一个Sub-Step创建. cpp实现
+- 确保MYPROJECT_API替换为你的项目名称（大写）
+- **添加新文件后可能需要重新Generate Visual Studio project files**
+
+【输出要求】
+输出完整的CameraStage_StateMachine.h文件代码。
+
+================================================================================
+                        上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+```
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：Sub-Step 2.2.3 创建CameraStage_StateMachine.h - Stage 2类声明
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断]
+
+【已完成内容】
+- [列出已完成的部分]
+
+【未完成内容】
+- [列出剩余部分]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存到CameraStage_StateMachine.h，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Phase 2 Step 2.2 Sub-Step 2.2.3 续接任务。
+完成CameraStage_StateMachine.h声明。
+**这是8个Stage中的第二个。**
+
+【前置完成】
+- Phase 1 全部完成 ✅
+- Sub-Step 2.1.1-2.1.3:  Pipeline骨架 ✅
+- Sub-Step 2.2.1-2.2.2: Stage 1 (InputGather) ✅
+- Sub-Step 2.2.3 部分完成 ✅
+
+【续接任务】
+继续完成CameraStage_StateMachine.h
+
+【目标文件】
+Source/[ProjectName]/Camera/Pipeline/CameraStage_StateMachine.h
+
+【Stage 2概述】
+- 名称：State Machine
+- 层级：DECISION LAYER
+- 索引：2
+- 必需：是
+- 职责：状态评估、状态切换、过渡混合、获取配置、设置初始输出
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================
+```
+
+【交接信息要求】
+1. 交接PROMPT必须是**完全自包含**的
+2. 明确标注这是8个Stage中的第二个
+3. 包含Stage概述信息
+4. 标明编译注意事项
+
+================================================================================

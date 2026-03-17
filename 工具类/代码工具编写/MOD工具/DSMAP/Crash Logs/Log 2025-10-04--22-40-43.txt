@@ -1,0 +1,16 @@
+DSMapStudio Version 1.11.1
+
+Renderable system full.
+
+Try increasing renderables limit in settings.
+
+
+   at StudioCore.Scene.Renderables.GetNextInvalidIndex() in ./src/StudioCore/Scene/Renderable.cs:line 68
+   at StudioCore.Scene.Renderables.AllocateValidAndVisibleRenderable() in ./src/StudioCore/Scene/Renderable.cs:line 76
+   at StudioCore.Scene.MeshRenderables.CreateMesh(BoundingBox& bounds, MeshDrawParametersComponent& drawArgs) in ./src/StudioCore/Scene/Renderable.cs:line 112
+   at StudioCore.Scene.MeshRenderableProxy.ConstructRenderables(GraphicsDevice gd, CommandList cl, SceneRenderPipeline sp) in ./src/StudioCore/Scene/RenderableProxy.cs:line 690
+   at StudioCore.Scene.RenderableProxy.<ScheduleRenderableConstruction>b__28_0(GraphicsDevice gd, CommandList cl) in ./src/StudioCore/Scene/RenderableProxy.cs:line 71
+   at StudioCore.Scene.Renderer.Frame(CommandList drawCommandList, Boolean backgroundOnly) in ./src/StudioCore/Scene/Renderer.cs:line 160
+   at StudioCore.Graphics.VulkanGraphicsContext.Draw(List`1 editors, EditorScreen focusedEditor) in ./src/StudioCore/Graphics/VulkanGraphicsContext.cs:line 118
+   at StudioCore.MapStudioNew.Run() in ./src/StudioCore/MapStudioNew.cs:line 378
+   at DSMapStudio.Program.Main(String[]) in ./src/Studio.App/DSMapStudio/Program.cs:line 36

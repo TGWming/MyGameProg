@@ -1,0 +1,400 @@
+Sub-Step 3.6.3 Prompt
+
+================================================================================
+任务：在CameraModule_Offset.cpp中添加O02 Shoulder_Offset实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+O02提供过肩视角的水平偏移，将相机偏移到角色肩部侧面。
+这是第三人称游戏中常见的相机配置，尤其适合战斗场景。
+
+【Pipeline中的位置】
+```
+Offset模块计算流程：
+1. O01: SocketOffset = (0, 0, 20) (Override，基础值)
+2. O02: Shoulder = (0, 50, 0) (Override，肩部偏移) ← 当前
+   → 相机向右偏移50cm，形成越肩视角
+3. O03-O05: 后续调整
+```
+
+【当前进度】
+Phase 3 Step 3.6 Sub-Step 3.6.3 (共190个Sub-Step中的第96个)
+前置完成：3.6.2 O01实现 ✅
+
+【任务目标】
+在CameraModule_Offset.cpp中完整实现O02模块，替换现有的占位符。
+
+【⚠️ 重要提醒】
+
+1. **编译前必做步骤：**
+   本Sub-Step只修改现有. cpp文件，不添加新文件。
+   因此**不需要Regenerate**，可以直接编译。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   确认StateConfig的字段路径与项目实际结构一致。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_Offset.cpp
+
+2. **定位修改位置：**
+
+在文件中找到O02的占位符实现部分：
+
+```cpp
+//========================================
+// O02: Shoulder Offset
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.6.3
+// Over-the-shoulder horizontal offset
+...  占位符代码
+```
+
+**将上述占位符代码完整替换为下方的完整实现。**
+
+---
+
+3. **O02完整实现代码：**
+
+**A. ShouldActivate() 实现：**
+
+```cpp
+/**
+ * ShouldActivate - Determine if shoulder offset should be active
+ * 
+ * O02 activates when: 
+ * - Module is enabled
+ * - Shoulder offset is configured (non-zero value)
+ * 
+ * This module provides the classic "over-the-shoulder" camera view
+ * common in third-person shooters and Souls-like games.
+ * 
+ * Priority 105 (after base socket offset), uses Override policy. 
+ * 
+ * Use Cases:
+ * - Combat stance (offset to see aiming direction)
+ * - Lock-on combat (offset for better visibility)
+ * - General exploration with slight offset
+ */
+bool UCameraModule_O02_Shoulder_Offset::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Get shoulder offset from config
+	float ShoulderOffset = StateConfig.Module.Offset.ShoulderOffset;
+	
+	// Activate if shoulder offset is configured (non-zero)
+	// Use KINDA_SMALL_NUMBER for float comparison
+	if (FMath:: Abs(ShoulderOffset) <= KINDA_SMALL_NUMBER)
+	{
+		return false;  // No shoulder offset configured
+	}
+	
+	// All conditions met - activate shoulder offset
+	return true;
+}
+```
+
+---
+
+**B.  Compute() 实现：**
+
+```cpp
+/**
+ * Compute - Calculate shoulder offset for over-the-shoulder view
+ * 
+ * This module applies a horizontal offset to create the classic
+ * over-the-shoulder camera perspective.  The offset moves the camera
+ * to the side of the character. 
+ * 
+ * Steps:
+ * 1. Get shoulder offset from config
+ * 2.  Validate and clamp to reasonable range
+ * 3. Apply as Y-axis (horizontal) offset
+ * 4. Output with Override policy
+ * 
+ * Coordinate System:
+ * - Y positive:  Camera moves right (right shoulder view)
+ * - Y negative: Camera moves left (left shoulder view)
+ * 
+ * Typical Values:
+ * - Subtle:  30cm
+ * - Standard: 50cm
+ * - Aggressive: 70cm
+ * 
+ * Note: This module sets a fixed shoulder side.  For dynamic
+ * switching, use O03 (Shoulder Switch) instead.
+ * 
+ * @param Context The current pipeline execution context
+ * @param StateConfig The current camera state configuration
+ * @param OutOutput Output structure to fill with computed values
+ * @return True if computation succeeded
+ */
+bool UCameraModule_O02_Shoulder_Offset::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Step 1: Get shoulder offset from config
+	float ShoulderOffset = StateConfig.Module.Offset.ShoulderOffset;
+	
+	// Step 2: Clamp to reasonable range
+	// Prevent extreme shoulder offsets that would look unnatural
+	const float MaxShoulderOffset = 100.0f;  // 1 meter max horizontal
+	ShoulderOffset = FMath::Clamp(ShoulderOffset, -MaxShoulderOffset, MaxShoulderOffset);
+	
+	// Step 3: Create offset vector
+	// Apply as horizontal (Y-axis) offset only
+	// X = 0 (no forward/back change)
+	// Y = ShoulderOffset (horizontal, positive = right shoulder)
+	// Z = 0 (no vertical change, handled by O01 base offset)
+	FVector OffsetVector(0.0f, ShoulderOffset, 0.0f);
+	
+	// Step 4: Fill output structure
+	OutOutput. OffsetOutput = OffsetVector;
+	OutOutput.bHasOffsetOutput = true;
+	
+	return true;
+}
+```
+
+---
+
+4. **完整的O02代码块（用于复制粘贴）：**
+
+```cpp
+//========================================
+// O02: Shoulder Offset
+//========================================
+
+/**
+ * ShouldActivate - Activate when shoulder offset is configured
+ */
+bool UCameraModule_O02_Shoulder_Offset:: ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Get shoulder offset from config
+	float ShoulderOffset = StateConfig.Module.Offset.ShoulderOffset;
+	
+	// Activate if shoulder offset is non-zero
+	if (FMath:: Abs(ShoulderOffset) <= KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
+	
+	return true;
+}
+
+/**
+ * Compute - Calculate shoulder offset for over-the-shoulder view
+ */
+bool UCameraModule_O02_Shoulder_Offset:: Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output
+	OutOutput = CreateBaseOutput();
+	
+	// Get shoulder offset from config
+	float ShoulderOffset = StateConfig.Module.Offset.ShoulderOffset;
+	
+	// Clamp to reasonable range
+	const float MaxShoulderOffset = 100.0f;
+	ShoulderOffset = FMath:: Clamp(ShoulderOffset, -MaxShoulderOffset, MaxShoulderOffset);
+	
+	// Create offset vector (Y = horizontal offset)
+	// Positive Y = right shoulder, Negative Y = left shoulder
+	FVector OffsetVector(0.0f, ShoulderOffset, 0.0f);
+	
+	// Fill output
+	OutOutput.OffsetOutput = OffsetVector;
+	OutOutput.bHasOffsetOutput = true;
+	
+	return true;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 说明坐标系和偏移方向
+   - 解释正负值的含义
+   - 提供典型数值
+   - 所有注释英文
+
+2. **格式：**
+   - Tab缩进
+   - 清晰步骤标注
+   - 方法间空两行
+
+3. **防御性编程：**
+   - 使用KINDA_SMALL_NUMBER比较浮点数
+   - Clamp确保有效范围
+   - 处理未配置的情况
+
+【技术说明】
+
+**O02的核心机制：**
+
+### 1. 越肩视角的原理
+
+```
+俯视图：
+
+没有肩部偏移（居中）：
+      Camera
+         ↓
+    ┌────●────┐
+    │         │
+    │  Player │
+    │         │
+    └─────────┘
+
+有肩部偏移（右肩，Y=+50）：
+          Camera
+              ↓
+    ┌────────●┐
+    │         │
+    │  Player │
+    │         │
+    └─────────┘
+
+效果：
+- 玩家角色偏左
+- 右侧有更多视野空间
+- 适合右手武器/瞄准
+```
+
+### 2. 坐标系说明
+
+```cpp
+// Y轴正值 = 相机向右移动 = 右肩视角
+FVector(0, +50, 0)  // 右肩，玩家在左
+
+// Y轴负值 = 相机向左移动 = 左肩视角
+FVector(0, -50, 0)  // 左肩，玩家在右
+```
+
+### 3. KINDA_SMALL_NUMBER的使用
+
+```cpp
+// 为什么用KINDA_SMALL_NUMBER而不是 == 0？
+if (FMath:: Abs(ShoulderOffset) <= KINDA_SMALL_NUMBER)
+
+// 原因：浮点数精度问题
+// 0.0f 可能实际是 0.00000001f
+// KINDA_SMALL_NUMBER ≈ 1e-4，足够小但避免精度陷阱
+```
+
+### 4. 与O03的区别
+
+| 特性 | O02 Shoulder Offset | O03 Shoulder Switch |
+|------|---------------------|---------------------|
+| **目的** | 固定肩部偏移 | 动态切换肩部 |
+| **触发** | 配置值非零 | 手动/自动切换 |
+| **输出** | 固定值 | 平滑过渡 |
+| **适用** | 固定侧视角 | 需要切换时 |
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] ShouldActivate()完整
+   - [ ] Compute()完整
+   - [ ] 所有方法签名与. h一致
+
+3. **逻辑正确性：**
+   - [ ] 使用KINDA_SMALL_NUMBER检测零值
+   - [ ] Y轴用于水平偏移
+   - [ ] Clamp范围±100cm
+
+4. **字段访问：**
+   - [ ] StateConfig.Module. Offset.ShoulderOffset
+
+【注意事项】
+
+1. **不需要Regenerate**
+
+2. **字段缺失处理：**
+   ```cpp
+   // 如果ShoulderOffset字段不存在
+   float ShoulderOffset = 50.0f;  // 使用默认值
+   ```
+
+3. **KINDA_SMALL_NUMBER：**
+   - UE4内置常量
+   - 约等于 1e-4
+   - 用于浮点数近似零比较
+
+4. **测试建议：**
+   - ShoulderOffset = 0 → 模块不激活
+   - ShoulderOffset = 50 → 右肩视角
+   - ShoulderOffset = -50 → 左肩视角
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 3.6.3 完成报告
+================================================================================
+
+【修改内容】
+- 文件：CameraModule_Offset.cpp
+- 修改位置：O02模块
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ ShouldActivate：检查肩部偏移配置
+- ✅ Compute：水平偏移计算
+
+【编译结果】
+- 编译状态：[成功/失败]
+
+【最终状态】
+✅ O02完成，越肩视角偏移
+
+================================================================================
+```
+
+【后续步骤】
+
+O02完成后，Offset模块进度：
+- [x] ✅ 3.6.1:  CameraModule_Offset.h
+- [x] ✅ 3.6.2: O01 - SocketOffset Base
+- [x] ✅ 3.6.3: O02 - Shoulder Offset
+- [ ] ⏳ 3.6.4: O03 - Shoulder Switch（下一步）
+- [ ] ⏳ 3.6.5: O04 - Crouch Offset
+- [ ] ⏳ 3.6.6: O05 - Mount Offset
+
+**Offset模块完成度：2/5 (40%)**
+
+================================================================================

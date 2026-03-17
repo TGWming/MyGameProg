@@ -1,0 +1,618 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WwiseDocument Type="WorkUnit" ID="{EDDE29F1-8559-491C-BEDD-38F4C51423A3}" SchemaVersion="103">
+	<AudioObjects>
+		<WorkUnit Name="Default Work Unit" ID="{EDDE29F1-8559-491C-BEDD-38F4C51423A3}" PersistMode="Standalone">
+			<ChildrenList>
+				<Folder Name="backup_audio" ID="{9FFD192C-DD35-4069-AEB4-DEF73DCED4C1}" ShortID="300173302"/>
+				<BlendContainer Name="RPM" ID="{BFC3F6C7-39AF-4071-9699-51D5FF70FB16}" ShortID="839529755">
+					<ReferenceList>
+						<Reference Name="Conversion">
+							<ObjectRef Name="Default Conversion Settings" ID="{6D1B890C-9826-4384-BF07-C15223E9FB56}" WorkUnitID="{1270FF52-34DA-46F2-99B6-12F454A45217}"/>
+						</Reference>
+						<Reference Name="OutputBus">
+							<ObjectRef Name="Master Audio Bus" ID="{1514A4D8-1DA6-412A-A17E-75CA0C2149F3}" WorkUnitID="{5FD3B3E5-5BC0-4031-B58F-B56082A81A57}"/>
+						</Reference>
+					</ReferenceList>
+					<ChildrenList>
+						<BlendContainer Name="New Blend Container" ID="{B72FDA57-9B47-42F0-86B6-3AFAA9EC269F}" ShortID="897549118">
+							<ReferenceList>
+								<Reference Name="Conversion">
+									<ObjectRef Name="Default Conversion Settings" ID="{6D1B890C-9826-4384-BF07-C15223E9FB56}" WorkUnitID="{1270FF52-34DA-46F2-99B6-12F454A45217}"/>
+								</Reference>
+								<Reference Name="OutputBus">
+									<ObjectRef Name="Master Audio Bus" ID="{1514A4D8-1DA6-412A-A17E-75CA0C2149F3}" WorkUnitID="{5FD3B3E5-5BC0-4031-B58F-B56082A81A57}"/>
+								</Reference>
+							</ReferenceList>
+							<ObjectLists/>
+						</BlendContainer>
+					</ChildrenList>
+					<ObjectLists/>
+				</BlendContainer>
+				<ActorMixer Name="New Actor-Mixer" ID="{CB7BAB90-F626-4356-A777-005397F3C8F7}" ShortID="984044181">
+					<PropertyList>
+						<Property Name="MaxSoundPerInstance" Type="int16">
+							<ValueList>
+								<Value>1</Value>
+							</ValueList>
+						</Property>
+						<Property Name="UseMaxSoundPerInstance" Type="bool">
+							<ValueList>
+								<Value>True</Value>
+							</ValueList>
+						</Property>
+					</PropertyList>
+					<ReferenceList>
+						<Reference Name="Conversion">
+							<ObjectRef Name="Default Conversion Settings" ID="{6D1B890C-9826-4384-BF07-C15223E9FB56}" WorkUnitID="{1270FF52-34DA-46F2-99B6-12F454A45217}"/>
+						</Reference>
+						<Reference Name="OutputBus">
+							<ObjectRef Name="Master Audio Bus" ID="{1514A4D8-1DA6-412A-A17E-75CA0C2149F3}" WorkUnitID="{5FD3B3E5-5BC0-4031-B58F-B56082A81A57}"/>
+						</Reference>
+					</ReferenceList>
+					<ChildrenList>
+						<Sound Name="Combo1" ID="{175D9855-2962-400E-BDAE-DEA8AC2AD869}" ShortID="744822535">
+							<PropertyList>
+								<Property Name="OverrideOutput" Type="bool" Value="True"/>
+							</PropertyList>
+							<ReferenceList>
+								<Reference Name="Conversion">
+									<ObjectRef Name="Default Conversion Settings" ID="{6D1B890C-9826-4384-BF07-C15223E9FB56}" WorkUnitID="{1270FF52-34DA-46F2-99B6-12F454A45217}"/>
+								</Reference>
+								<Reference Name="OutputBus">
+									<ObjectRef Name="Combo" ID="{897E4556-4E02-4A23-BBF8-8C0D8780219F}" WorkUnitID="{5FD3B3E5-5BC0-4031-B58F-B56082A81A57}"/>
+								</Reference>
+							</ReferenceList>
+							<ChildrenList>
+								<AudioFileSource Name="Combo1" ID="{D710363F-ED61-4744-819F-D594997597B3}">
+									<PropertyList>
+										<Property Name="OverrideWavLoop" Type="bool" Value="True"/>
+										<Property Name="TrimBegin" Type="Real64" Value="0.0364793806729951"/>
+										<Property Name="TrimEnd" Type="Real64" Value="1.87167283914521"/>
+									</PropertyList>
+									<Language>SFX</Language>
+									<AudioFile>Combo1.wav</AudioFile>
+									<MediaIDList>
+										<MediaID ID="907308486"/>
+									</MediaIDList>
+								</AudioFileSource>
+							</ChildrenList>
+							<ObjectLists/>
+							<ActiveSourceList>
+								<ActiveSource Name="Combo1" ID="{D710363F-ED61-4744-819F-D594997597B3}" Platform="Linked"/>
+							</ActiveSourceList>
+						</Sound>
+						<Sound Name="Loop_end" ID="{5E76BE56-5455-49F9-912A-15FE4725178F}" ShortID="398874074">
+							<ReferenceList>
+								<Reference Name="Conversion">
+									<ObjectRef Name="Default Conversion Settings" ID="{6D1B890C-9826-4384-BF07-C15223E9FB56}" WorkUnitID="{1270FF52-34DA-46F2-99B6-12F454A45217}"/>
+								</Reference>
+								<Reference Name="OutputBus">
+									<ObjectRef Name="Master Audio Bus" ID="{1514A4D8-1DA6-412A-A17E-75CA0C2149F3}" WorkUnitID="{5FD3B3E5-5BC0-4031-B58F-B56082A81A57}"/>
+								</Reference>
+							</ReferenceList>
+							<ChildrenList>
+								<AudioFileSource Name="Loop_end" ID="{6B9B7316-1AE7-4CA0-88FB-884BF13A7327}">
+									<Language>SFX</Language>
+									<AudioFile>Loop_end.wav</AudioFile>
+									<MediaIDList>
+										<MediaID ID="36050463"/>
+									</MediaIDList>
+								</AudioFileSource>
+							</ChildrenList>
+							<ObjectLists/>
+							<ActiveSourceList>
+								<ActiveSource Name="Loop_end" ID="{6B9B7316-1AE7-4CA0-88FB-884BF13A7327}" Platform="Linked"/>
+							</ActiveSourceList>
+						</Sound>
+						<Sound Name="Ultra_Combo_Finish" ID="{173B43C7-E137-400F-A396-9132739ECDE1}" ShortID="580468895">
+							<PropertyList>
+								<Property Name="OverrideOutput" Type="bool" Value="True"/>
+								<Property Name="Volume" Type="Real64">
+									<ValueList>
+										<Value>-1</Value>
+									</ValueList>
+								</Property>
+							</PropertyList>
+							<ReferenceList>
+								<Reference Name="Conversion">
+									<ObjectRef Name="Default Conversion Settings" ID="{6D1B890C-9826-4384-BF07-C15223E9FB56}" WorkUnitID="{1270FF52-34DA-46F2-99B6-12F454A45217}"/>
+								</Reference>
+								<Reference Name="OutputBus">
+									<ObjectRef Name="Sfx" ID="{2C7144D1-6A38-4AD8-B09F-1F8560F524B8}" WorkUnitID="{5FD3B3E5-5BC0-4031-B58F-B56082A81A57}"/>
+								</Reference>
+							</ReferenceList>
+							<ChildrenList>
+								<AudioFileSource Name="Ultra_Combo_Finish" ID="{DFDED8E0-086E-4828-A0F6-D8DF52D8DFEC}">
+									<Language>SFX</Language>
+									<AudioFile>Ultra_Combo_Finish.wav</AudioFile>
+									<MediaIDList>
+										<MediaID ID="110776134"/>
+									</MediaIDList>
+								</AudioFileSource>
+							</ChildrenList>
+							<ObjectLists/>
+							<ActiveSourceList>
+								<ActiveSource Name="Ultra_Combo_Finish" ID="{DFDED8E0-086E-4828-A0F6-D8DF52D8DFEC}" Platform="Linked"/>
+							</ActiveSourceList>
+						</Sound>
+						<RandomSequenceContainer Name="New Random Container_01" ID="{BAD2358F-18CF-4139-B67A-3B5DC64895C0}" ShortID="504241566">
+							<PropertyList>
+								<Property Name="GlobalOrPerObject" Type="int16" Value="0"/>
+								<Property Name="NormalOrShuffle" Type="int16" Value="0"/>
+								<Property Name="OverrideEffect" Type="bool" Value="True"/>
+								<Property Name="OverrideOutput" Type="bool" Value="True"/>
+								<Property Name="PlayMechanismLoop" Type="bool" Value="True"/>
+								<Property Name="PlayMechanismSpecialTransitionsType" Type="int16" Value="4"/>
+								<Property Name="PlayMechanismSpecialTransitionsValue" Type="Real64" Value="0"/>
+							</PropertyList>
+							<ReferenceList>
+								<Reference Name="Conversion">
+									<ObjectRef Name="Default Conversion Settings" ID="{6D1B890C-9826-4384-BF07-C15223E9FB56}" WorkUnitID="{1270FF52-34DA-46F2-99B6-12F454A45217}"/>
+								</Reference>
+								<Reference Name="OutputBus">
+									<ObjectRef Name="Combo" ID="{897E4556-4E02-4A23-BBF8-8C0D8780219F}" WorkUnitID="{5FD3B3E5-5BC0-4031-B58F-B56082A81A57}"/>
+								</Reference>
+							</ReferenceList>
+							<ChildrenList>
+								<Sound Name="Hit3" ID="{E12CFCE4-E395-489C-9E65-C890EE8E1311}" ShortID="711607074">
+									<PropertyList>
+										<Property Name="Weight" Type="Real64">
+											<ValueList>
+												<Value>62</Value>
+											</ValueList>
+										</Property>
+									</PropertyList>
+									<ReferenceList>
+										<Reference Name="Conversion">
+											<ObjectRef Name="Default Conversion Settings" ID="{6D1B890C-9826-4384-BF07-C15223E9FB56}" WorkUnitID="{1270FF52-34DA-46F2-99B6-12F454A45217}"/>
+										</Reference>
+										<Reference Name="OutputBus">
+											<ObjectRef Name="Master Audio Bus" ID="{1514A4D8-1DA6-412A-A17E-75CA0C2149F3}" WorkUnitID="{5FD3B3E5-5BC0-4031-B58F-B56082A81A57}"/>
+										</Reference>
+									</ReferenceList>
+									<ChildrenList>
+										<AudioFileSource Name="Hit3" ID="{6F4C13F1-E7B8-4B4D-92B0-B2EC58AD8AA4}">
+											<PropertyList>
+												<Property Name="OverrideWavLoop" Type="bool" Value="True"/>
+												<Property Name="TrimBegin" Type="Real64" Value="0.0127986342579056"/>
+												<Property Name="TrimEnd" Type="Real64" Value="0.276450499970762"/>
+											</PropertyList>
+											<Language>SFX</Language>
+											<AudioFile>Hit3.wav</AudioFile>
+											<MediaIDList>
+												<MediaID ID="843187336"/>
+											</MediaIDList>
+										</AudioFileSource>
+									</ChildrenList>
+									<ObjectLists/>
+									<ActiveSourceList>
+										<ActiveSource Name="Hit3" ID="{6F4C13F1-E7B8-4B4D-92B0-B2EC58AD8AA4}" Platform="Linked"/>
+									</ActiveSourceList>
+								</Sound>
+								<Sound Name="Hit3_01" ID="{9B96C4D8-BACC-4022-85F9-903AB4D8F703}" ShortID="94559707">
+									<ReferenceList>
+										<Reference Name="Conversion">
+											<ObjectRef Name="Default Conversion Settings" ID="{6D1B890C-9826-4384-BF07-C15223E9FB56}" WorkUnitID="{1270FF52-34DA-46F2-99B6-12F454A45217}"/>
+										</Reference>
+										<Reference Name="OutputBus">
+											<ObjectRef Name="Master Audio Bus" ID="{1514A4D8-1DA6-412A-A17E-75CA0C2149F3}" WorkUnitID="{5FD3B3E5-5BC0-4031-B58F-B56082A81A57}"/>
+										</Reference>
+									</ReferenceList>
+									<ChildrenList>
+										<AudioFileSource Name="Hit3" ID="{0F55481D-1952-4E40-A570-9CF4DC2A0FDA}">
+											<PropertyList>
+												<Property Name="OverrideWavLoop" Type="bool" Value="True"/>
+												<Property Name="TrimBegin" Type="Real64" Value="0.481228648097252"/>
+												<Property Name="TrimEnd" Type="Real64" Value="0.790955597138569"/>
+											</PropertyList>
+											<Language>SFX</Language>
+											<AudioFile>Hit3.wav</AudioFile>
+											<MediaIDList>
+												<MediaID ID="1070886827"/>
+											</MediaIDList>
+										</AudioFileSource>
+									</ChildrenList>
+									<ObjectLists/>
+									<ActiveSourceList>
+										<ActiveSource Name="Hit3" ID="{0F55481D-1952-4E40-A570-9CF4DC2A0FDA}" Platform="Linked"/>
+									</ActiveSourceList>
+								</Sound>
+								<Sound Name="Hit3_02" ID="{A1C0BED3-9988-45FF-AF40-EDCB6C0A02C4}" ShortID="617040569">
+									<PropertyList>
+										<Property Name="Weight" Type="Real64">
+											<ValueList>
+												<Value>37</Value>
+											</ValueList>
+										</Property>
+									</PropertyList>
+									<ReferenceList>
+										<Reference Name="Conversion">
+											<ObjectRef Name="Default Conversion Settings" ID="{6D1B890C-9826-4384-BF07-C15223E9FB56}" WorkUnitID="{1270FF52-34DA-46F2-99B6-12F454A45217}"/>
+										</Reference>
+										<Reference Name="OutputBus">
+											<ObjectRef Name="Master Audio Bus" ID="{1514A4D8-1DA6-412A-A17E-75CA0C2149F3}" WorkUnitID="{5FD3B3E5-5BC0-4031-B58F-B56082A81A57}"/>
+										</Reference>
+									</ReferenceList>
+									<ChildrenList>
+										<AudioFileSource Name="Hit3" ID="{EF918F06-EFCD-40DF-AB70-BB5D97131597}">
+											<PropertyList>
+												<Property Name="OverrideWavLoop" Type="bool" Value="True"/>
+												<Property Name="TrimBegin" Type="Real64" Value="0.949658661936599"/>
+												<Property Name="TrimEnd" Type="Real64" Value="1.37713304615065"/>
+											</PropertyList>
+											<Language>SFX</Language>
+											<AudioFile>Hit3.wav</AudioFile>
+											<MediaIDList>
+												<MediaID ID="207947420"/>
+											</MediaIDList>
+										</AudioFileSource>
+									</ChildrenList>
+									<ObjectLists/>
+									<ActiveSourceList>
+										<ActiveSource Name="Hit3" ID="{EF918F06-EFCD-40DF-AB70-BB5D97131597}" Platform="Linked"/>
+									</ActiveSourceList>
+								</Sound>
+								<Sound Name="hit2_01" ID="{FB9D5B1E-61BB-4124-94B9-4B6113145DB9}" ShortID="882006840">
+									<PropertyList>
+										<Property Name="Weight" Type="Real64">
+											<ValueList>
+												<Value>62</Value>
+											</ValueList>
+										</Property>
+									</PropertyList>
+									<ReferenceList>
+										<Reference Name="Conversion">
+											<ObjectRef Name="Default Conversion Settings" ID="{6D1B890C-9826-4384-BF07-C15223E9FB56}" WorkUnitID="{1270FF52-34DA-46F2-99B6-12F454A45217}"/>
+										</Reference>
+										<Reference Name="OutputBus">
+											<ObjectRef Name="Master Audio Bus" ID="{1514A4D8-1DA6-412A-A17E-75CA0C2149F3}" WorkUnitID="{5FD3B3E5-5BC0-4031-B58F-B56082A81A57}"/>
+										</Reference>
+									</ReferenceList>
+									<ChildrenList>
+										<AudioFileSource Name="hit2" ID="{C8220851-6955-4192-A61A-4D61CBFBE614}">
+											<PropertyList>
+												<Property Name="OverrideWavLoop" Type="bool" Value="True"/>
+												<Property Name="TrimBegin" Type="Real64" Value="0.574414361733232"/>
+												<Property Name="TrimEnd" Type="Real64" Value="0.865303685944291"/>
+											</PropertyList>
+											<Language>SFX</Language>
+											<AudioFile>hit2.wav</AudioFile>
+											<MediaIDList>
+												<MediaID ID="322526176"/>
+											</MediaIDList>
+										</AudioFileSource>
+									</ChildrenList>
+									<ObjectLists/>
+									<ActiveSourceList>
+										<ActiveSource Name="hit2" ID="{C8220851-6955-4192-A61A-4D61CBFBE614}" Platform="Linked"/>
+									</ActiveSourceList>
+								</Sound>
+								<Sound Name="hit2_02" ID="{B07B0781-71E0-412F-AEB6-6E982ED2C9F1}" ShortID="20184265">
+									<PropertyList>
+										<Property Name="Weight" Type="Real64">
+											<ValueList>
+												<Value>62</Value>
+											</ValueList>
+										</Property>
+									</PropertyList>
+									<ReferenceList>
+										<Reference Name="Conversion">
+											<ObjectRef Name="Default Conversion Settings" ID="{6D1B890C-9826-4384-BF07-C15223E9FB56}" WorkUnitID="{1270FF52-34DA-46F2-99B6-12F454A45217}"/>
+										</Reference>
+										<Reference Name="OutputBus">
+											<ObjectRef Name="Master Audio Bus" ID="{1514A4D8-1DA6-412A-A17E-75CA0C2149F3}" WorkUnitID="{5FD3B3E5-5BC0-4031-B58F-B56082A81A57}"/>
+										</Reference>
+									</ReferenceList>
+									<ChildrenList>
+										<AudioFileSource Name="hit2" ID="{03C5F8C5-CB41-4AD1-9A04-E3E887A2ACE2}">
+											<PropertyList>
+												<Property Name="OverrideWavLoop" Type="bool" Value="True"/>
+												<Property Name="TrimBegin" Type="Real64" Value="1.03468227978871"/>
+												<Property Name="TrimEnd" Type="Real64" Value="1.31452517396643"/>
+											</PropertyList>
+											<Language>SFX</Language>
+											<AudioFile>hit2.wav</AudioFile>
+											<MediaIDList>
+												<MediaID ID="1060696168"/>
+											</MediaIDList>
+										</AudioFileSource>
+									</ChildrenList>
+									<ObjectLists/>
+									<ActiveSourceList>
+										<ActiveSource Name="hit2" ID="{03C5F8C5-CB41-4AD1-9A04-E3E887A2ACE2}" Platform="Linked"/>
+									</ActiveSourceList>
+								</Sound>
+								<Sound Name="hit2_03" ID="{FDB4A53E-7C34-4C5C-A6DA-1FD0C0152637}" ShortID="497435103">
+									<PropertyList>
+										<Property Name="Weight" Type="Real64">
+											<ValueList>
+												<Value>33</Value>
+											</ValueList>
+										</Property>
+									</PropertyList>
+									<ReferenceList>
+										<Reference Name="Conversion">
+											<ObjectRef Name="Default Conversion Settings" ID="{6D1B890C-9826-4384-BF07-C15223E9FB56}" WorkUnitID="{1270FF52-34DA-46F2-99B6-12F454A45217}"/>
+										</Reference>
+										<Reference Name="OutputBus">
+											<ObjectRef Name="Master Audio Bus" ID="{1514A4D8-1DA6-412A-A17E-75CA0C2149F3}" WorkUnitID="{5FD3B3E5-5BC0-4031-B58F-B56082A81A57}"/>
+										</Reference>
+									</ReferenceList>
+									<ChildrenList>
+										<AudioFileSource Name="hit2" ID="{155E6A41-0466-496D-9BB9-3C79297CE2ED}">
+											<PropertyList>
+												<Property Name="OverrideWavLoop" Type="bool" Value="True"/>
+												<Property Name="TrimBegin" Type="Real64" Value="1.93312525583299"/>
+												<Property Name="TrimEnd" Type="Real64" Value="2.41548603395513"/>
+											</PropertyList>
+											<Language>SFX</Language>
+											<AudioFile>hit2.wav</AudioFile>
+											<MediaIDList>
+												<MediaID ID="593010017"/>
+											</MediaIDList>
+										</AudioFileSource>
+									</ChildrenList>
+									<ObjectLists/>
+									<ActiveSourceList>
+										<ActiveSource Name="hit2" ID="{155E6A41-0466-496D-9BB9-3C79297CE2ED}" Platform="Linked"/>
+									</ActiveSourceList>
+								</Sound>
+								<Sound Name="hit1" ID="{FBD7A511-D1B1-47A9-A819-C800819FC622}" ShortID="764227013">
+									<ReferenceList>
+										<Reference Name="Conversion">
+											<ObjectRef Name="Default Conversion Settings" ID="{6D1B890C-9826-4384-BF07-C15223E9FB56}" WorkUnitID="{1270FF52-34DA-46F2-99B6-12F454A45217}"/>
+										</Reference>
+										<Reference Name="OutputBus">
+											<ObjectRef Name="Master Audio Bus" ID="{1514A4D8-1DA6-412A-A17E-75CA0C2149F3}" WorkUnitID="{5FD3B3E5-5BC0-4031-B58F-B56082A81A57}"/>
+										</Reference>
+									</ReferenceList>
+									<ChildrenList>
+										<AudioFileSource Name="hit1" ID="{4A877733-9E36-446A-B424-7092DA7F2BE0}">
+											<PropertyList>
+												<Property Name="OverrideWavLoop" Type="bool" Value="True"/>
+												<Property Name="TrimBegin" Type="Real64" Value="0.628993593617007"/>
+												<Property Name="TrimEnd" Type="Real64" Value="1.24275204828827"/>
+											</PropertyList>
+											<Language>SFX</Language>
+											<AudioFile>hit1.wav</AudioFile>
+											<MediaIDList>
+												<MediaID ID="753650319"/>
+											</MediaIDList>
+										</AudioFileSource>
+									</ChildrenList>
+									<ObjectLists/>
+									<ActiveSourceList>
+										<ActiveSource Name="hit1" ID="{4A877733-9E36-446A-B424-7092DA7F2BE0}" Platform="Linked"/>
+									</ActiveSourceList>
+								</Sound>
+							</ChildrenList>
+							<ObjectLists/>
+						</RandomSequenceContainer>
+					</ChildrenList>
+					<ObjectLists/>
+				</ActorMixer>
+				<ActorMixer Name="dialogue" ID="{B5E2343A-74FE-49A8-86BE-C34C418AF861}" ShortID="559078807">
+					<ReferenceList>
+						<Reference Name="Conversion">
+							<ObjectRef Name="Default Conversion Settings" ID="{6D1B890C-9826-4384-BF07-C15223E9FB56}" WorkUnitID="{1270FF52-34DA-46F2-99B6-12F454A45217}"/>
+						</Reference>
+						<Reference Name="OutputBus">
+							<ObjectRef Name="ui" ID="{B80EF626-6751-494B-88FD-F739793171E9}" WorkUnitID="{5FD3B3E5-5BC0-4031-B58F-B56082A81A57}"/>
+						</Reference>
+					</ReferenceList>
+					<ChildrenList>
+						<Sound Name="guanping_display" ID="{EC127766-3490-44F3-B0BA-7DB186E1CB65}" ShortID="630657617">
+							<ReferenceList>
+								<Reference Name="Conversion">
+									<ObjectRef Name="Default Conversion Settings" ID="{6D1B890C-9826-4384-BF07-C15223E9FB56}" WorkUnitID="{1270FF52-34DA-46F2-99B6-12F454A45217}"/>
+								</Reference>
+								<Reference Name="OutputBus">
+									<ObjectRef Name="amb" ID="{761202DD-6CBF-4140-A549-4498A5917195}" WorkUnitID="{5FD3B3E5-5BC0-4031-B58F-B56082A81A57}"/>
+								</Reference>
+							</ReferenceList>
+							<ChildrenList>
+								<AudioFileSource Name="guanping_display" ID="{99588445-D4EF-4930-A12A-79FF9EED6BB3}">
+									<Language>SFX</Language>
+									<AudioFile>guanping_display.wav</AudioFile>
+									<MediaIDList>
+										<MediaID ID="712376139"/>
+									</MediaIDList>
+								</AudioFileSource>
+							</ChildrenList>
+							<ObjectLists/>
+							<ActiveSourceList>
+								<ActiveSource Name="guanping_display" ID="{99588445-D4EF-4930-A12A-79FF9EED6BB3}" Platform="Linked"/>
+							</ActiveSourceList>
+						</Sound>
+					</ChildrenList>
+					<ObjectLists/>
+				</ActorMixer>
+				<ActorMixer Name="amb" ID="{31EEB137-6866-40B3-963C-35C9D8767BA5}" ShortID="256337460">
+					<ReferenceList>
+						<Reference Name="Conversion">
+							<ObjectRef Name="Default Conversion Settings" ID="{6D1B890C-9826-4384-BF07-C15223E9FB56}" WorkUnitID="{1270FF52-34DA-46F2-99B6-12F454A45217}"/>
+						</Reference>
+						<Reference Name="OutputBus">
+							<ObjectRef Name="amb" ID="{761202DD-6CBF-4140-A549-4498A5917195}" WorkUnitID="{5FD3B3E5-5BC0-4031-B58F-B56082A81A57}"/>
+						</Reference>
+					</ReferenceList>
+					<ChildrenList>
+						<Sound Name="amb_fort_lp" ID="{43241541-63CC-4464-8A27-874A23C89F69}" ShortID="617716614">
+							<ReferenceList>
+								<Reference Name="Conversion">
+									<ObjectRef Name="Default Conversion Settings" ID="{6D1B890C-9826-4384-BF07-C15223E9FB56}" WorkUnitID="{1270FF52-34DA-46F2-99B6-12F454A45217}"/>
+								</Reference>
+								<Reference Name="OutputBus">
+									<ObjectRef Name="Master Audio Bus" ID="{1514A4D8-1DA6-412A-A17E-75CA0C2149F3}" WorkUnitID="{5FD3B3E5-5BC0-4031-B58F-B56082A81A57}"/>
+								</Reference>
+							</ReferenceList>
+							<ChildrenList>
+								<AudioFileSource Name="amb_fort_lp" ID="{BE2A7135-1B9A-4E1E-9B7E-31A6BC4FB350}">
+									<Language>SFX</Language>
+									<AudioFile>amb_fort_lp.wav</AudioFile>
+									<MediaIDList>
+										<MediaID ID="6193163"/>
+									</MediaIDList>
+								</AudioFileSource>
+							</ChildrenList>
+							<StateInfo>
+								<StateGroupList>
+									<StateGroupInfo>
+										<StateGroupRef Name="Battle_Stage" ID="{E7A71FE3-0965-47F1-BC5F-34D14714DB7F}"/>
+									</StateGroupInfo>
+								</StateGroupList>
+								<CustomStateList>
+									<CustomState>
+										<StateRef Name="Excute" ID="{E6571D9C-66E2-4033-9B26-C741C92AA735}"/>
+										<CustomState Name="" ID="{2911C192-877D-4EF8-89A6-BEDABF3B5BA4}" ShortID="712555932"/>
+									</CustomState>
+									<CustomState>
+										<StateRef Name="Tiger" ID="{52A96F9B-E28E-4102-B8C8-51360E2B3A08}"/>
+										<CustomState Name="" ID="{A0AF0A66-6723-4F59-95FC-5F366ED89E67}" ShortID="881103888"/>
+									</CustomState>
+									<CustomState>
+										<StateRef Name="Boxer" ID="{387BD5E2-3362-490C-8461-80C782B57FB7}"/>
+										<CustomState Name="" ID="{C884C341-5865-48DF-B135-842F22EBFDD3}" ShortID="171100289"/>
+									</CustomState>
+									<CustomState>
+										<StateRef Name="Elly" ID="{33770E67-9784-4B6C-AF50-37C10EF66E34}"/>
+										<CustomState Name="" ID="{B96A1CC7-B16B-4383-997D-FE1A033E635C}" ShortID="871611146"/>
+									</CustomState>
+									<CustomState>
+										<StateRef Name="Hatchery" ID="{6D4DE197-C40D-4B8E-A006-DA04B924723A}"/>
+										<CustomState Name="" ID="{D6E4C96B-5D7E-47CE-88F8-2905549B03C7}" ShortID="96263194"/>
+									</CustomState>
+									<CustomState>
+										<StateRef Name="Elly_Ultra_finish" ID="{DE3C6E3D-B872-4E07-AC3A-A6B8EC40F795}"/>
+										<CustomState Name="" ID="{0A489FA9-A422-44E1-B843-936796A59596}" ShortID="388548111"/>
+									</CustomState>
+									<CustomState>
+										<StateRef Name="Combo_time" ID="{CAB45733-83A1-4E5C-97E6-B7B464F3FD15}"/>
+										<CustomState Name="" ID="{BB3430D3-C61A-4293-BCCB-1104893B8FED}" ShortID="956386920"/>
+									</CustomState>
+									<CustomState>
+										<StateRef Name="Shachtail" ID="{BBE9CE13-7402-4FBB-BA54-9B0340441A41}"/>
+										<CustomState Name="" ID="{79A50CDF-A3F3-4862-B123-3B25A6EAF60D}" ShortID="406826200"/>
+									</CustomState>
+								</CustomStateList>
+							</StateInfo>
+							<ObjectLists/>
+							<ActiveSourceList>
+								<ActiveSource Name="amb_fort_lp" ID="{BE2A7135-1B9A-4E1E-9B7E-31A6BC4FB350}" Platform="Linked"/>
+							</ActiveSourceList>
+						</Sound>
+						<Sound Name="amb_dong" ID="{0B74A1B0-9D70-4A32-92D1-E73D4A91A15B}" ShortID="436001666">
+							<PropertyList>
+								<Property Name="IsLoopingEnabled" Type="bool" Value="True"/>
+							</PropertyList>
+							<ReferenceList>
+								<Reference Name="Conversion">
+									<ObjectRef Name="Default Conversion Settings" ID="{6D1B890C-9826-4384-BF07-C15223E9FB56}" WorkUnitID="{1270FF52-34DA-46F2-99B6-12F454A45217}"/>
+								</Reference>
+								<Reference Name="OutputBus">
+									<ObjectRef Name="Master Audio Bus" ID="{1514A4D8-1DA6-412A-A17E-75CA0C2149F3}" WorkUnitID="{5FD3B3E5-5BC0-4031-B58F-B56082A81A57}"/>
+								</Reference>
+							</ReferenceList>
+							<ChildrenList>
+								<AudioFileSource Name="amb_dong" ID="{B290C59E-B10B-47CB-A9E0-38006F619773}">
+									<Language>SFX</Language>
+									<AudioFile>amb_dong.wav</AudioFile>
+									<MediaIDList>
+										<MediaID ID="101972949"/>
+									</MediaIDList>
+								</AudioFileSource>
+							</ChildrenList>
+							<StateInfo>
+								<StateGroupList>
+									<StateGroupInfo>
+										<StateGroupRef Name="Battle_Stage" ID="{E7A71FE3-0965-47F1-BC5F-34D14714DB7F}"/>
+									</StateGroupInfo>
+								</StateGroupList>
+								<CustomStateList>
+									<CustomState>
+										<StateRef Name="Excute" ID="{E6571D9C-66E2-4033-9B26-C741C92AA735}"/>
+										<CustomState Name="" ID="{D7EA7774-A657-4F2E-B379-EB5996A93AD1}" ShortID="949877174"/>
+									</CustomState>
+									<CustomState>
+										<StateRef Name="Tiger" ID="{52A96F9B-E28E-4102-B8C8-51360E2B3A08}"/>
+										<CustomState Name="" ID="{5D54DF10-A7FA-40ED-8866-EDD0FC821635}" ShortID="498587269"/>
+									</CustomState>
+									<CustomState>
+										<StateRef Name="Boxer" ID="{387BD5E2-3362-490C-8461-80C782B57FB7}"/>
+										<CustomState Name="" ID="{BE9A5EBF-6C0F-4B8E-8A15-2539F9B69AE8}" ShortID="237794828"/>
+									</CustomState>
+									<CustomState>
+										<StateRef Name="Elly" ID="{33770E67-9784-4B6C-AF50-37C10EF66E34}"/>
+										<CustomState Name="" ID="{7053CC58-3B5A-4200-9D2D-B8D7B3AFEF51}" ShortID="1004602476"/>
+									</CustomState>
+									<CustomState>
+										<StateRef Name="Hatchery" ID="{6D4DE197-C40D-4B8E-A006-DA04B924723A}"/>
+										<CustomState Name="" ID="{931E7B0F-1850-49FA-A636-518C489745C5}" ShortID="713412115"/>
+									</CustomState>
+									<CustomState>
+										<StateRef Name="Elly_Ultra_finish" ID="{DE3C6E3D-B872-4E07-AC3A-A6B8EC40F795}"/>
+										<CustomState Name="" ID="{B4BDB48B-BA51-4EAA-BD49-76F432506C5E}" ShortID="378022050"/>
+									</CustomState>
+									<CustomState>
+										<StateRef Name="Combo_time" ID="{CAB45733-83A1-4E5C-97E6-B7B464F3FD15}"/>
+										<CustomState Name="" ID="{D4AD5E41-EE9F-45F4-B754-332BACF84996}" ShortID="567889028"/>
+									</CustomState>
+									<CustomState>
+										<StateRef Name="Shachtail" ID="{BBE9CE13-7402-4FBB-BA54-9B0340441A41}"/>
+										<CustomState Name="" ID="{DCE51AEC-A60B-4151-B9C4-E5D08D4187BD}" ShortID="844721353"/>
+									</CustomState>
+								</CustomStateList>
+							</StateInfo>
+							<ObjectLists/>
+							<ActiveSourceList>
+								<ActiveSource Name="amb_dong" ID="{B290C59E-B10B-47CB-A9E0-38006F619773}" Platform="Linked"/>
+							</ActiveSourceList>
+						</Sound>
+					</ChildrenList>
+					<StateInfo>
+						<StateGroupList>
+							<StateGroupInfo>
+								<StateGroupRef Name="Battle_Stage" ID="{E7A71FE3-0965-47F1-BC5F-34D14714DB7F}"/>
+							</StateGroupInfo>
+						</StateGroupList>
+						<CustomStateList>
+							<CustomState>
+								<StateRef Name="Excute" ID="{E6571D9C-66E2-4033-9B26-C741C92AA735}"/>
+								<CustomState Name="" ID="{6BBE2268-0F2B-4049-A783-27670B75F748}" ShortID="109630568"/>
+							</CustomState>
+							<CustomState>
+								<StateRef Name="Tiger" ID="{52A96F9B-E28E-4102-B8C8-51360E2B3A08}"/>
+								<CustomState Name="" ID="{FEE23E71-BA38-47BC-913C-E873C9B7FAA1}" ShortID="839106687"/>
+							</CustomState>
+							<CustomState>
+								<StateRef Name="Boxer" ID="{387BD5E2-3362-490C-8461-80C782B57FB7}"/>
+								<CustomState Name="" ID="{1BA844A9-CAB8-414D-9967-098330580096}" ShortID="495535048"/>
+							</CustomState>
+							<CustomState>
+								<StateRef Name="Elly" ID="{33770E67-9784-4B6C-AF50-37C10EF66E34}"/>
+								<CustomState Name="" ID="{FFFFBD9D-684B-402C-8640-A79819D2AA36}" ShortID="1050895304"/>
+							</CustomState>
+							<CustomState>
+								<StateRef Name="Hatchery" ID="{6D4DE197-C40D-4B8E-A006-DA04B924723A}"/>
+								<CustomState Name="" ID="{4836A970-B46D-4E7B-A361-84F633CEF321}" ShortID="1015244857"/>
+							</CustomState>
+							<CustomState>
+								<StateRef Name="Elly_Ultra_finish" ID="{DE3C6E3D-B872-4E07-AC3A-A6B8EC40F795}"/>
+								<CustomState Name="" ID="{9D5D35A5-5FD5-413F-8526-DE0A03D477A2}" ShortID="436912303"/>
+							</CustomState>
+							<CustomState>
+								<StateRef Name="Combo_time" ID="{CAB45733-83A1-4E5C-97E6-B7B464F3FD15}"/>
+								<CustomState Name="" ID="{9B957868-19A5-405B-8465-A818FD6758EA}" ShortID="882500362"/>
+							</CustomState>
+							<CustomState>
+								<StateRef Name="Shachtail" ID="{BBE9CE13-7402-4FBB-BA54-9B0340441A41}"/>
+								<CustomState Name="" ID="{AB2611DF-3085-4B8C-A8DD-16C902BD1F54}" ShortID="698617860"/>
+							</CustomState>
+						</CustomStateList>
+					</StateInfo>
+					<ObjectLists/>
+				</ActorMixer>
+			</ChildrenList>
+		</WorkUnit>
+	</AudioObjects>
+</WwiseDocument>

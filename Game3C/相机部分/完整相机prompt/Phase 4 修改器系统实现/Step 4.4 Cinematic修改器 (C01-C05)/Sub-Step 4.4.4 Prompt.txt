@@ -1,0 +1,392 @@
+Sub-Step 4.4.4 Prompt
+
+================================================================================
+任务：在CameraModifier_Cinematic.cpp中添加C02 Backstab实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+C02是背刺/潜行击杀时的过场相机，从背后展示攻击。
+
+【C02 Backstab设计】
+```
+触发场景：
+├── 黑魂系列：背刺攻击（Backstab）
+├── 血源：背后内脏攻击
+├── 只狼：潜行忍杀
+└── 艾尔登法环：背刺致命一击
+
+相机行为：
+├── 过肩视角（从玩家背后偏侧）
+├── 紧凑FOV强调亲密感
+├── 相机从后方缓慢移向侧面
+├── 看向目标上半身
+└── 持续约1.5秒
+```
+
+【当前进度】
+Phase 4 Step 4. 4 Sub-Step 4.4.4 (共190个Sub-Step中的第129个)
+前置完成：4.4.3 C01 Execution实现 ✅
+
+【任务目标】
+在CameraModifier_Cinematic.cpp中添加C02 Backstab的完整实现。
+
+【⚠️ 重要提醒】
+
+1. **本Sub-Step是更新现有文件，不创建新文件**
+   因此**不需要Regenerate**，直接编译即可。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **类名必须与头文件一致：**
+   `UCameraModifier_C02_Cinematic_Backstab`
+
+4. **在C01实现之后添加代码**
+
+【具体要求】
+
+**在CameraModifier_Cinematic.cpp的C01实现之后添加：**
+
+```cpp
+//========================================
+// C02: Backstab Camera Implementation
+//========================================
+
+/**
+ * Constructor - Configure backstab camera parameters
+ * 
+ * Backstab camera provides over-shoulder view: 
+ * - Camera behind and to the side of player
+ * - Tight FOV for intimate kill moment
+ * - Minimal movement for clean shot
+ * - Emphasis on the stealth/surprise attack
+ */
+UCameraModifier_C02_Cinematic_Backstab:: UCameraModifier_C02_Cinematic_Backstab()
+	: SideOffset(50.0f)
+	, BackDistance(140.0f)
+	, BackstabHeightOffset(30.0f)
+	, PushInAmount(20.0f)
+{
+	// Configure cinematic settings
+	CameraOffset = FVector(-140.0f, 50.0f, 30.0f);
+	HeightOffset = 40.0f;
+	CameraDistance = 160.0f;
+	CinematicFOV = 62.0f;  // Tighter FOV for close-up
+	
+	// Letterbox for cinematic feel
+	bApplyLetterbox = true;
+	LetterboxAmount = 0.12f;
+	
+	// Smooth but responsive camera
+	TransformInterpSpeed = 8.0f;
+	
+	// Block player input during backstab
+	bBlockPlayerInput = true;
+}
+
+/**
+ * OnTriggered - Initialize backstab camera state
+ * 
+ * Stores attack direction and randomizes which side to view from. 
+ * The camera will be positioned behind the player, offset to one side.
+ */
+void UCameraModifier_C02_Cinematic_Backstab::OnTriggered(const FModifierTriggerData& InTriggerData)
+{
+	// Call parent to store basic positions
+	Super::OnTriggered(InTriggerData);
+	
+	// Get player/attacker location
+	if (InTriggerData. SourceActor.IsValid())
+	{
+		StoredPlayerLocation = InTriggerData.SourceActor->GetActorLocation();
+	}
+	
+	// Get victim/target location
+	if (InTriggerData.TargetActor.IsValid())
+	{
+		StoredTargetLocation = InTriggerData.TargetActor->GetActorLocation();
+		StoredTargetActor = InTriggerData.TargetActor;
+	}
+	
+	// Calculate attack direction (player to target, horizontal only)
+	FVector AttackDir = StoredTargetLocation - StoredPlayerLocation;
+	AttackDir.Z = 0.0f;
+	if (! AttackDir.IsNearlyZero())
+	{
+		ActionDirection = AttackDir. GetSafeNormal();
+	}
+	else
+	{
+		ActionDirection = FVector::ForwardVector;
+	}
+	
+	// Randomize which side to view from for variety
+	if (FMath:: RandBool())
+	{
+		SideOffset = FMath:: Abs(SideOffset);   // Right side
+	}
+	else
+	{
+		SideOffset = -FMath::Abs(SideOffset);  // Left side
+	}
+	
+	UE_LOG(LogTemp, Verbose, TEXT("C02 Backstab:  Triggered, SideOffset=%.1f"), SideOffset);
+}
+
+/**
+ * ComputeEffect - Calculate over-shoulder camera position each frame
+ * 
+ * Camera starts behind player and slowly moves to the side during
+ * the backstab animation, providing a cinematic reveal of the kill.
+ */
+void UCameraModifier_C02_Cinematic_Backstab::ComputeEffect(float DeltaTime, const FStageExecutionContext& Context)
+{
+	// Calculate normalized time (0-1 over duration)
+	float NormalizedTime = 0.0f;
+	if (ActiveDuration > 0.0f)
+	{
+		NormalizedTime = FMath::Clamp(TotalActiveTime / ActiveDuration, 0.0f, 1.0f);
+	}
+	
+	// Calculate action center (midpoint between player and target)
+	FVector ActionCenter = FMath::Lerp(StoredPlayerLocation, StoredTargetLocation, 0.5f);
+	
+	// Calculate coordinate axes
+	FVector Forward = ActionDirection;
+	FVector Right = FVector:: CrossProduct(FVector::UpVector, Forward).GetSafeNormal();
+	if (Right.IsNearlyZero())
+	{
+		Right = FVector:: RightVector;
+	}
+	FVector Up = FVector:: UpVector;
+	
+	// Camera movement:  starts behind, moves to side during animation
+	// Use smooth curve for natural motion
+	float MovementCurve = FMath::InterpEaseInOut(0.0f, 1.0f, NormalizedTime, 2.0f);
+	
+	// Behind offset:  starts far behind, moves closer
+	float CurrentBackDistance = FMath:: Lerp(BackDistance, BackDistance - PushInAmount, MovementCurve);
+	
+	// Side offset: starts centered, moves to side
+	float CurrentSideOffset = FMath::Lerp(SideOffset * 0.3f, SideOffset, MovementCurve);
+	
+	// Height:  slight rise during animation
+	float CurrentHeight = FMath:: Lerp(BackstabHeightOffset, BackstabHeightOffset + 15.0f, MovementCurve);
+	
+	// Calculate camera position
+	FVector DesiredPosition = ActionCenter;
+	DesiredPosition -= Forward * CurrentBackDistance;  // Behind the action
+	DesiredPosition += Right * CurrentSideOffset;      // To the side
+	DesiredPosition += Up * CurrentHeight;             // Height offset
+	
+	// Look at target's upper body
+	FVector LookAtPoint = StoredTargetLocation + FVector(0.0f, 0.0f, 80.0f);
+	
+	// Blend look-at point from target towards midpoint over time
+	FVector MidLookAt = ActionCenter + FVector(0.0f, 0.0f, 70.0f);
+	LookAtPoint = FMath::Lerp(LookAtPoint, MidLookAt, NormalizedTime * 0.4f);
+	
+	// Calculate look-at rotation
+	FRotator DesiredRotation = CalculateLookAtRotation(DesiredPosition, LookAtPoint);
+	
+	// Create target transform
+	FTransform TargetTransform;
+	TargetTransform.SetLocation(DesiredPosition);
+	TargetTransform.SetRotation(DesiredRotation. Quaternion());
+	
+	// Smooth interpolation to target
+	InterpolateCameraTransform(DeltaTime, TargetTransform, TransformInterpSpeed);
+	
+	// Set override transform
+	OverrideTransform = CurrentCameraTransform;
+	bIsOverriding = true;
+	
+	// FOV with impact punch
+	float FOVValue = CinematicFOV;
+	
+	// Impact moment: slight FOV punch at 30-50% of animation
+	if (NormalizedTime > 0.30f && NormalizedTime < 0.50f)
+	{
+		float ImpactProgress = (NormalizedTime - 0.30f) / 0.20f;
+		float ImpactPunch = FMath::Sin(ImpactProgress * PI) * 4.0f;
+		FOVValue += ImpactPunch;
+	}
+	
+	FOVEffect = FOVValue - Context.Output.FOV;
+	
+	// Letterbox effect
+	if (bApplyLetterbox)
+	{
+		VignetteEffect = LetterboxAmount;
+	}
+	
+	// Time dilation at moment of impact
+	if (NormalizedTime > 0.25f && NormalizedTime < 0.45f)
+	{
+		// Slow motion during the actual backstab
+		float SlowMoProgress = (NormalizedTime - 0.25f) / 0.20f;
+		float SlowMoCurve = FMath::Sin(SlowMoProgress * PI);
+		TimeDilationEffect = FMath::Lerp(1.0f, 0.6f, SlowMoCurve);
+	}
+	else if (NormalizedTime >= 0.45f && NormalizedTime < 0.55f)
+	{
+		// Smooth return to normal
+		float ReturnProgress = (NormalizedTime - 0.45f) / 0.10f;
+		TimeDilationEffect = FMath:: Lerp(0.6f, 1.0f, ReturnProgress);
+	}
+	else
+	{
+		TimeDilationEffect = 1.0f;
+	}
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 构造函数说明过肩相机设计意图
+   - OnTriggered说明侧向随机化
+   - ComputeEffect说明相机运动曲线
+   - 所有注释英文
+
+2. **格式：**
+   - Tab缩进
+   - 清晰的代码分隔
+   - 与C01风格一致
+
+3. **关键实现点：**
+   - 调用`Super::OnTriggered`
+   - 使用`InterpolateCameraTransform`平滑
+   - 设置`OverrideTransform`和`bIsOverriding`
+   - 时间膨胀使用平滑曲线
+
+【技术说明】
+
+### 1. 过肩相机位置计算
+
+```
+ActionCenter = 玩家和目标的中点
+
+相机位置 = ActionCenter
+         - Forward * BackDistance    // 在动作后方
+         + Right * SideOffset        // 偏向一侧
+         + Up * HeightOffset         // 高度偏移
+
+运动曲线：
+├── BackDistance:  140 → 120 (靠近)
+├── SideOffset: 15 → 50 (移向侧面)
+└── Height: 30 → 45 (轻微上升)
+```
+
+### 2. 时间线效果
+
+```
+时间线（1.5秒持续）：
+0%───25%───45%───55%────100%
+│准备│ 慢动作  │恢复│ 收尾  │
+
+FOV冲击（30%-50%）：
+    ___
+   /   \
+__/     \__
+30%     50%
+```
+
+### 3. 与C01的区别
+
+| 特性 | C01 Execution | C02 Backstab |
+|------|---------------|--------------|
+| 相机运动 | 轨道环绕 | 后方→侧方 |
+| 持续时间 | 2.0秒 | 1.5秒 |
+| FOV | 65° | 62°（更紧） |
+| 运动幅度 | 大（轨道） | 小（推进） |
+| 视角 | 低角度环绕 | 过肩视角 |
+
+### 4. 侧向随机化
+
+```cpp
+// 随机选择左侧或右侧视角
+if (FMath::RandBool())
+{
+    SideOffset = +50.0f;  // 右侧视角
+}
+else
+{
+    SideOffset = -50.0f;  // 左侧视角
+}
+
+// 这样每次背刺都有不同的视觉体验
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过（0 errors）
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] 构造函数初始化所有成员
+   - [ ] OnTriggered调用Super并随机侧向
+   - [ ] ComputeEffect计算过肩位置
+   - [ ] 设置OverrideTransform和bIsOverriding
+
+3. **效果验证：**
+   - [ ] 相机从后方移向侧方
+   - [ ] 平滑的推进运动
+   - [ ] FOV冲击效果
+   - [ ] 时间膨胀平滑过渡
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 4.4.4 完成报告
+================================================================================
+
+【更新的文件】
+- 文件：CameraModifier_Cinematic.cpp
+- 添加位置：C01实现之后
+
+【实现的修改器】
+- ✅ UCameraModifier_C02_Cinematic_Backstab
+  - 构造函数：SideOffset=50, BackDistance=140, FOV=62
+  - OnTriggered：随机侧向，计算攻击方向
+  - ComputeEffect：过肩视角 + 推进运动 + 时间膨胀
+
+【关键特性】
+- 过肩相机从后方移向侧方
+- 紧凑FOV强调亲密感
+- FOV冲击和时间膨胀
+- 随机左/右侧视角
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【最终状态】
+✅ C02 Backstab实现完成
+
+================================================================================
+```
+
+【后续步骤】
+
+C02完成后：
+- [x] ✅ 4.4.1:  CameraModifier_Cinematic.h
+- [x] ✅ 4.4.2: CinematicBase实现
+- [x] ✅ 4.4.3: C01 Execution实现
+- [x] ✅ 4.4.4: C02 Backstab实现
+- [ ] ⏳ 4.4.5: C03 Riposte实现
+- [ ] ⏳ 4.4.6: C04 BossIntro实现
+- [ ] ⏳ 4.4.7: C05 BossPhase实现
+- [ ] ⏳ 4.4.8: 注册到ModifierManager
+
+**Cinematic修改器进度：2/5 = 40%**
+
+================================================================================

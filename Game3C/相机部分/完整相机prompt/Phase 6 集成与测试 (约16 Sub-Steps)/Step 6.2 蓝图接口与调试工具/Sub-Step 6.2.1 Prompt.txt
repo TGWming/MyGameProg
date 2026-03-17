@@ -1,0 +1,161 @@
+Sub-Step 6.2.1 Prompt
+
+================================================================================
+任务：创建SoulsCameraBlueprintLibrary. h - 蓝图函数库头文件
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4. 27 C++项目。
+创建蓝图函数库，提供便捷的蓝图调用接口。
+
+【当前进度】
+Phase 6 Step 6. 2 Sub-Step 6.2.1 (共190个Sub-Step中的第179个)
+前置完成：Step 6.1 完整系统集成
+
+【任务目标】
+创建文件：Source/MyProject/Camera/Utility/SoulsCameraBlueprintLibrary. h
+定义蓝图函数库。
+
+【现有系统接口参考】
+基于SoulsCameraManager.h中已有的公共接口：
+
+状态管理（使用FName，不是ECameraState）：
+- RequestStateChange(FName NewStateName, bool bForce) -> bool
+- GetCurrentStateName() -> FName
+- GetCurrentCategory() -> ECameraStateCategory
+- IsInTransition() -> bool
+
+目标锁定：
+- SetLockOnTarget(AActor* Target)
+- ClearLockOnTarget()
+- GetLockOnTarget() -> AActor*
+- HasLockOnTarget() -> bool
+
+修改器触发（使用ECameraModifierID枚举）：
+- TriggerCameraShake(ECameraModifierID ShakeID, float Intensity)
+- TriggerHitReaction(bool bHeavyHit, float Intensity, FVector HitDirection)
+- TriggerSlowMotion(float Duration, float TimeDilation)
+- TriggerHitStop(float Intensity)
+- TriggerLowHealthEffect(float HealthPercent)
+- StopLowHealthEffect()
+- TriggerDeathCamera(FVector DeathLocation)
+- StopAllModifiers()
+
+碰撞查询：
+- IsCollisionActive() -> bool
+- IsInCollisionRecovery() -> bool
+- IsCharacterOccluded() -> bool
+- IsTargetOccluded() -> bool
+- GetCollisionAdjustedDistance() -> float
+- SetCollisionStrategyEnabled(ECollisionStrategyID StrategyType, bool bEnabled)
+- SetCollisionDebugEnabled(bool bEnabled)
+
+输出查询（通过GetCurrentOutput()获取FSoulsCameraOutput）：
+- GetCurrentOutput() -> FSoulsCameraOutput
+  - Output.FocusPoint
+  - Output. Rotation
+  - Output.Distance
+  - Output.FOV
+  - Output.GetCameraLocation() // 辅助方法
+
+调试：
+- SetDebugEnabled(bool bEnabled)
+- IsDebugEnabled() -> bool
+
+【具体要求】
+
+1. 文件路径：Source/MyProject/Camera/Utility/SoulsCameraBlueprintLibrary.h
+
+2. Include依赖：
+```cpp
+#include "CoreMinimal.h"
+#include "Kismet/BlueprintFunctionLibrary.h"
+#include "Camera/Data/CameraStateEnums.h"
+#include "Camera/Core/SoulsCameraRuntimeTypes.h"
+#include "SoulsCameraBlueprintLibrary.generated.h"
+```
+
+3. 前向声明：
+```cpp
+class USoulsCameraManager;
+```
+
+4. 函数分类设计：
+
+【Camera Manager Access - "Souls Camera|Access"】
+- GetSoulsCameraManager(WorldContext, PlayerIndex = 0) -> USoulsCameraManager*
+- GetSoulsCameraManagerFromActor(AActor*) -> USoulsCameraManager*
+
+【State Control - "Souls Camera|State"】
+- RequestCameraStateChange(WorldContext, FName StateName, bool bForce = false, PlayerIndex = 0) -> bool
+- GetCurrentCameraStateName(WorldContext, PlayerIndex = 0) -> FName
+- GetCurrentCameraCategory(WorldContext, PlayerIndex = 0) -> ECameraStateCategory
+- IsCameraInTransition(WorldContext, PlayerIndex = 0) -> bool
+
+【Target Lock - "Souls Camera|Target"】
+- SetCameraLockOnTarget(WorldContext, AActor* Target, PlayerIndex = 0)
+- ClearCameraLockOnTarget(WorldContext, PlayerIndex = 0)
+- GetCameraLockOnTarget(WorldContext, PlayerIndex = 0) -> AActor*
+- HasCameraLockOnTarget(WorldContext, PlayerIndex = 0) -> bool
+
+【Camera Effects - "Souls Camera|Effects"】
+- TriggerCameraShakeByID(WorldContext, ECameraModifierID ShakeID, float Intensity = 1.0f, PlayerIndex = 0)
+- TriggerCameraHitReaction(WorldContext, bool bHeavyHit, float Intensity = 1.0f, FVector HitDirection = FVector::ZeroVector, PlayerIndex = 0)
+- TriggerCameraSlowMotion(WorldContext, float Duration = 0.8f, float TimeDilation = 0.35f, PlayerIndex = 0)
+- TriggerCameraHitStop(WorldContext, float Intensity = 1.0f, PlayerIndex = 0)
+- TriggerCameraLowHealthEffect(WorldContext, float HealthPercent, PlayerIndex = 0)
+- StopCameraLowHealthEffect(WorldContext, PlayerIndex = 0)
+- TriggerCameraDeathEffect(WorldContext, FVector DeathLocation, PlayerIndex = 0)
+- StopAllCameraModifiers(WorldContext, PlayerIndex = 0)
+
+【Collision Query - "Souls Camera|Collision"】
+- IsCameraCollisionActive(WorldContext, PlayerIndex = 0) -> bool
+- IsCameraInCollisionRecovery(WorldContext, PlayerIndex = 0) -> bool
+- IsCameraCharacterOccluded(WorldContext, PlayerIndex = 0) -> bool
+- IsCameraTargetOccluded(WorldContext, PlayerIndex = 0) -> bool
+- GetCameraCollisionAdjustedDistance(WorldContext, PlayerIndex = 0) -> float
+
+【Output Query - "Souls Camera|Output"】
+- GetCameraCurrentOutput(WorldContext, PlayerIndex = 0) -> FSoulsCameraOutput
+- GetCameraLocation(WorldContext, PlayerIndex = 0) -> FVector
+- GetCameraRotation(WorldContext, PlayerIndex = 0) -> FRotator
+- GetCameraDistance(WorldContext, PlayerIndex = 0) -> float
+- GetCameraFOV(WorldContext, PlayerIndex = 0) -> float
+
+【Debug - "Souls Camera|Debug"】
+- SetCameraDebugEnabled(WorldContext, bool bEnabled, PlayerIndex = 0)
+- IsCameraDebugEnabled(WorldContext, PlayerIndex = 0) -> bool
+
+5.  UFUNCTION宏格式：
+```cpp
+// BlueprintPure示例
+UFUNCTION(BlueprintPure, Category = "Souls Camera|Access", meta = (WorldContext = "WorldContextObject"))
+static USoulsCameraManager* GetSoulsCameraManager(const UObject* WorldContextObject, int32 PlayerIndex = 0);
+
+// BlueprintCallable示例
+UFUNCTION(BlueprintCallable, Category = "Souls Camera|State", meta = (WorldContext = "WorldContextObject"))
+static bool RequestCameraStateChange(const UObject* WorldContextObject, FName NewStateName, bool bForce = false, int32 PlayerIndex = 0);
+```
+
+6. 类定义：
+```cpp
+UCLASS()
+class MYPROJECT_API USoulsCameraBlueprintLibrary : public UBlueprintFunctionLibrary
+{
+    GENERATED_BODY()
+    
+public: 
+    // ...  所有函数声明
+};
+```
+
+【验证标准】
+- 编译通过
+- 蓝图中可见所有函数
+- 函数分类清晰（Category正确设置）
+- 使用正确的枚举类型（ECameraModifierID, ECameraStateCategory）
+- 使用FName进行状态切换（不是ECameraState）
+
+【输出要求】
+输出完整的SoulsCameraBlueprintLibrary. h文件代码。
+================================================================================

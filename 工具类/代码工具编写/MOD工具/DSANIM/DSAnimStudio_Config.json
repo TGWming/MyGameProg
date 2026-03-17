@@ -1,0 +1,770 @@
+{
+  "MSAA": 2,
+  "SSAA": 1,
+  "CategoryEnableDraw": {
+    "AlwaysDraw": false,
+    "HkxBone": false,
+    "FlverBone": false,
+    "FlverBoneBoundingBox": false,
+    "DummyPoly": false,
+    "SoundEvent": false,
+    "WeaponDummyPoly": false,
+    "DummyPolyHelper": true,
+    "Skybox": true,
+    "DummyPolySpawnArrow": true,
+    "Other": true,
+    "RootMotionPath": true
+  },
+  "CategoryEnableDbgLabelDraw": {
+    "AlwaysDraw": false,
+    "HkxBone": false,
+    "FlverBone": false,
+    "FlverBoneBoundingBox": false,
+    "DummyPoly": false,
+    "SoundEvent": false,
+    "WeaponDummyPoly": false,
+    "DummyPolyHelper": false,
+    "Skybox": false,
+    "DummyPolySpawnArrow": false,
+    "Other": false,
+    "RootMotionPath": false
+  },
+  "CategoryEnableNameDraw": {
+    "AlwaysDraw": false,
+    "HkxBone": false,
+    "FlverBone": false,
+    "FlverBoneBoundingBox": false,
+    "DummyPoly": false,
+    "SoundEvent": false,
+    "WeaponDummyPoly": false,
+    "DummyPolyHelper": true,
+    "Skybox": false,
+    "DummyPolySpawnArrow": false,
+    "Other": false,
+    "RootMotionPath": false
+  },
+  "EnableGameDataIOLogging": true,
+  "ShowStatusInViewport": 1,
+  "HitViewDummyPolySource": 10,
+  "CharacterTrackingTestIsIngameTime": true,
+  "SaveAdditionalEventRowInfoToLegacyGames": false,
+  "UseGamesMenuSounds": true,
+  "DbgPrimXRay": true,
+  "EventSnapType": 1,
+  "LockFramerateToOriginalAnimFramerate": false,
+  "EnableFancyScrollingStrings": true,
+  "FancyScrollingStringsScrollSpeed": 132.1771,
+  "FancyTextScrollSnapsToPixels": true,
+  "AutoCollapseAllTaeSections": false,
+  "AutoScrollDuringAnimPlayback": true,
+  "SoloHighlightEventOnHover": true,
+  "ShowEventHoverInfo": true,
+  "TaeLoadFromArchivesWizardJsonSaveData": {
+    "GameExePath": "D:\\Program Files (x86)\\Steam\\steamapps\\common\\ELDEN RING\\Game\\eldenring.exe",
+    "AnibndPath": "/chr/c2120.anibnd.dcx",
+    "ChrbndPath": "/chr/c2120.chrbnd.dcx",
+    "ProjectSaveFolder": "E:\\EldenRing_Ming_Animmod",
+    "LoadLooseGameParam": false,
+    "ModEngineDirectory": ""
+  },
+  "RecentFilesList": [
+    {
+      "TaeFile": "E:\\EldenRing_Ming_Animmod\\c2120.anibnd.dcx",
+      "ModelFile": "/chr/c2120.chrbnd.dcx"
+    },
+    {
+      "TaeFile": "E:\\EldenRing_Ming_Animmod\\c2140.anibnd.dcx",
+      "ModelFile": "/chr/c2140.chrbnd.dcx"
+    },
+    {
+      "TaeFile": "E:\\EldenRing_Ming_Animmod\\c2131.anibnd.dcx",
+      "ModelFile": "/chr/c2131.chrbnd.dcx"
+    },
+    {
+      "TaeFile": "E:\\EldenRing_Ming_Animmod\\c2100.anibnd.dcx",
+      "ModelFile": "/chr/c2100.chrbnd.dcx"
+    },
+    {
+      "TaeFile": "E:\\EldenRing_Ming_Animmod\\c2110.anibnd.dcx",
+      "ModelFile": "/chr/c2120.chrbnd.dcx"
+    },
+    {
+      "TaeFile": "E:\\EldenRing_Ming_Animmod\\c3000.anibnd.dcx",
+      "ModelFile": "/chr/c3000.chrbnd.dcx"
+    },
+    {
+      "TaeFile": "E:\\EldenRing_Ming_Animmod\\c6080.anibnd.dcx",
+      "ModelFile": "/chr/c6080.chrbnd.dcx"
+    },
+    {
+      "TaeFile": "E:\\EldenRing_Ming_Animmod\\c4310.anibnd.dcx",
+      "ModelFile": "/chr/c4315.chrbnd.dcx"
+    },
+    {
+      "TaeFile": "E:\\EldenRing_Ming_Animmod\\c4315.anibnd.dcx",
+      "ModelFile": "/chr/c4315.chrbnd.dcx"
+    },
+    {
+      "TaeFile": "E:\\EldenRing_Ming_Animmod\\c2031.anibnd.dcx",
+      "ModelFile": "/chr/c2031.chrbnd.dcx"
+    }
+  ],
+  "ExtensiveBackupsEnabled": false,
+  "LiveRefreshOnSave": false,
+  "CameraFollowsRootMotionZX": true,
+  "CameraFollowsRootMotionZX_Interpolation": 0.1,
+  "CameraFollowsRootMotionY": true,
+  "CameraFollowsRootMotionY_Interpolation": 0.1,
+  "CameraFollowsRootMotionRotation": true,
+  "CameraFollowsRootMotionRotation_Interpolation": 0.1,
+  "CameraFollowType": 0,
+  "CameraFollowDummyPolyID": 220,
+  "WrapRootMotion": true,
+  "AccumulateRootMotion": true,
+  "EnableAnimRootMotion": true,
+  "RootMotionTranslationMultiplierXZ": 1.0,
+  "RootMotionTranslationMultiplierY": 1.0,
+  "RootMotionRotationMultiplier": 1.0,
+  "RootMotionTranslationPowerXZ": 1.0,
+  "RootMotionTranslationPowerY": 1.0,
+  "RootMotionRotationPower": 1.0,
+  "CamAngleSnapEnable": true,
+  "ShowCameraPivotCube": true,
+  "ViewportStatusTextSize": 100.0,
+  "ViewportMemoryTextSize": 100.0,
+  "ViewportFramerateTextSize": 100.0,
+  "ToolboxGuiScale": 100.0,
+  "ToolboxItemWidthScale": 100.0,
+  "Colors": {
+    "ColorGrid": {
+      "B": 39,
+      "G": 112,
+      "R": 32,
+      "A": 255
+    },
+    "ColorHelperHitboxRoot": {
+      "B": 230,
+      "G": 26,
+      "R": 26,
+      "A": 255
+    },
+    "ColorHelperHitboxMiddle": {
+      "B": 26,
+      "G": 26,
+      "R": 230,
+      "A": 255
+    },
+    "ColorHelperHitboxTip": {
+      "B": 50,
+      "G": 186,
+      "R": 231,
+      "A": 255
+    },
+    "ColorHelperFlverBone": {
+      "B": 0,
+      "G": 255,
+      "R": 255,
+      "A": 255
+    },
+    "ColorHelperFlverBoneBoundingBox": {
+      "B": 0,
+      "G": 255,
+      "R": 0,
+      "A": 255
+    },
+    "ColorHelperDummyPoly": {
+      "B": 0,
+      "G": 60,
+      "R": 231,
+      "A": 255
+    },
+    "ColorHelperDummyPolyDbg": {
+      "B": 0,
+      "G": 255,
+      "R": 255,
+      "A": 255
+    },
+    "ColorHelperSoundEvent": {
+      "B": 0,
+      "G": 0,
+      "R": 255,
+      "A": 255
+    },
+    "ColorHelperDummyPolySpawnSFX": {
+      "B": 255,
+      "G": 255,
+      "R": 0,
+      "A": 255
+    },
+    "ColorHelperDummyPolySpawnBulletsMisc": {
+      "B": 0,
+      "G": 255,
+      "R": 255,
+      "A": 255
+    },
+    "ColorHelperDummyPolySpawnSFXBulletsMisc": {
+      "B": 0,
+      "G": 255,
+      "R": 0,
+      "A": 255
+    },
+    "ColorHelperCameraPivot": {
+      "B": 255,
+      "G": 255,
+      "R": 0,
+      "A": 255
+    },
+    "MainColorBackground": {
+      "B": 35,
+      "G": 35,
+      "R": 35,
+      "A": 255
+    },
+    "MainColorDivider": {
+      "B": 90,
+      "G": 90,
+      "R": 90,
+      "A": 255
+    },
+    "MainColorViewportBackground": {
+      "B": 25,
+      "G": 25,
+      "R": 25,
+      "A": 255
+    },
+    "GuiColorMemoryUseTextGood": {
+      "B": 0,
+      "G": 255,
+      "R": 255,
+      "A": 255
+    },
+    "GuiColorMemoryUseTextOkay": {
+      "B": 0,
+      "G": 165,
+      "R": 255,
+      "A": 255
+    },
+    "GuiColorMemoryUseTextBad": {
+      "B": 0,
+      "G": 0,
+      "R": 255,
+      "A": 255
+    },
+    "GuiColorViewportStatus": {
+      "B": 0,
+      "G": 255,
+      "R": 255,
+      "A": 255
+    },
+    "GuiColorViewportStatusMaxBoneCountExceeded": {
+      "B": 0,
+      "G": 165,
+      "R": 255,
+      "A": 255
+    },
+    "GuiColorViewportStatusAnimDoesntExist": {
+      "B": 0,
+      "G": 0,
+      "R": 255,
+      "A": 255
+    },
+    "GuiColorViewportStatusCombo": {
+      "B": 255,
+      "G": 255,
+      "R": 0,
+      "A": 255
+    },
+    "GuiColorEventBox_Normal_Fill": {
+      "B": 80,
+      "G": 80,
+      "R": 80,
+      "A": 255
+    },
+    "GuiColorEventBox_Normal_Outline": {
+      "B": 0,
+      "G": 0,
+      "R": 0,
+      "A": 255
+    },
+    "GuiColorEventBox_Normal_Text": {
+      "B": 255,
+      "G": 255,
+      "R": 255,
+      "A": 255
+    },
+    "GuiColorEventBox_Normal_TextShadow": {
+      "B": 0,
+      "G": 0,
+      "R": 0,
+      "A": 255
+    },
+    "GuiColorEventBox_Highlighted_Fill": {
+      "B": 191,
+      "G": 108,
+      "R": 22,
+      "A": 255
+    },
+    "GuiColorEventBox_Highlighted_Outline": {
+      "B": 0,
+      "G": 255,
+      "R": 255,
+      "A": 255
+    },
+    "GuiColorEventBox_Highlighted_Text": {
+      "B": 0,
+      "G": 255,
+      "R": 255,
+      "A": 255
+    },
+    "GuiColorEventBox_Highlighted_TextShadow": {
+      "B": 0,
+      "G": 0,
+      "R": 0,
+      "A": 255
+    },
+    "GuiColorEventBox_Hover_TextOutline": {
+      "B": 0,
+      "G": 0,
+      "R": 0,
+      "A": 255
+    },
+    "GuiColorEventBox_SelectionDimmingOverlay": {
+      "B": 0,
+      "G": 0,
+      "R": 0,
+      "A": 127
+    },
+    "GuiColorEventGraphBackground": {
+      "B": 120,
+      "G": 120,
+      "R": 120,
+      "A": 255
+    },
+    "GuiColorEventGraphGhostOverlay": {
+      "B": 116,
+      "G": 116,
+      "R": 116,
+      "A": 188
+    },
+    "GuiColorEventGraphAnimEndVerticalLine": {
+      "B": 255,
+      "G": 255,
+      "R": 255,
+      "A": 255
+    },
+    "GuiColorEventGraphAnimEndDarkenRect": {
+      "B": 0,
+      "G": 0,
+      "R": 0,
+      "A": 63
+    },
+    "GuiColorEventGraphRowHorizontalLines": {
+      "B": 0,
+      "G": 0,
+      "R": 0,
+      "A": 63
+    },
+    "GuiColorEventGraphTimelineFill": {
+      "B": 75,
+      "G": 75,
+      "R": 75,
+      "A": 255
+    },
+    "GuiColorEventGraphTimelineFrameVerticalLines": {
+      "B": 0,
+      "G": 0,
+      "R": 0,
+      "A": 31
+    },
+    "GuiColorEventGraphTimelineFrameNumberText": {
+      "B": 255,
+      "G": 255,
+      "R": 255,
+      "A": 255
+    },
+    "GuiColorEventGraphVerticalFrameLines": {
+      "B": 105,
+      "G": 105,
+      "R": 105,
+      "A": 127
+    },
+    "GuiColorEventGraphVerticalSecondLines": {
+      "B": 158,
+      "G": 158,
+      "R": 158,
+      "A": 191
+    },
+    "GuiColorEventGraphSelectionRectangleFill": {
+      "B": 127,
+      "G": 72,
+      "R": 15,
+      "A": 127
+    },
+    "GuiColorEventGraphSelectionRectangleOutline": {
+      "B": 255,
+      "G": 255,
+      "R": 255,
+      "A": 255
+    },
+    "GuiColorEventGraphSliceToolLine": {
+      "B": 255,
+      "G": 255,
+      "R": 0,
+      "A": 255
+    },
+    "GuiColorEventGraphPlaybackCursor": {
+      "B": 0,
+      "G": 0,
+      "R": 0,
+      "A": 255
+    },
+    "GuiColorEventGraphPlaybackStartTime": {
+      "B": 255,
+      "G": 0,
+      "R": 0,
+      "A": 255
+    },
+    "GuiColorEventGraphHoverInfoBoxFill": {
+      "B": 64,
+      "G": 64,
+      "R": 64,
+      "A": 1
+    },
+    "GuiColorEventGraphHoverInfoBoxText": {
+      "B": 255,
+      "G": 255,
+      "R": 255,
+      "A": 255
+    },
+    "GuiColorEventGraphHoverInfoBoxOutline": {
+      "B": 32,
+      "G": 32,
+      "R": 32,
+      "A": 1
+    },
+    "GuiColorEventGraphScrollbarBackground": {
+      "B": 63,
+      "G": 63,
+      "R": 63,
+      "A": 255
+    },
+    "GuiColorEventGraphScrollbarForegroundInactive": {
+      "B": 114,
+      "G": 114,
+      "R": 114,
+      "A": 255
+    },
+    "GuiColorEventGraphScrollbarForegroundActive": {
+      "B": 140,
+      "G": 140,
+      "R": 140,
+      "A": 255
+    },
+    "GuiColorEventGraphScrollbarArrowButtonForegroundInactive": {
+      "B": 89,
+      "G": 89,
+      "R": 89,
+      "A": 255
+    },
+    "GuiColorEventGraphScrollbarArrowButtonForegroundActive": {
+      "B": 114,
+      "G": 114,
+      "R": 114,
+      "A": 255
+    },
+    "GuiColorAnimListCollapsePlusMinusForeground": {
+      "B": 0,
+      "G": 0,
+      "R": 0,
+      "A": 255
+    },
+    "GuiColorAnimListCollapsePlusMinusBackground": {
+      "B": 255,
+      "G": 255,
+      "R": 255,
+      "A": 255
+    },
+    "GuiColorAnimListAnimSectionHeaderRectOutline": {
+      "B": 255,
+      "G": 255,
+      "R": 255,
+      "A": 255
+    },
+    "GuiColorAnimListAnimSectionHeaderRectFill": {
+      "B": 128,
+      "G": 128,
+      "R": 128,
+      "A": 255
+    },
+    "GuiColorAnimListTextAnimSectionName": {
+      "B": 255,
+      "G": 255,
+      "R": 255,
+      "A": 255
+    },
+    "GuiColorAnimListTextAnimName": {
+      "B": 255,
+      "G": 255,
+      "R": 255,
+      "A": 255
+    },
+    "GuiColorAnimListTextAnimNameMinBlend": {
+      "B": 128,
+      "G": 128,
+      "R": 128,
+      "A": 255
+    },
+    "GuiColorAnimListTextAnimNameMaxBlend": {
+      "B": 0,
+      "G": 255,
+      "R": 255,
+      "A": 255
+    },
+    "GuiColorAnimListTextAnimDevName": {
+      "B": 170,
+      "G": 232,
+      "R": 238,
+      "A": 255
+    },
+    "GuiColorAnimListTextShadow": {
+      "B": 0,
+      "G": 0,
+      "R": 0,
+      "A": 255
+    },
+    "GuiColorAnimListHighlightRectFill": {
+      "B": 255,
+      "G": 144,
+      "R": 30,
+      "A": 255
+    },
+    "GuiColorAnimListHighlightRectOutline": {
+      "B": 200,
+      "G": 200,
+      "R": 200,
+      "A": 255
+    },
+    "ColorHelperRootMotionStartLocation": {
+      "B": 0,
+      "G": 0,
+      "R": 255,
+      "A": 255
+    },
+    "ColorHelperRootMotionTrail": {
+      "B": 0,
+      "G": 255,
+      "R": 255,
+      "A": 255
+    },
+    "ColorHelperRootMotionCurrentLocation": {
+      "B": 0,
+      "G": 255,
+      "R": 0,
+      "A": 255
+    },
+    "ColorHelperRootMotionStartLocation_PrevLoop": {
+      "B": 0,
+      "G": 0,
+      "R": 255,
+      "A": 127
+    },
+    "ColorHelperRootMotionTrail_PrevLoop": {
+      "B": 0,
+      "G": 255,
+      "R": 255,
+      "A": 127
+    },
+    "ColorHelperRootMotionCurrentLocation_PrevLoop": {
+      "B": 0,
+      "G": 255,
+      "R": 0,
+      "A": 127
+    }
+  },
+  "MouseSpeedMult": 1.0,
+  "IsNewGraphVisiMode": true,
+  "EnableVSync": true,
+  "LastUsedImportConfig_FLVER2": {
+    "AssetPath": null,
+    "SceneScale": 1.0,
+    "ConvertFromZUp": true,
+    "KeepOriginalDummyPoly": true
+  },
+  "LastUsedImportConfig_AnimFBX": {
+    "UseRootMotionScaleOverride": false,
+    "RotationTolerance": 0.001,
+    "BonesToFlipBackwardsForHotfix": [],
+    "AssetPath": null,
+    "SceneScale": 1.0,
+    "RootMotionScaleOverride": 1.0,
+    "ConvertFromZUp": false,
+    "RootMotionNodeName": "root",
+    "TurnQuaternionsInsideOut": false,
+    "SampleToFramerate": 60.0,
+    "RotationQuantizationType": 1,
+    "NegateQuaternionX": false,
+    "NegateQuaternionY": false,
+    "NegateQuaternionZ": false,
+    "NegateQuaternionW": false,
+    "EnableRotationalRootMotion": true,
+    "InitializeTransformTracksToTPose": true,
+    "ExcludeRootMotionNodeFromTransformTracks": true
+  },
+  "_eventSimulationsEnabled": {
+    "EventSimSE": true,
+    "EventSimRumbleCam": true,
+    "EventSimWeaponStyle": true,
+    "EventSimTracking": true,
+    "EventSimBasicBlending": true,
+    "EventSimBasicBlending_Combos": true,
+    "EventSimAdditiveOverlays": true,
+    "EventSimDS3PairedWeaponOverrideMemeEvents": true,
+    "EventSimAttackBehaviors": true,
+    "EventSimSpEffects": true,
+    "EventSimDS3DebugAnimSpeed": false,
+    "EventSimERSpeedGradient": true,
+    "EventSimBulletBehaviors": true,
+    "EventSimSFXSpawns": true,
+    "EventSimOpacity": true,
+    "EventSimDrawMasks": true
+  },
+  "LastCubemapUsed": "DefaultCubemap",
+  "SkyboxBrightness": 0.25,
+  "ShowCubemapAsSkybox": false,
+  "ShowFullWeaponDummyPolyIDs": true,
+  "LayoutAnimListWidth": 286.0,
+  "LayoutViewportWidth": 600.0,
+  "LayoutViewportHeight": 600.0,
+  "LayoutWindowX": 472,
+  "LayoutWindowY": 230,
+  "LayoutWindowWidth": 1616,
+  "LayoutWindowHeight": 939,
+  "LoopEnabled": true,
+  "LoopEnabled_BeforeCombo": true,
+  "DisableConfigFileAutoSave": false,
+  "RootMotionPathEnabled": true,
+  "RootMotionPathUpdateRate": 30.0,
+  "RootMotionPathSampleMax": 200,
+  "ToolExportAnims_LastDestinationPathUsed": "",
+  "ChrAsmConfigurations": {
+    "DS1": {
+      "GameType": 0,
+      "IsFemale": false,
+      "HeadID": 100000,
+      "BodyID": 111000,
+      "ArmsID": 292000,
+      "LegsID": 113000,
+      "RightWeaponID": 306000,
+      "LeftWeaponID": 1455000,
+      "WeaponStyle": 1,
+      "FaceName_Male": "",
+      "FaceName_Female": "",
+      "FacegenName": "",
+      "HairName_Male": "",
+      "HairName_Female": "",
+      "ChrCustomize": {}
+    },
+    "DS1R": {
+      "GameType": 0,
+      "IsFemale": false,
+      "HeadID": 100000,
+      "BodyID": 111000,
+      "ArmsID": 292000,
+      "LegsID": 113000,
+      "RightWeaponID": 306000,
+      "LeftWeaponID": 1455000,
+      "WeaponStyle": 1,
+      "FaceName_Male": "",
+      "FaceName_Female": "",
+      "FacegenName": "",
+      "HairName_Male": "",
+      "HairName_Female": "",
+      "ChrCustomize": {}
+    },
+    "DS3": {
+      "GameType": 0,
+      "IsFemale": false,
+      "HeadID": 54000000,
+      "BodyID": 54001000,
+      "ArmsID": 54002000,
+      "LegsID": 54003000,
+      "RightWeaponID": 16160000,
+      "LeftWeaponID": 21100000,
+      "WeaponStyle": 3,
+      "FaceName_Male": "",
+      "FaceName_Female": "",
+      "FacegenName": "",
+      "HairName_Male": "",
+      "HairName_Female": "",
+      "ChrCustomize": {}
+    },
+    "BB": {
+      "GameType": 0,
+      "IsFemale": false,
+      "HeadID": 130000,
+      "BodyID": 361000,
+      "ArmsID": 402000,
+      "LegsID": 353000,
+      "RightWeaponID": 24000000,
+      "LeftWeaponID": 14000000,
+      "WeaponStyle": 1,
+      "FaceName_Male": "",
+      "FaceName_Female": "",
+      "FacegenName": "",
+      "HairName_Male": "",
+      "HairName_Female": "",
+      "ChrCustomize": {}
+    },
+    "DES": {
+      "GameType": 0,
+      "IsFemale": false,
+      "HeadID": 100700,
+      "BodyID": 200700,
+      "ArmsID": 300700,
+      "LegsID": 400700,
+      "RightWeaponID": 20200,
+      "LeftWeaponID": 150800,
+      "WeaponStyle": 1,
+      "FaceName_Male": "",
+      "FaceName_Female": "",
+      "FacegenName": "",
+      "HairName_Male": "",
+      "HairName_Female": "",
+      "ChrCustomize": {}
+    },
+    "ER": {
+      "GameType": 0,
+      "IsFemale": false,
+      "HeadID": 651000,
+      "BodyID": 650100,
+      "ArmsID": 650200,
+      "LegsID": 650300,
+      "RightWeaponID": 2000000,
+      "LeftWeaponID": 31330000,
+      "WeaponStyle": 1,
+      "FaceName_Male": "",
+      "FaceName_Female": "",
+      "FacegenName": "",
+      "HairName_Male": "",
+      "HairName_Female": "",
+      "ChrCustomize": {}
+    },
+    "SDT": {
+      "GameType": 0,
+      "IsFemale": false,
+      "HeadID": 100000,
+      "BodyID": 101000,
+      "ArmsID": 102000,
+      "LegsID": 103000,
+      "RightWeaponID": 8000000,
+      "LeftWeaponID": 73000,
+      "WeaponStyle": 1,
+      "FaceName_Male": "",
+      "FaceName_Female": "",
+      "FacegenName": "",
+      "HairName_Male": "",
+      "HairName_Female": "",
+      "ChrCustomize": {}
+    }
+  }
+}

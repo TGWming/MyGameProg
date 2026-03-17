@@ -1,0 +1,177 @@
+UE4.27 AnimGraph 心智模型的「状态机结构图」**，
+
+
+* 直接当设计文档看
+* 粘到支持 Mermaid 的编辑器 / Wiki
+* 或照着在 UE4.27 里一比一搭
+
+> ⚠️ 说明一句：
+> UE4 编辑器里 State Machine 是“平面图”，
+> 这个图是**逻辑等价映射**，不是美术示意。
+
+---
+
+# 一、AnimBP 顶层结构图（总览）
+
+```mermaid
+stateDiagram-v2
+    [*] --> Base_Locomotion_SM
+
+    Base_Locomotion_SM --> Exploration_SM : !bIsInCombat && !bInSpecial
+    Base_Locomotion_SM --> Combat_SM : bIsInCombat || bLockOn
+    Base_Locomotion_SM --> Special_SM : bInSpecialState
+```
+
+**理解重点：**
+
+* 这是 AnimGraph 中的「主 Locomotion State Machine」
+* **攻击 / 翻滚 / 交互不在这里切**
+
+---
+
+# 二、Exploration Locomotion State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+
+    Idle --> Walk_BS : Speed > 0 && Speed <= WalkThreshold
+    Walk_BS --> Idle : Speed == 0
+
+    Walk_BS --> Run_BS : Speed > RunThreshold
+    Run_BS --> Walk_BS : Speed <= WalkThreshold
+
+    Idle --> JumpStart : bJumpPressed
+    Walk_BS --> JumpStart : bJumpPressed
+    Run_BS --> JumpStart : bJumpPressed
+
+    JumpStart --> JumpLoop : !bIsGrounded
+    JumpLoop --> JumpLand : bIsGrounded
+    JumpLand --> Idle : Speed == 0
+    JumpLand --> Walk_BS : Speed > 0 && Speed <= WalkThreshold
+    JumpLand --> Run_BS : Speed > RunThreshold
+```
+
+### 对应你表格里的：
+
+* 1a IDLE
+* 2b / 3c / 4d / 5e → Walk_BS / Run_BS
+* 6f → JumpStart → JumpLoop → JumpLand
+
+---
+
+# 三、Combat Locomotion State Machine（锁定核心）
+
+```mermaid
+stateDiagram-v2
+    [*] --> Combat_Idle
+
+    Combat_Idle --> Combat_Walk_BS : Speed > 0 && Speed <= WalkThreshold
+    Combat_Walk_BS --> Combat_Idle : Speed == 0
+
+    Combat_Walk_BS --> Combat_Run_BS : Speed > RunThreshold && !bLockOn
+    Combat_Run_BS --> Combat_Walk_BS : bLockOn || Speed <= WalkThreshold
+
+    Combat_Idle --> Combat_JumpStart : bJumpPressed
+    Combat_Walk_BS --> Combat_JumpStart : bJumpPressed
+    Combat_Run_BS --> Combat_JumpStart : bJumpPressed
+
+    Combat_JumpStart --> Combat_JumpLoop : !bIsGrounded
+    Combat_JumpLoop --> Combat_JumpLand : bIsGrounded
+    Combat_JumpLand --> Combat_Idle
+```
+
+**关键设计点（类魂味）：**
+
+* 锁定时 **禁止跑步 State**
+* 战斗走路始终是 2D BlendSpace（前/后/左右）
+
+---
+
+# 四、Special Locomotion State Machine（地形专用）
+
+```mermaid
+stateDiagram-v2
+    [*] --> Narrow_Move_BS : bInNarrowPath
+    [*] --> Stair_Move_BS : bOnStairMove
+
+    Narrow_Move_BS --> [*] : !bInNarrowPath
+    Stair_Move_BS --> [*] : !bOnStairMove
+```
+
+### 对应：
+
+* 4a 狭窄通道移动
+* 4e 楼梯移动
+
+> ⚠️ 注意：
+> 这里只放“**仍然允许玩家控制位移的状态**”
+
+---
+
+# 五、Montage 层（不进 State Machine，但你必须理解它的“覆盖关系”）
+
+```mermaid
+flowchart TD
+    Locomotion -->|被覆盖| Combat_Slot
+    Locomotion -->|被覆盖| Dodge_Slot
+    Locomotion -->|被覆盖| Interaction_Slot
+    Locomotion -->|被覆盖| Execution_Slot
+
+    Execution_Slot -->|优先级最高| OutputPose
+    Interaction_Slot --> OutputPose
+    Dodge_Slot --> OutputPose
+    Combat_Slot --> OutputPose
+```
+
+### 对应你全部这些：
+
+* 攻击 2g–2k
+* 翻滚 2z
+* 处决 2n / 2o
+* 交互 3a–3g / 4b–4j
+* 受击 / 失衡 / 被处决
+
+---
+
+# 六、如果你要「UE4.27 实操对照」
+
+我给你一个**一眼不迷路的搭建顺序**：
+
+1. AnimGraph
+
+   * 放一个 `State Machine` → `Base_Locomotion_SM`
+2. Base_Locomotion_SM
+
+   * 3 个 State：Exploration / Combat / Special
+   * 每个 State 里再放子 State Machine
+3. AnimGraph 末端
+
+   * 接 `Slot (FullBody)`
+   * Slot 顺序按：Execution → Interaction → Dodge → Combat
+4. 所有攻击 / 翻滚 / 处决
+
+   * **只 Play Montage，不切 State**
+
+---
+
+## 最后一段实话（重要）
+
+> **你现在这个动画状态机复杂度，已经是“商用类魂”的复杂度了。**
+> 如果你一开始用“一个 BlendSpace + 几个 Montage”，
+> 后面一定全部推翻。
+
+你现在这套图：
+
+* 是 **FromSoftware 逻辑同源**
+* 是 UE4.27 **维护成本最低** 的拆法
+
+---
+
+下一步我可以继续帮你做三件更细的（你选）：
+
+1️⃣ **把每个 State 的 UE4.27 变量条件列成变量表**
+2️⃣ **给你一个“Montage 是否能打断 / 被打断”的规则矩阵**
+3️⃣ **直接帮你按 UE4.27 AnimGraph 节点画“连线级逻辑说明”**
+
+你现在已经在“系统设计层”，不是动画新手层了。

@@ -1,0 +1,652 @@
+Sub-Step 3.4.4 Prompt
+
+================================================================================
+任务：在CameraModule_Distance.cpp中添加D03 Speed_Offset实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+D03根据角色移动速度动态增加相机距离。
+当角色快速移动（跑步/冲刺）时，相机自动拉远以提供更好的前方视野。
+
+【Pipeline中的位置】
+```
+Distance模块计算流程：
+1. D01:  BaseDistance = 400cm (Override，基础值)
+2. D02: ×1.2 (Multiplicative) → 480cm
+3. D03: +80cm (Additive，速度偏移) ← 当前
+   → 480 + 80 = 560cm（冲刺时更远）
+4. D04-D07: 后续调整
+```
+
+【当前进度】
+Phase 3 Step 3.4 Sub-Step 3.4.4 (共190个Sub-Step中的第82个)
+前置完成：3.4.3 D02实现 ✅
+
+【任务目标】
+在CameraModule_Distance.cpp中完整实现D03模块，替换现有的占位符。
+
+【⚠️ 重要提醒】
+
+1. **编译前必做步骤：**
+   本Sub-Step只修改现有. cpp文件，不添加新文件。
+   因此**不需要Regenerate**，可以直接编译。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   确认StateConfig和InputContext的字段路径与项目实际结构一致。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_Distance.cpp
+
+2. **定位修改位置：**
+
+在文件中找到D03的占位符实现部分（约第188-217行）：
+
+```cpp
+//========================================
+// D03: Speed Offset
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.4.4
+// Increases distance when moving fast
+
+UCameraModule_D03_Speed_Offset::UCameraModule_D03_Speed_Offset()
+	: CurrentSpeedOffset(0.0f)
+{
+}
+
+bool UCameraModule_D03_Speed_Offset::ShouldActivate(... ) const
+{
+	// Placeholder:  Will be properly implemented in Sub-Step 3.4.4
+	return false;
+}
+
+bool UCameraModule_D03_Speed_Offset::Compute(...)
+{
+	// Placeholder: Will be properly implemented in Sub-Step 3.4.4
+	OutOutput = CreateBaseOutput();
+	OutOutput.DistanceOutput = 0.0f;
+	... 
+}
+```
+
+**将上述占位符代码完整替换为下方的完整实现。**
+
+---
+
+3. **D03完整实现代码：**
+
+**A. 构造函数（保持不变）：**
+
+```cpp
+/**
+ * Constructor - Initialize smooth offset state
+ */
+UCameraModule_D03_Speed_Offset::UCameraModule_D03_Speed_Offset()
+	: CurrentSpeedOffset(0.0f)
+{
+}
+```
+
+---
+
+**B. ShouldActivate() 实现：**
+
+**当前占位符代码：**
+```cpp
+bool UCameraModule_D03_Speed_Offset::ShouldActivate(... ) const
+{
+	// Placeholder:  Will be properly implemented in Sub-Step 3.4.4
+	return false;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * ShouldActivate - Determine if speed-based distance offset should be active
+ * 
+ * D03 activates when: 
+ * - Module is enabled
+ * - Character is moving (bIsMoving)
+ * - Character speed exceeds threshold
+ * 
+ * This module provides better forward visibility during fast movement
+ * by pulling the camera back.  Common in third-person action games.
+ * 
+ * Priority 105 (after D01, before D02), uses Additive policy. 
+ * 
+ * Use Cases:
+ * - Sprinting through open areas
+ * - Running to objectives
+ * - Escape sequences
+ */
+bool UCameraModule_D03_Speed_Offset::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if character is moving
+	if (!Context. InputContext.bIsMoving)
+	{
+		return false;
+	}
+	
+	// Get speed threshold from config
+	float SpeedThreshold = StateConfig. Module.Distance.SpeedDistanceThreshold;
+	
+	// If threshold not configured, use default
+	if (SpeedThreshold <= 0.0f)
+	{
+		SpeedThreshold = 200.0f;  // Default:  2 m/s (walking speed)
+	}
+	
+	// Check if speed exceeds threshold
+	float CurrentSpeed = Context.InputContext.CharacterSpeed;
+	if (CurrentSpeed <= SpeedThreshold)
+	{
+		return false;  // Not fast enough to trigger
+	}
+	
+	// All conditions met - activate speed offset
+	return true;
+}
+```
+
+**说明：**
+- 三个条件：启用 + 移动中 + 速度超阈值
+- 阈值默认200cm/s（走路速度）
+- 优先级105（D01之后）
+
+---
+
+**C. Compute() 实现：**
+
+**当前占位符代码：**
+```cpp
+bool UCameraModule_D03_Speed_Offset:: Compute(...)
+{
+	// Placeholder
+	OutOutput = CreateBaseOutput();
+	OutOutput.DistanceOutput = 0.0f;
+	OutOutput.bHasDistanceOutput = true;
+	OutOutput.bDistanceIsMultiplier = false;
+	return true;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * Compute - Calculate distance offset based on movement speed
+ * 
+ * This module calculates an additive distance offset based on how fast
+ * the character is moving.  Faster movement = larger offset = camera farther back.
+ * 
+ * Steps:
+ * 1. Get current speed and config values
+ * 2. Calculate speed above threshold
+ * 3. Calculate speed ratio (0 to 1)
+ * 4. Calculate target offset from ratio
+ * 5. Smooth the offset transition
+ * 6. Output with Additive policy
+ * 
+ * Speed to Offset Mapping:
+ * - At threshold (200cm/s): offset = 0cm
+ * - At run speed (400cm/s): offset = ~50cm
+ * - At sprint speed (600cm/s): offset = ~100cm (max)
+ * 
+ * The offset is smoothed to prevent sudden camera distance changes
+ * when starting/stopping sprints. 
+ * 
+ * @param Context The current pipeline execution context
+ * @param StateConfig The current camera state configuration
+ * @param OutOutput Output structure to fill with computed values
+ * @return True if computation succeeded
+ */
+bool UCameraModule_D03_Speed_Offset::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Step 1: Get current speed and config values
+	float CurrentSpeed = Context.InputContext. CharacterSpeed;
+	
+	// Get speed threshold from config
+	float SpeedThreshold = StateConfig. Module.Distance.SpeedDistanceThreshold;
+	if (SpeedThreshold <= 0.0f)
+	{
+		SpeedThreshold = 200.0f;  // Default: 2 m/s (walking speed)
+	}
+	
+	// Get maximum speed offset from config
+	float MaxSpeedOffset = StateConfig.Module. Distance.SpeedDistanceMax;
+	if (MaxSpeedOffset <= 0.0f)
+	{
+		MaxSpeedOffset = 100.0f;  // Default: 1 meter max offset
+	}
+	
+	// Step 2: Calculate speed above threshold
+	float SpeedAboveThreshold = FMath:: Max(0.0f, CurrentSpeed - SpeedThreshold);
+	
+	// Step 3: Calculate speed ratio (0 to 1)
+	// Assume max effective speed range is 400cm/s above threshold
+	// (threshold + 400 = typical sprint speed of 600cm/s)
+	const float MaxSpeedRange = 400.0f;
+	float SpeedRatio = FMath:: Clamp(SpeedAboveThreshold / MaxSpeedRange, 0.0f, 1.0f);
+	
+	// Step 4: Calculate target offset from ratio
+	// Linear mapping: ratio 0 -> 0cm, ratio 1 -> MaxSpeedOffset
+	float TargetOffset = SpeedRatio * MaxSpeedOffset;
+	
+	// Step 5: Smooth the offset transition
+	// This prevents jarring camera distance changes
+	float InterpSpeed = 5.0f;  // Smoothing speed
+	
+	// Try to get interp speed from config
+	float ConfigLagSpeed = StateConfig.StateBase. Lag.DistanceLagSpeed;
+	if (ConfigLagSpeed > 0.0f)
+	{
+		InterpSpeed = ConfigLagSpeed;
+	}
+	
+	// Interpolate current offset towards target
+	CurrentSpeedOffset = FMath::FInterpTo(
+		CurrentSpeedOffset, 
+		TargetOffset, 
+		Context.DeltaTime, 
+		InterpSpeed
+	);
+	
+	// If speed drops below threshold, smoothly return to zero
+	if (CurrentSpeed <= SpeedThreshold)
+	{
+		CurrentSpeedOffset = FMath::FInterpTo(
+			CurrentSpeedOffset, 
+			0.0f, 
+			Context.DeltaTime, 
+			InterpSpeed
+		);
+	}
+	
+	// Step 6: Fill output structure
+	OutOutput. DistanceOutput = CurrentSpeedOffset;
+	OutOutput. bHasDistanceOutput = true;
+	OutOutput.bDistanceIsMultiplier = false;  // Additive policy
+	
+	// Full weight for speed offset
+	OutOutput. Weight = 1.0f;
+	
+	return true;
+}
+```
+
+**说明：**
+- 速度超出阈值的部分映射到偏移
+- 线性映射：阈值→0，阈值+400→MaxOffset
+- 使用FInterpTo平滑过渡
+- 速度下降时平滑回归零
+
+---
+
+4. **完整的D03代码块（用于复制粘贴）：**
+
+```cpp
+//========================================
+// D03: Speed Offset
+//========================================
+
+/**
+ * Constructor - Initialize smooth offset state
+ */
+UCameraModule_D03_Speed_Offset::UCameraModule_D03_Speed_Offset()
+	: CurrentSpeedOffset(0.0f)
+{
+}
+
+/**
+ * ShouldActivate - Activate when moving above threshold speed
+ */
+bool UCameraModule_D03_Speed_Offset::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if character is moving
+	if (!Context.InputContext.bIsMoving)
+	{
+		return false;
+	}
+	
+	// Get speed threshold
+	float SpeedThreshold = StateConfig. Module.Distance.SpeedDistanceThreshold;
+	if (SpeedThreshold <= 0.0f)
+	{
+		SpeedThreshold = 200.0f;  // Default: 2 m/s
+	}
+	
+	// Check if speed exceeds threshold
+	float CurrentSpeed = Context.InputContext.CharacterSpeed;
+	if (CurrentSpeed <= SpeedThreshold)
+	{
+		return false;
+	}
+	
+	return true;
+}
+
+/**
+ * Compute - Calculate distance offset based on movement speed
+ */
+bool UCameraModule_D03_Speed_Offset:: Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output
+	OutOutput = CreateBaseOutput();
+	
+	// Get current speed
+	float CurrentSpeed = Context.InputContext.CharacterSpeed;
+	
+	// Get threshold from config
+	float SpeedThreshold = StateConfig.Module. Distance.SpeedDistanceThreshold;
+	if (SpeedThreshold <= 0.0f)
+	{
+		SpeedThreshold = 200.0f;
+	}
+	
+	// Get max offset from config
+	float MaxSpeedOffset = StateConfig.Module.Distance.SpeedDistanceMax;
+	if (MaxSpeedOffset <= 0.0f)
+	{
+		MaxSpeedOffset = 100.0f;  // Default: 1 meter
+	}
+	
+	// Calculate speed above threshold
+	float SpeedAboveThreshold = FMath::Max(0.0f, CurrentSpeed - SpeedThreshold);
+	
+	// Calculate speed ratio (0 to 1)
+	const float MaxSpeedRange = 400.0f;
+	float SpeedRatio = FMath::Clamp(SpeedAboveThreshold / MaxSpeedRange, 0.0f, 1.0f);
+	
+	// Calculate target offset
+	float TargetOffset = SpeedRatio * MaxSpeedOffset;
+	
+	// Get interp speed
+	float InterpSpeed = 5.0f;
+	float ConfigLagSpeed = StateConfig.StateBase.Lag. DistanceLagSpeed;
+	if (ConfigLagSpeed > 0.0f)
+	{
+		InterpSpeed = ConfigLagSpeed;
+	}
+	
+	// Smooth transition
+	CurrentSpeedOffset = FMath::FInterpTo(
+		CurrentSpeedOffset, 
+		TargetOffset, 
+		Context.DeltaTime, 
+		InterpSpeed
+	);
+	
+	// Return to zero if below threshold
+	if (CurrentSpeed <= SpeedThreshold)
+	{
+		CurrentSpeedOffset = FMath::FInterpTo(
+			CurrentSpeedOffset, 
+			0.0f, 
+			Context.DeltaTime, 
+			InterpSpeed
+		);
+	}
+	
+	// Fill output
+	OutOutput.DistanceOutput = CurrentSpeedOffset;
+	OutOutput.bHasDistanceOutput = true;
+	OutOutput. bDistanceIsMultiplier = false;
+	OutOutput.Weight = 1.0f;
+	
+	return true;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 说明速度到偏移的映射关系
+   - 解释平滑过渡的作用
+   - 提供典型速度值
+   - 所有注释英文
+
+2. **格式：**
+   - Tab缩进
+   - 清晰步骤标注
+   - 方法间空两行
+
+3. **防御性编程：**
+   - 配置值默认值处理
+   - Clamp确保有效范围
+   - 速度下降时平滑回归
+
+【技术说明】
+
+**D03的核心机制：**
+
+### 1. 速度到偏移的映射
+
+**数学公式：**
+```
+SpeedAboveThreshold = max(0, CurrentSpeed - Threshold)
+SpeedRatio = clamp(SpeedAboveThreshold / MaxSpeedRange, 0, 1)
+TargetOffset = SpeedRatio × MaxSpeedOffset
+```
+
+**计算示例：**
+
+| 移动状态 | 速度 | 超出阈值 | 比例 | 目标偏移 |
+|---------|------|---------|------|---------|
+| 站立 | 0 | 0 | 0 | 0cm |
+| 走路 | 200 | 0 | 0 | 0cm |
+| 快走 | 300 | 100 | 0.25 | 25cm |
+| 跑步 | 400 | 200 | 0.5 | 50cm |
+| 冲刺 | 600 | 400 | 1.0 | 100cm |
+| 极速 | 800 | 600 | 1.0(cap) | 100cm |
+
+### 2. 平滑过渡的作用
+
+**为什么需要平滑？**
+
+```
+不平滑（假设）：
+T=0s: 站立，偏移=0cm
+T=0.1s: 开始冲刺，偏移=100cm（瞬间跳变）
+→ 相机突然拉远，体验差
+
+有平滑（实际）：
+T=0s: 站立，偏移=0cm
+T=0.1s: 开始冲刺，偏移≈15cm
+T=0.2s: 偏移≈28cm
+T=0.5s: 偏移≈65cm
+T=1. 0s: 偏移≈95cm
+→ 相机渐变拉远，平滑自然
+
+使用FInterpTo：
+CurrentSpeedOffset = FInterpTo(Current, Target, DeltaTime, Speed)
+- 指数衰减插值
+- 帧率独立
+- 平滑自然
+```
+
+### 3. 成员变量CurrentSpeedOffset
+
+**为什么需要成员变量？**
+
+```cpp
+// 不用成员变量（错误）
+float TargetOffset = .. .; // 每帧计算
+OutOutput. DistanceOutput = TargetOffset; // 直接输出
+// 问题：无法平滑，每帧跳变
+
+// 使用成员变量（正确）
+float TargetOffset = ...; // 每帧计算目标
+CurrentSpeedOffset = FInterpTo(CurrentSpeedOffset, TargetOffset, ... ); // 平滑
+OutOutput.DistanceOutput = CurrentSpeedOffset; // 输出平滑后的值
+// 效果：平滑过渡
+```
+
+### 4. 速度下降时的处理
+
+**特殊处理：**
+```cpp
+if (CurrentSpeed <= SpeedThreshold)
+{
+    // 速度低于阈值，平滑回归零
+    CurrentSpeedOffset = FMath::FInterpTo(
+        CurrentSpeedOffset, 
+        0.0f, 
+        Context.DeltaTime, 
+        InterpSpeed
+    );
+}
+```
+
+**原因：**
+- 玩家停止冲刺时，偏移应该回归零
+- 但不应该瞬间回归（跳变）
+- 平滑回归提供自然体验
+
+### 5. 与R06(AutoOrient Movement)的配合
+
+**类似的设计理念：**
+
+| 特性 | R06 (Rotation) | D03 (Distance) |
+|------|----------------|----------------|
+| **触发条件** | 移动中 | 移动中且速度高 |
+| **调整类型** | 相机朝向 | 相机距离 |
+| **平滑方式** | 直接输出 | FInterpTo平滑 |
+| **权重** | 动态(0-0.5) | 固定(1.0) |
+
+**配合效果：**
+- 快速移动时，R06调整朝向对齐移动方向
+- 同时D03拉远相机提供更好视野
+- 两者共同提升移动体验
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] 构造函数完整
+   - [ ] ShouldActivate()完整
+   - [ ] Compute()完整
+   - [ ] 使用成员变量CurrentSpeedOffset
+
+3. **逻辑正确性：**
+   - [ ] 检查bIsMoving
+   - [ ] 检查速度阈值
+   - [ ] 速度比例计算正确
+   - [ ] FInterpTo平滑正确
+   - [ ] 速度下降时回归零
+   - [ ] bDistanceIsMultiplier = false
+
+4. **字段访问：**
+   - [ ] Context.InputContext.bIsMoving
+   - [ ] Context. InputContext.CharacterSpeed
+   - [ ] StateConfig.Module.Distance.SpeedDistanceThreshold
+   - [ ] StateConfig.Module.Distance.SpeedDistanceMax
+   - [ ] StateConfig.StateBase.Lag. DistanceLagSpeed（可选）
+
+【注意事项】
+
+1. **不需要Regenerate**
+
+2. **字段缺失处理：**
+   ```cpp
+   // 如果SpeedDistanceThreshold不存在
+   float SpeedThreshold = 200.0f;  // 直接使用默认值
+   
+   // 如果SpeedDistanceMax不存在
+   float MaxSpeedOffset = 100.0f;  // 直接使用默认值
+   
+   // 如果DistanceLagSpeed不存在
+   float InterpSpeed = 5.0f;  // 使用硬编码默认值
+   ```
+
+3. **默认值说明：**
+   - SpeedThreshold = 200cm/s（走路速度）
+   - MaxSpeedOffset = 100cm（最大1米偏移）
+   - MaxSpeedRange = 400cm/s（速度映射范围）
+   - InterpSpeed = 5.0（平滑速度）
+
+4. **测试建议：**
+   - 站立 → 偏移应为0
+   - 走路 → 偏移应为0（低于阈值）
+   - 跑步 → 偏移应逐渐增加
+   - 冲刺 → 偏移应达到最大
+   - 停止 → 偏移应平滑回归0
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 3.4.4 完成报告
+================================================================================
+
+【修改内容】
+- 文件：CameraModule_Distance. cpp
+- 修改位置：D03模块（约第188-217行）
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ 构造函数：初始化CurrentSpeedOffset
+- ✅ ShouldActivate：检查移动+速度阈值
+- ✅ Compute：速度到偏移的平滑映射
+
+【编译结果】
+- 编译状态：[成功/失败]
+
+【最终状态】
+✅ D03修复完成，速度影响相机距离
+
+================================================================================
+```
+
+【后续步骤】
+
+D03修复完成后，Distance模块进度：
+- [x] ✅ D01 - BaseDistance
+- [x] ✅ D02 - TargetSize_Multiplier
+- [x] ✅ D03 - Speed_Offset（刚修复）
+- [x] ✅ D04 - Combat_Adjust
+- [x] ✅ D05 - Environment_Limit
+- [x] ✅ D06 - Proximity_Adjust
+- [x] ✅ D07 - Boss_Phase
+
+**Distance模块完成度：7/7 (100%)** 🎉
+
+**下一步：** Step 3.5 FOV模块
+
+================================================================================

@@ -1,0 +1,272 @@
+Sub-Step 5.4.5 Prompt
+
+================================================================================
+任务：在CameraCollision_Occlusion.cpp中添加Occ04 SmartReframe实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Occ04智能地重新构图以避免遮挡，结合旋转和位移。
+
+【当前进度】
+Phase 5 Step 5.4 Sub-Step 5.4.5 (共190个Sub-Step中的第167个)
+前置完成：5.4.4 Occ03实现
+这是Step 5.4的最后一个Sub-Step。
+
+【任务目标】
+在CameraCollision_Occlusion.cpp中添加Occ04实现。
+
+【具体要求】
+
+在Occ03实现之后添加：
+
+//========================================
+// Occ04: Smart Reframe
+//========================================
+
+UCameraCollision_Occ04_SmartReframe::UCameraCollision_Occ04_SmartReframe()
+    : MaxReframeAngle(25.0f)
+    , ReframeSpeed(3.0f)
+    , NumSamplePoints(16)
+    , CurrentReframeRotation(FRotator::ZeroRotator)
+    , CurrentReframeOffset(FVector::ZeroVector)
+{
+}
+
+bool UCameraCollision_Occ04_SmartReframe::ShouldExecute(const FStageExecutionContext& Context, const FCameraStateConfig& StateConfig) const
+{
+    // Execute when there's occlusion and smart reframe is enabled
+    return bIsEnabled && StateConfig.Collision.Occlusion.bEnableSmartReframe;
+}
+
+bool UCameraCollision_Occ04_SmartReframe::Execute(
+    const FStageExecutionContext& Context,
+    const FCameraStateConfig& StateConfig,
+    const FCollisionDetectionResult& DetectionResult,
+    FCollisionResponseOutput& OutResponse)
+{
+    bool bNeedsReframe = DetectionResult.bCollisionDetected || 
+                         DetectionResult.bCharacterOccluded ||
+                         DetectionResult.bTargetOccluded;
+
+    if (! bNeedsReframe)
+    {
+        // Decay reframe adjustments
+        bool bStillActive = false;
+
+        if (! CurrentReframeRotation.IsNearlyZero(0.5f))
+        {
+            CurrentReframeRotation = FMath::RInterpTo(CurrentReframeRotation, FRotator::ZeroRotator, Context.DeltaTime, ReframeSpeed * 2.0f);
+            bStillActive = true;
+        }
+        else
+        {
+            CurrentReframeRotation = FRotator::ZeroRotator;
+        }
+
+        if (!CurrentReframeOffset.IsNearlyZero(1.0f))
+        {
+            CurrentReframeOffset = FMath::VInterpTo(CurrentReframeOffset, FVector::ZeroVector, Context.DeltaTime, ReframeSpeed * 2.0f);
+            bStillActive = true;
+        }
+        else
+        {
+            CurrentReframeOffset = FVector:: ZeroVector;
+        }
+
+        if (bStillActive)
+        {
+            OutResponse. StrategyType = GetStrategyType();
+            OutResponse.RotationAdjustment = CurrentReframeRotation;
+            OutResponse. PositionAdjustment = CurrentReframeOffset;
+            OutResponse.Weight = 0.5f;
+            OutResponse.Priority = GetPriority();
+        }
+
+        bIsActive = bStillActive;
+        return bStillActive;
+    }
+
+    bIsActive = true;
+
+    // Find best reframe configuration
+    FRotator TargetRotation;
+    FVector TargetOffset;
+    FindBestReframe(Context, DetectionResult, TargetRotation, TargetOffset);
+
+    // Interpolate to target
+    CurrentReframeRotation = FMath::RInterpTo(CurrentReframeRotation, TargetRotation, Context.DeltaTime, ReframeSpeed);
+    CurrentReframeOffset = FMath::VInterpTo(CurrentReframeOffset, TargetOffset, Context.DeltaTime, ReframeSpeed);
+
+    // Build response
+    OutResponse.StrategyType = GetStrategyType();
+    OutResponse.RotationAdjustment = CurrentReframeRotation;
+    OutResponse. PositionAdjustment = CurrentReframeOffset;
+    OutResponse.Weight = 0.9f;
+    OutResponse.Priority = GetPriority();
+    OutResponse.bOverride = false;
+
+    UE_LOG(LogTemp, Verbose, TEXT("Occ04 SmartReframe: Rotation (%.2f, %.2f), Offset (%.2f, %. 2f, %.2f)"),
+        CurrentReframeRotation.Yaw, CurrentReframeRotation.Pitch,
+        CurrentReframeOffset. X, CurrentReframeOffset. Y, CurrentReframeOffset. Z);
+
+    return true;
+}
+
+void UCameraCollision_Occ04_SmartReframe::FindBestReframe(
+    const FStageExecutionContext& Context,
+    const FCollisionDetectionResult& DetectionResult,
+    FRotator& OutRotation,
+    FVector& OutOffset)
+{
+    FVector FocusPoint = Context.Output. FocusPoint;
+    FRotator BaseRotation = Context.Output. Rotation;
+    float Distance = Context.Output.Distance;
+
+    // If collision detected, use safe distance
+    if (DetectionResult. bCollisionDetected)
+    {
+        Distance = DetectionResult.SafeDistance;
+    }
+
+    FVector BaseDirection = -BaseRotation.Vector();
+    FVector BaseCameraPos = FocusPoint + BaseDirection * Distance;
+
+    FRotator BestRotation = FRotator:: ZeroRotator;
+    FVector BestOffset = FVector:: ZeroVector;
+    float BestScore = ScoreConfiguration(Context, BaseCameraPos, BaseRotation);
+
+    // Sample different configurations
+    FVector RightVector = FRotationMatrix(BaseRotation).GetUnitAxis(EAxis::Y);
+    FVector UpVector = FVector:: UpVector;
+
+    for (int32 i = 0; i < NumSamplePoints; ++i)
+    {
+        // Calculate sample angle
+        float Angle = (360.0f / NumSamplePoints) * i;
+        float AngleRad = FMath::DegreesToRadians(Angle);
+
+        // Test at multiple magnitudes
+        for (float Magnitude = 5.0f; Magnitude <= MaxReframeAngle; Magnitude += 10.0f)
+        {
+            // Create test rotation
+            FRotator TestRotation;
+            TestRotation.Yaw = FMath:: Cos(AngleRad) * Magnitude;
+            TestRotation. Pitch = FMath::Sin(AngleRad) * Magnitude * 0.5f; // Less pitch adjustment
+            TestRotation.Roll = 0.0f;
+
+            FRotator CombinedRotation = BaseRotation + TestRotation;
+            FVector TestDirection = -CombinedRotation.Vector();
+            FVector TestCameraPos = FocusPoint + TestDirection * Distance;
+
+            // Also test with small position offsets
+            TArray<FVector> TestOffsets;
+            TestOffsets.Add(FVector:: ZeroVector);
+            TestOffsets.Add(RightVector * 20.0f);
+            TestOffsets.Add(RightVector * -20.0f);
+            TestOffsets.Add(UpVector * 15.0f);
+
+            for (const FVector& Offset : TestOffsets)
+            {
+                FVector FinalTestPos = TestCameraPos + Offset;
+                float Score = ScoreConfiguration(Context, FinalTestPos, CombinedRotation);
+
+                // Prefer smaller adjustments
+                float AdjustmentPenalty = (FMath::Abs(TestRotation.Yaw) + FMath::Abs(TestRotation.Pitch) + Offset.Size() * 0.1f) * 0.5f;
+                Score -= AdjustmentPenalty;
+
+                if (Score > BestScore)
+                {
+                    BestScore = Score;
+                    BestRotation = TestRotation;
+                    BestOffset = Offset;
+                }
+            }
+        }
+    }
+
+    OutRotation = BestRotation;
+    OutOffset = BestOffset;
+}
+
+float UCameraCollision_Occ04_SmartReframe::ScoreConfiguration(
+    const FStageExecutionContext& Context,
+    const FVector& CameraPosition,
+    const FRotator& CameraRotation)
+{
+    float Score = 0.0f;
+
+    FVector FocusPoint = Context. Output.FocusPoint;
+    FVector CharacterLocation = Context.InputContext. CharacterLocation;
+    CharacterLocation.Z += 100.0f;
+
+    FCollisionQueryParams Params;
+    Params.AddIgnoredActor(Context. InputContext.CharacterActor. Get());
+    if (Context.InputContext. TargetActor.IsValid())
+    {
+        Params.AddIgnoredActor(Context.InputContext.TargetActor.Get());
+    }
+
+    // Check line to character
+    FHitResult CharacterHit;
+    bool bCharacterOccluded = LineTrace(CameraPosition, CharacterLocation, CharacterHit, Params);
+    
+    if (! bCharacterOccluded)
+    {
+        Score += 100.0f; // Big bonus for seeing character
+    }
+    else
+    {
+        Score += CharacterHit.Distance * 0.1f; // Partial score based on how far we can see
+    }
+
+    // Check line to target if exists
+    if (Context.InputContext.bHasTarget)
+    {
+        FVector TargetLocation = Context.InputContext.TargetLocation;
+        TargetLocation.Z += Context.InputContext.TargetSize * 0.5f;
+
+        FHitResult TargetHit;
+        bool bTargetOccluded = LineTrace(CameraPosition, TargetLocation, TargetHit, Params);
+
+        if (!bTargetOccluded)
+        {
+            Score += 80.0f; // Bonus for seeing target
+        }
+        else
+        {
+            Score += TargetHit.Distance * 0.05f;
+        }
+    }
+
+    // Check for collision at camera position
+    FHitResult CollisionHit;
+    bool bCollision = LineTrace(FocusPoint, CameraPosition, CollisionHit, Params);
+    
+    if (!bCollision)
+    {
+        Score += 50.0f; // Bonus for no collision
+    }
+    else
+    {
+        Score -= (FVector:: Dist(FocusPoint, CameraPosition) - CollisionHit.Distance) * 0.2f;
+    }
+
+    return Score;
+}
+
+【Step 5.4 完成验证】
+Occlusion策略（Occ01-Occ04）全部实现：
+- Occ01 CharacterFade:  角色淡化
+- Occ02 TargetVisibility: 目标可见性保证
+- Occ03 TransparencyProbe: 遮挡物透明化
+- Occ04 SmartReframe: 智能重构图
+
+【验证标准】
+- 编译通过
+- 所有4个Occlusion策略可工作
+- 遮挡处理自然不突兀
+
+【输出要求】
+输出Occ04的完整实现代码。
+================================================================================

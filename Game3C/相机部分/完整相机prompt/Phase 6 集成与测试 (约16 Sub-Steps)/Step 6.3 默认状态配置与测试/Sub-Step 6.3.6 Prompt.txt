@@ -1,0 +1,389 @@
+Sub-Step 6.3.6 Prompt
+
+================================================================================
+任务：创建项目最终验证文档
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4. 27 C++项目。
+创建最终验证文档，总结整个系统。
+
+【当前进度】
+Phase 6 Step 6. 3 Sub-Step 6.3.6 (共190个Sub-Step中的第189个)
+前置完成：6.3.5 测试Actor实现
+
+【任务目标】
+创建验证文档，确保系统完整性。
+
+【已完成系统概述】
+根据实际开发，系统包含：
+- 8个Pipeline阶段
+- 39个相机模块
+- 26个相机修改器
+- 20个碰撞策略
+- 总计93个核心组件
+
+【具体要求】
+
+创建文件：Docs/SoulsCameraSystem_ValidationChecklist.md
+
+内容如下（注意使用正确的文件名和枚举）：
+
+````markdown
+# Souls Camera System - 最终验证清单
+
+## 系统概述
+
+| 项目属性 | 值 |
+|----------|-----|
+| 项目名称 | 类魂游戏第三人称相机系统 |
+| 引擎版本 | Unreal Engine 4.27 |
+| 编程语言 | C++ |
+| 项目代号 | MyProject |
+
+## 组件数量验证
+
+| 类别 | 预期数量 | 实际数量 | 状态 |
+|------|----------|----------|------|
+| Pipeline Stages | 8 | __ | ☐ |
+| Camera Modules | 39 | __ | ☐ |
+| Camera Modifiers | 26 | __ | ☐ |
+| Collision Strategies | 20 | __ | ☐ |
+| **总计** | **93** | __ | ☐ |
+
+---
+
+## Phase 1: 核心架构验证
+
+### 核心文件 (Camera/Core/)
+- [ ] SoulsCameraManager.h/.cpp - 主控制器
+- [ ] SoulsCameraStateMachine.h/. cpp - 状态机
+- [ ] SoulsCameraRuntimeTypes.h - 运行时类型
+- [ ] CameraModifierManager.h/.cpp - 修改器管理器
+
+### 配置文件 (Camera/Data/)
+- [ ] CameraStateEnums.h - 所有枚举定义
+- [ ] SoulsCameraParams_StateBase.h - 状态基础参数
+- [ ] SoulsCameraParams_Module.h - 模块参数
+- [ ] SoulsCameraParams_Modifier.h - 修改器参数
+- [ ] SoulsCameraParams_Collision.h - 碰撞参数
+
+### 配置文件 (Camera/Core/)
+- [ ] SoulsCameraConfig.h - FCameraStateConfig定义
+
+### Pipeline文件 (Camera/Pipeline/)
+- [ ] SoulsCameraPipeline.h/.cpp - 管线管理器
+- [ ] ICameraStage.h - 阶段接口
+- [ ] CameraStage_InputGather.h/. cpp - Stage 1: 输入收集
+- [ ] CameraStage_StateMachine.h/. cpp - Stage 2: 状态机
+- [ ] CameraStage_ModuleCompute.h/.cpp - Stage 3: 模块计算
+- [ ] CameraStage_ModifierApply.h/.cpp - Stage 4: 修改器应用
+- [ ] CameraStage_BlendSolve.h/.cpp - Stage 5: 混合求解
+- [ ] CameraStage_CollisionResolve.h/. cpp - Stage 6: 碰撞解决
+- [ ] CameraStage_PostProcess.h/.cpp - Stage 7: 后处理
+- [ ] CameraStage_RenderApply.h/.cpp - Stage 8: 渲染应用
+
+---
+
+## Phase 2-3: 模块系统验证
+
+### 模块基础文件 (Camera/Modules/)
+- [ ] CameraModuleBase.h/. cpp - 模块基类
+- [ ] CameraModuleRegistry.h/.cpp - 模块注册表
+
+### 模块实现文件 (Camera/Modules/)
+- [ ] CameraModule_Position.h/.cpp - 8个位置模块
+- [ ] CameraModule_Rotation.h/.cpp - 9个旋转模块
+- [ ] CameraModule_Distance.h/.cpp - 7个距离模块
+- [ ] CameraModule_FOV.h/.cpp - 6个FOV模块
+- [ ] CameraModule_Offset.h/.cpp - 5个偏移模块
+- [ ] CameraModule_Constraint.h/.cpp - 4个约束模块
+
+### 39个模块清单
+
+**Position 位置模块 (P01-P08): 8个**
+- [ ] P01_FollowTarget - 直接跟随
+- [ ] P02_FollowTarget_Lagged - 延迟跟随
+- [ ] P03_FollowTarget_Predictive - 预测跟随
+- [ ] P04_Orbit_LockOn - 锁定轨道
+- [ ] P05_Orbit_Boss - Boss轨道
+- [ ] P06_FixedPoint - 固定点
+- [ ] P07_Spline_Follow - 样条跟随
+- [ ] P08_MidPoint_TwoTarget - 双目标中点
+
+**Rotation 旋转模块 (R01-R09): 9个**
+- [ ] R01_PlayerInput_Free - 自由输入
+- [ ] R02_PlayerInput_Lagged - 延迟输入
+- [ ] R03_LookAt_Target - 看向目标
+- [ ] R04_LookAt_Target_Soft - 软看向目标
+- [ ] R05_LookAt_Boss - 看向Boss
+- [ ] R06_AutoOrient_Movement - 自动朝向移动
+- [ ] R07_AutoOrient_Delayed - 延迟自动朝向
+- [ ] R08_LookAt_Point - 看向点
+- [ ] R09_Spline_Rotation - 样条旋转
+
+**Distance 距离模块 (D01-D07): 7个**
+- [ ] D01_BaseDistance - 基础距离
+- [ ] D02_TargetSize_Multiplier - 目标尺寸乘数
+- [ ] D03_Speed_Offset - 速度偏移
+- [ ] D04_Combat_Adjust - 战斗调整
+- [ ] D05_Environment_Limit - 环境限制
+- [ ] D06_Proximity_Adjust - 接近调整
+- [ ] D07_Boss_Phase - Boss阶段
+
+**FOV 视场角模块 (F01-F06): 6个**
+- [ ] F01_BaseFOV - 基础FOV
+- [ ] F02_Speed_FOV - 速度FOV
+- [ ] F03_Aim_FOV - 瞄准FOV
+- [ ] F04_Combat_FOV - 战斗FOV
+- [ ] F05_Boss_FOV - Boss FOV
+- [ ] F06_Impact_FOV - 冲击FOV
+
+**Offset 偏移模块 (O01-O05): 5个**
+- [ ] O01_SocketOffset_Base - 基础插槽偏移
+- [ ] O02_Shoulder_Offset - 肩部偏移
+- [ ] O03_Shoulder_Switch - 肩部切换
+- [ ] O04_Crouch_Offset - 蹲伏偏移
+- [ ] O05_Mount_Offset - 骑乘偏移
+
+**Constraint 约束模块 (C01-C04): 4个**
+- [ ] C01_Pitch_Clamp - 俯仰限制
+- [ ] C02_Distance_Clamp - 距离限制
+- [ ] C03_FOV_Clamp - FOV限制
+- [ ] C04_Visibility_Ensure - 可见性保证
+
+---
+
+## Phase 4: 修改器系统验证
+
+### 修改器基础文件 (Camera/Modifiers/)
+- [ ] CameraModifierBase.h/.cpp - 修改器基类
+
+### 修改器管理器 (Camera/Core/)
+- [ ] CameraModifierManager. h/.cpp - 修改器管理器
+
+### 修改器实现文件 (Camera/Modifiers/)
+- [ ] CameraModifier_Shake.h/.cpp - 5个震动修改器
+- [ ] CameraModifier_Reaction.h/.cpp - 6个反应修改器
+- [ ] CameraModifier_Cinematic.h/.cpp - 5个过场修改器
+- [ ] CameraModifier_Zoom.h/.cpp - 4个缩放修改器
+- [ ] CameraModifier_Effect.h/.cpp - 3个效果修改器
+- [ ] CameraModifier_Special.h/.cpp - 3个特殊修改器
+
+### 26个修改器清单
+
+**Shake 震动修改器 (S01-S05): 5个**
+- [ ] S01_Shake_Light - 轻震动
+- [ ] S02_Shake_Medium - 中震动
+- [ ] S03_Shake_Heavy - 重震动
+- [ ] S04_Shake_Continuous - 持续震动
+- [ ] S05_Shake_Directional - 方向震动
+
+**Reaction 反应修改器 (R01-R06): 6个**
+- [ ] R01_Reaction_HitLight - 轻击反应
+- [ ] R02_Reaction_HitHeavy - 重击反应
+- [ ] R03_Reaction_Parry - 弹刀反应
+- [ ] R04_Reaction_GuardBreak - 破防反应
+- [ ] R05_Reaction_Stagger - 硬直反应
+- [ ] R06_Reaction_Knockback - 击退反应
+
+**Cinematic 过场修改器 (C01-C05): 5个**
+- [ ] C01_Cinematic_Execution - 处决过场
+- [ ] C02_Cinematic_Backstab - 背刺过场
+- [ ] C03_Cinematic_Riposte - 致命一击过场
+- [ ] C04_Cinematic_BossIntro - Boss登场过场
+- [ ] C05_Cinematic_Death - 死亡过场
+
+**Zoom 缩放修改器 (Z01-Z04): 4个**
+- [ ] Z01_Zoom_Impact - 冲击缩放
+- [ ] Z02_Zoom_Charge - 蓄力缩放
+- [ ] Z03_Zoom_Skill - 技能缩放
+- [ ] Z04_Zoom_Dramatic - 戏剧性缩放
+
+**Effect 效果修改器 (E01-E03): 3个**
+- [ ] E01_Effect_LowHealth - 低血量效果
+- [ ] E02_Effect_Poison - 中毒效果
+- [ ] E03_Effect_Buff - 增益效果
+
+**Special 特殊修改器 (X01-X03): 3个**
+- [ ] X01_Special_SlowMotion - 慢动作
+- [ ] X02_Special_HitStop - 顿帧
+- [ ] X03_Special_DeathCam - 死亡相机
+
+---
+
+## Phase 5: 碰撞系统验证
+
+### 碰撞基础文件 (Camera/Collision/)
+- [ ] CameraCollisionBase. h/.cpp - 碰撞策略基类
+- [ ] CameraCollisionResolver.h/. cpp - 碰撞解算器
+
+### 碰撞策略实现文件 (Camera/Collision/)
+- [ ] CameraCollision_Detection.h/.cpp - 4个检测策略
+- [ ] CameraCollision_Response.h/.cpp - 5个响应策略
+- [ ] CameraCollision_Occlusion.h/. cpp - 4个遮挡策略
+- [ ] CameraCollision_Recovery.h/. cpp - 3个恢复策略
+- [ ] CameraCollision_Special.h/.cpp - 4个特殊策略
+
+### 20个碰撞策略清单
+
+**Detection 检测策略 (D01-D04): 4个**
+- [ ] D01_Detection_RayCast - 射线检测
+- [ ] D02_Detection_SphereSweep - 球体扫描
+- [ ] D03_Detection_MultiRay - 多射线检测
+- [ ] D04_Detection_Predictive - 预测检测
+
+**Response 响应策略 (RS01-RS05): 5个**
+- [ ] RS01_Response_PullIn - 拉近响应
+- [ ] RS02_Response_Slide - 滑动响应
+- [ ] RS03_Response_Rotate - 旋转响应
+- [ ] RS04_Response_Hybrid - 混合响应
+- [ ] RS05_Response_Soft - 软响应
+
+**Occlusion 遮挡策略 (OC01-OC04): 4个**
+- [ ] OC01_Occlusion_CharacterFade - 角色淡化
+- [ ] OC02_Occlusion_TargetVisibility - 目标可见性
+- [ ] OC03_Occlusion_TransparencyProbe - 透明探测
+- [ ] OC04_Occlusion_SmartReframe - 智能重构
+
+**Recovery 恢复策略 (RC01-RC03): 3个**
+- [ ] RC01_Recovery_Instant - 即时恢复
+- [ ] RC02_Recovery_Smooth - 平滑恢复
+- [ ] RC03_Recovery_Adaptive - 自适应恢复
+
+**Special 特殊策略 (SP01-SP04): 4个**
+- [ ] SP01_Special_TightSpace - 狭窄空间
+- [ ] SP02_Special_Water - 水体处理
+- [ ] SP03_Special_BossArena - Boss竞技场
+- [ ] SP04_Special_DynamicObstacle - 动态障碍
+
+---
+
+## Phase 6: 集成与工具验证
+
+### 蓝图接口 (Camera/Utility/)
+- [ ] SoulsCameraBlueprintLibrary.h/.cpp - 蓝图函数库
+
+### 调试工具 (Camera/Utility/)
+- [ ] SoulsCameraDebugComponent.h/.cpp - 调试组件
+
+### 预设配置 (Camera/Config/)
+- [ ] SoulsCameraPresets.h/.cpp - 预设配置
+
+### 测试工具 (Camera/Test/)
+- [ ] SoulsCameraTestActor.h/. cpp - 测试Actor
+
+---
+
+## 功能测试清单
+
+### 基础功能
+- [ ] 相机跟随角色移动
+- [ ] 相机响应玩家输入旋转
+- [ ] 距离动态调整（速度/战斗/目标大小）
+- [ ] FOV动态变化（速度/战斗/瞄准）
+
+### 状态切换（使用FName）
+- [ ] Exploration <-> Combat
+- [ ] Combat -> BossLockOn
+- [ ] 任意状态 -> Dialogue
+- [ ] 任意状态 -> Cinematic
+- [ ] 状态转换混合平滑
+
+### 锁定系统
+- [ ] 锁定普通目标
+- [ ] 锁定Boss目标
+- [ ] 目标切换
+- [ ] 解除锁定
+- [ ] 目标丢失处理
+
+### 修改器效果
+- [ ] 震动效果（轻/中/重）
+- [ ] 受击反应（拉近/震动）
+- [ ] 弹刀效果
+- [ ] 慢动作效果
+- [ ] 顿帧效果
+- [ ] 处决过场
+- [ ] 低血量效果
+
+### 碰撞系统
+- [ ] 墙壁碰撞拉近
+- [ ] 碰撞后平滑恢复
+- [ ] 角色遮挡淡化
+- [ ] 目标可见性保证
+- [ ] 狭窄空间处理
+- [ ] 水体碰撞处理
+
+---
+
+## 性能验证
+
+| 测试项 | 目标 | 结果 | 状态 |
+|--------|------|------|------|
+| 空闲帧率 | 60+ FPS | __ FPS | ☐ |
+| 碰撞检测开销 | < 0.5ms | __ ms | ☐ |
+| 修改器叠加(5个) | < 0.2ms | __ ms | ☐ |
+| 状态切换延迟 | < 1帧 | __ 帧 | ☐ |
+| 内存占用增量 | < 10MB | __ MB | ☐ |
+
+---
+
+## 代码质量检查
+
+- [ ] 所有UPROPERTY正确标记
+- [ ] 所有UFUNCTION正确标记
+- [ ] 无编译警告
+- [ ] 无内存泄漏
+- [ ] 空指针检查完善
+- [ ] 日志输出合理
+
+---
+
+## 蓝图兼容性
+
+- [ ] 所有公共函数在蓝图可见
+- [ ] 枚举在蓝图可选择
+- [ ] 结构体在蓝图可编辑
+- [ ] 调试组件可添加到Actor
+- [ ] 测试Actor可放置在关卡
+
+---
+
+## 验证签署
+
+| 项目 | 内容 |
+|------|------|
+| 验证人 | ________________ |
+| 验证日期 | ________________ |
+| 引擎版本 | UE 4.27.__ |
+| 验证结果 | ☐ 通过 / ☐ 需修复 |
+| 备注 | ________________ |
+
+---
+
+## 修复记录
+
+| 日期 | 问题 | 修复内容 | 验证人 |
+|------|------|----------|--------|
+| | | | |
+| | | | |
+| | | | |
+
+【输出要求】 输出完整的验证文档Markdown内容。
+
+
+## 📝 修改说明
+
+| 修改项 | 原始 | 修改后 |
+|--------|------|--------|
+| 项目代号 | 无 | 添加`MyProject` |
+| 文件路径 | 错误路径 | 正确路径（如Camera/Core/, Camera/Data/等）|
+| Pipeline阶段 | 旧命名 | 正确命名（InputGather, StateMachine等）|
+| 修改器命名 | 不一致 | 统一格式（S01_Shake_Light等）|
+| 碰撞策略数量 | 4+4+4+4+4=20 | 4+5+4+3+4=20（与实际一致）|
+| 碰撞策略前缀 | Det/Res/Occ/Rec/Spc | D/RS/OC/RC/SP（与枚举一致）|
+| 性能验证 | 简单列表 | 表格形式带目标值 |
+| 代码质量 | 无 | 新增代码质量检查部分 |
+| 蓝图兼容性 | 无 | 新增蓝图兼容性检查 |
+| 修复记录 | 无 | 新增修复记录表格 |
+| 中文说明 | 部分 | 所有模块/修改器/策略添加中文说明 |

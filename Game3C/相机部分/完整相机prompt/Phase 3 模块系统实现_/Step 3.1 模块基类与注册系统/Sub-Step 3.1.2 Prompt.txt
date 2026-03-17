@@ -1,0 +1,165 @@
+Sub-Step 3.1.2 Prompt
+
+================================================================================
+任务：创建CameraModuleBase. cpp - 模块抽象基类实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+实现模块基类的通用功能。
+
+【当前进度】
+Phase 3 Step 3.1 Sub-Step 3.1.2 (共190个Sub-Step中的第57个)
+前置完成：3.1.1 CameraModuleBase.h ✅
+
+【任务目标】
+创建文件：Source/[ProjectName]/Private/Camera/Modules/CameraModuleBase.cpp
+实现模块基类的通用功能和辅助方法。
+
+【⚠️ 编码格式要求 - CRITICAL】
+
+1. **文件编码：UTF-8 Without BOM（强制）**
+   - 创建文件后立即检查VS Code右下角编码
+   - 如果显示 "UTF-8 with BOM"，点击转换为 "UTF-8"
+   - 保存前再次确认
+
+2. **注释规范：所有注释必须使用英文（强制）**
+   - 禁止使用中文注释
+   - 参考标准：已完成的CameraModuleBase.h
+
+3. **命名替换：**
+   - 将 [ProjectName] 替换为实际项目名称（如 MyProject）
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModuleBase.cpp
+   - 注意：这是 Private/ 目录下的实现文件
+
+2. **文件结构要求：**
+
+**A. 头部Include：**
+- 版权声明：// Copyright Epic Games, Inc. All Rights Reserved. 
+- 包含头文件（按顺序）：
+  * #include "Camera/Modules/CameraModuleBase. h"
+  * #include "Camera/Core/SoulsCameraManager.h"
+
+**B. 构造函数实现：**
+- 使用初始化列表初始化3个成员变量：
+  * bIsActive = false
+  * bIsEnabled = true （默认启用）
+  * TimeSinceActivation = 0.0f
+- 构造函数体为空
+
+**C. 模块身份方法实现（4个）：**
+
+GetModuleName() 实现：
+- 返回类的FName：GetClass()->GetFName()
+- 添加注释：Default implementation returns the class name
+
+GetModuleDescription() 实现：
+- 使用 FString::Printf 格式化字符串
+- 格式：Module:  [模块名]
+- 添加注释：Default implementation returns generic description
+
+**D. 激活逻辑方法实现（1个）：**
+
+ShouldActivate() 实现：
+- 默认行为：返回 bIsEnabled
+- 添加注释说明：
+  * Default implementation:  activate if enabled
+  * Derived classes should override with specific activation conditions
+
+**E. 生命周期方法实现（3个）：**
+
+OnActivate() 实现：
+- 设置 bIsActive = true
+- 重置 TimeSinceActivation = 0.0f
+- 添加日志：UE_LOG(LogTemp, Verbose, TEXT("Module %s activated"), *GetModuleName().ToString())
+- 添加注释：Called when module becomes active
+
+OnDeactivate() 实现：
+- 设置 bIsActive = false
+- 添加日志：UE_LOG(LogTemp, Verbose, TEXT("Module %s deactivated"), *GetModuleName().ToString())
+- 添加注释：Called when module becomes inactive
+
+OnUpdate() 实现：
+- 如果 bIsActive 为 true，则累加 TimeSinceActivation += DeltaTime
+- 添加注释：Called each frame while active, updates activation timer
+
+**F. 辅助方法实现（4个）：**
+
+CreateBaseOutput() 实现：
+- 创建 FModuleOutput 结构体
+- 预填充以下字段：
+  * Priority = GetDefaultPriority()
+  * BlendPolicy = GetDefaultBlendPolicy()
+  * Weight = 1.0f
+- 使用 switch 语句映射 EModuleCategory 到 ECameraModuleCategory：
+  * Position → CategoryPosition
+  * Rotation → CategoryRotation
+  * Distance → CategoryDistance
+  * FOV → CategoryFOV
+  * Offset → CategoryOffset
+  * Constraint → CategoryConstraint
+  * default → CategoryNone
+- 返回填充好的 Output
+- 添加注释：Create pre-filled output with module identity
+
+GetInterpAlpha() 实现：
+- 如果 LagSpeed <= 0.0f，返回 1.0f（instant，无插值）
+- 否则使用公式：1. 0f - FMath::Exp(-LagSpeed * DeltaTime)
+- 使用 FMath::Clamp 限制结果在 0.0f 到 1.0f 之间
+- 添加注释：Calculate frame-rate independent interpolation alpha using exponential decay
+- 注意：这里使用**指数插值**而非原PROMPT中的线性插值（更平滑）
+
+GetOwnerActor() 实现：
+- 检查 Context.Manager 是否有效
+- 如果有效，返回 Context.Manager->GetOwner()
+- 否则返回 nullptr
+- 添加注释：Safely get owner actor from manager
+
+GetTargetActor() 实现：
+- 调用 Context.InputContext.GetTargetActor() 并返回
+- 添加注释：Safely get target actor from input context
+- 注意：直接使用 InputContext 的方法，该方法内部已处理有效性检查
+
+**G. 代码风格要求：**
+- 每个方法之间空一行
+- 使用 C++ 注释风格（//）
+- 方法实现前添加简短注释说明功能
+- 日志使用 LogTemp 类别，Verbose 级别
+- 指针判空后再访问
+
+【⚠️ 重要修正】
+
+原PROMPT中 GetInterpAlpha() 使用了线性插值：
+```cpp
+return FMath::Clamp(DeltaTime * LagSpeed, 0.0f, 1.0f);
+```
+
+但根据已生成的 CameraModuleBase.cpp 检查结果，应使用**指数插值**（更符合相机平滑运动）：
+```cpp
+return FMath:: Clamp(1.0f - FMath:: Exp(-LagSpeed * DeltaTime), 0.0f, 1.0f);
+```
+
+请使用指数插值实现。
+
+【验证标准】
+1. 编译通过（0 errors, 0 warnings）
+2. 文件编码为 UTF-8 Without BOM
+3. 所有注释为英文
+4. 所有方法实现完整
+5. 构造函数使用初始化列表
+6. 日志输出正确使用 UE_LOG 宏
+
+【注意事项】
+1. 这是Private目录下的.  cpp文件，对应Public目录下的.  h文件
+2. Include路径使用相对于Public目录的路径
+3. GetInterpAlpha() 必须使用指数插值公式
+4. GetTargetActor() 直接使用 InputContext. GetTargetActor() 方法
+5. 所有日志使用 Verbose 级别（便于调试但不会在正常游戏中显示）
+
+【输出要求】
+输出完整的CameraModuleBase.cpp文件代码。
+
+================================================================================

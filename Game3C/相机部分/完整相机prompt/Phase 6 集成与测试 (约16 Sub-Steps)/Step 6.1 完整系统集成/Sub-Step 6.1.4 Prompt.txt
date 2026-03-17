@@ -1,0 +1,209 @@
+Sub-Step 6.1.4 Prompt
+
+================================================================================
+任务：创建SoulsCameraManager完整的Tick更新流程
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+实现Manager的完整Tick流程，驱动整个相机系统。
+
+【当前进度】
+Phase 6 Step 6.1 Sub-Step 6.1.4 (共190个Sub-Step中的第178个)
+前置完成：6.1.3 运行时结构体更新
+
+【任务目标】
+更新文件：Source/[ProjectName]/Camera/Core/SoulsCameraManager.cpp
+实现完整的TickComponent更新流程。
+
+【具体要求】
+
+更新TickComponent函数为完整实现：
+
+void USoulsCameraManager::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+    Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+    if (! bIsInitialized)
+    {
+        return;
+    }
+
+    // Step 1: Build input context from game state
+    FCameraInputContext InputContext = BuildInputContext();
+
+    // Step 2: Update state machine
+    if (StateMachine)
+    {
+        StateMachine->Update(DeltaTime, InputContext);
+    }
+
+    // Step 3: Build execution context
+    FStageExecutionContext ExecutionContext;
+    ExecutionContext.DeltaTime = DeltaTime;
+    ExecutionContext.InputContext = InputContext;
+    ExecutionContext.Manager = this;
+    ExecutionContext.bIsFirstFrame = (FrameCounter == 0);
+    ExecutionContext.FrameCounter = FrameCounter;
+
+    // Initialize output with previous frame data
+    ExecutionContext.Output. FocusPoint = PreviousFocusPoint;
+    ExecutionContext.Output. Rotation = PreviousRotation;
+    ExecutionContext.Output.Distance = PreviousDistance;
+    ExecutionContext.Output.FOV = PreviousFOV;
+
+    // Step 4: Execute pipeline
+    if (Pipeline)
+    {
+        Pipeline->Execute(ExecutionContext);
+    }
+
+    // Step 5: Apply final output to camera
+    ApplyCameraOutput(ExecutionContext. Output);
+
+    // Step 6: Store for next frame
+    PreviousFocusPoint = ExecutionContext. Output.FocusPoint;
+    PreviousRotation = ExecutionContext.Output.Rotation;
+    PreviousDistance = ExecutionContext.Output.Distance;
+    PreviousFOV = ExecutionContext.Output.FOV;
+
+    // Step 7: Update frame counter
+    FrameCounter++;
+
+    // Debug logging (verbose)
+    UE_LOG(LogTemp, Verbose, TEXT("SoulsCameraManager Tick: State=%s, Distance=%.2f, FOV=%. 2f"),
+        *GetCurrentStateName().ToString(),
+        ExecutionContext.Output.Distance,
+        ExecutionContext.Output.FOV);
+}
+
+FCameraInputContext USoulsCameraManager::BuildInputContext()
+{
+    FCameraInputContext Context;
+
+    // Get owning pawn
+    APawn* OwnerPawn = nullptr;
+    AActor* Owner = GetOwner();
+    if (Owner)
+    {
+        OwnerPawn = Cast<APawn>(Owner);
+        if (! OwnerPawn)
+        {
+            // Owner might be a controller
+            AController* Controller = Cast<AController>(Owner);
+            if (Controller)
+            {
+                OwnerPawn = Controller->GetPawn();
+            }
+        }
+    }
+
+    if (OwnerPawn)
+    {
+        Context.CharacterActor = OwnerPawn;
+        Context.CharacterLocation = OwnerPawn->GetActorLocation();
+        Context.CharacterRotation = OwnerPawn->GetActorRotation();
+
+        // Get velocity
+        UPawnMovementComponent* MovementComp = OwnerPawn->GetMovementComponent();
+        if (MovementComp)
+        {
+            Context.CharacterVelocity = MovementComp->Velocity;
+            Context.CharacterSpeed = Context.CharacterVelocity. Size();
+            Context.bIsMoving = Context.CharacterSpeed > 10.0f;
+            Context.bIsInAir = MovementComp->IsFalling();
+        }
+
+        // Get character-specific state
+        ACharacter* Character = Cast<ACharacter>(OwnerPawn);
+        if (Character)
+        {
+            Context. bIsCrouching = Character->bIsCrouched;
+        }
+    }
+
+    // Get look input from player controller
+    APlayerController* PC = nullptr;
+    if (OwnerPawn)
+    {
+        PC = Cast<APlayerController>(OwnerPawn->GetController());
+    }
+
+    if (PC)
+    {
+        float LookX, LookY;
+        PC->GetInputMouseDelta(LookX, LookY);
+        Context.RawLookInput = FVector2D(LookX, LookY);
+        Context.LookInputMagnitude = Context.RawLookInput.Size();
+    }
+
+    // Target info (from game-specific system - placeholder)
+    Context.bHasTarget = bHasLockedTarget;
+    if (Context.bHasTarget && LockedTargetActor. IsValid())
+    {
+        Context.TargetActor = LockedTargetActor;
+        Context.TargetLocation = LockedTargetActor->GetActorLocation();
+        Context.TargetDistance = FVector:: Dist(Context.CharacterLocation, Context.TargetLocation);
+        
+        // Get target size from collision bounds
+        FVector Origin, Extent;
+        LockedTargetActor->GetActorBounds(false, Origin, Extent);
+        Context.TargetSize = Extent.Size();
+        
+        // Check if boss (from tag or interface)
+        Context.bTargetIsBoss = LockedTargetActor->ActorHasTag(FName("Boss"));
+    }
+
+    // Previous frame data
+    Context.PreviousCameraRotation = PreviousRotation;
+    Context.PreviousCameraLocation = PreviousFocusPoint - PreviousRotation. Vector() * PreviousDistance;
+
+    return Context;
+}
+
+void USoulsCameraManager::ApplyCameraOutput(const FCameraOutput& Output)
+{
+    // Calculate final camera transform
+    FVector CameraDirection = -Output. Rotation.Vector();
+    FVector CameraLocation = Output.FocusPoint + CameraDirection * Output.Distance;
+
+    // Apply socket offset
+    FVector RightVector = FRotationMatrix(Output.Rotation).GetUnitAxis(EAxis:: Y);
+    FVector UpVector = FVector:: UpVector;
+    CameraLocation += RightVector * Output.SocketOffset.Y;
+    CameraLocation += UpVector * Output.SocketOffset.Z;
+    CameraLocation += Output. Rotation.Vector() * Output.SocketOffset.X;
+
+    // Apply to owning camera (Spring Arm + Camera Component)
+    if (USpringArmComponent* SpringArm = GetSpringArmComponent())
+    {
+        SpringArm->TargetArmLength = Output. Distance;
+        SpringArm->SocketOffset = Output.SocketOffset;
+        SpringArm->SetWorldRotation(Output.Rotation);
+    }
+
+    if (UCameraComponent* Camera = GetCameraComponent())
+    {
+        Camera->FieldOfView = Output.FOV;
+    }
+
+    // Alternative:  Directly set camera if no spring arm
+    if (! GetSpringArmComponent())
+    {
+        if (UCameraComponent* Camera = GetCameraComponent())
+        {
+            Camera->SetWorldLocation(CameraLocation);
+            Camera->SetWorldRotation(Output.Rotation);
+            Camera->FieldOfView = Output.FOV;
+        }
+    }
+}
+
+【验证标准】
+- 编译通过
+- Tick流程完整执行所有阶段
+- 相机正确跟随角色
+
+【输出要求】
+输出完整的Tick相关函数代码。
+================================================================================

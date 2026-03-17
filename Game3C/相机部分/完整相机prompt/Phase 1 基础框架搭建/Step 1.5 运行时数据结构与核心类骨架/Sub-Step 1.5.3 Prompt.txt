@@ -1,0 +1,418 @@
+================================================================================
+任务：在SoulsCameraRuntimeTypes.  h中添加FModuleOutput和FModifierOutput结构体
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.       27 C++项目。
+FModuleOutput是单个模块的计算输出，在Stage 3收集。
+FModifierOutput是单个修改器的效果输出，在Stage 4应用。
+
+【当前进度】
+Phase 1 Step 1.5 Sub-Step 1.5. 3 (共190个Sub-Step中的第31个)
+前置完成：1. 5. 1 FCameraInputContext，1. 5.2 FSoulsCameraOutput
+
+【任务目标】
+在SoulsCameraRuntimeTypes.  h中添加FModuleOutput和FModifierOutput结构体。
+这些结构体用于模块和修改器的输出收集。
+
+【具体要求】
+
+1. 在FSoulsCameraOutput之后添加：
+
+```cpp
+//========================================
+// FModuleOutput - Single Module Output (Stage 3)
+//========================================
+/**
+ * Output from a single camera module
+ * Multiple module outputs are collected and blended in Stage 5
+ */
+USTRUCT(BlueprintType)
+struct FModuleOutput
+{
+    GENERATED_BODY()
+
+    //--- Module Identity ---
+    
+    /** Type of module that produced this output */
+    UPROPERTY(BlueprintReadOnly, Category = "Module")
+    ECameraModuleType ModuleType;
+
+    /** Module priority (higher = processed later, can override) */
+    UPROPERTY(BlueprintReadOnly, Category = "Module")
+    int32 Priority;
+
+    /** How this output blends with others */
+    UPROPERTY(BlueprintReadOnly, Category = "Module")
+    EBlendPolicy BlendPolicy;
+
+    /** Blend weight (0-1) */
+    UPROPERTY(BlueprintReadOnly, Category = "Module")
+    float Weight;
+
+    //--- Output Values (Optional - only set if module affects this) ---
+    
+    /** Position offset to apply */
+    UPROPERTY(BlueprintReadWrite, Category = "Output")
+    FVector PositionOffset;
+
+    /** Has valid position output */
+    UPROPERTY(BlueprintReadOnly, Category = "Output")
+    bool bHasPositionOutput;
+
+    /** Rotation to apply */
+    UPROPERTY(BlueprintReadWrite, Category = "Output")
+    FRotator RotationOutput;
+
+    /** Has valid rotation output */
+    UPROPERTY(BlueprintReadOnly, Category = "Output")
+    bool bHasRotationOutput;
+
+    /** Distance value or offset */
+    UPROPERTY(BlueprintReadWrite, Category = "Output")
+    float DistanceOutput;
+
+    /** Has valid distance output */
+    UPROPERTY(BlueprintReadOnly, Category = "Output")
+    bool bHasDistanceOutput;
+
+    /** Distance is multiplier (true) or absolute (false) */
+    UPROPERTY(BlueprintReadOnly, Category = "Output")
+    bool bDistanceIsMultiplier;
+
+    /** FOV value or offset */
+    UPROPERTY(BlueprintReadWrite, Category = "Output")
+    float FOVOutput;
+
+    /** Has valid FOV output */
+    UPROPERTY(BlueprintReadOnly, Category = "Output")
+    bool bHasFOVOutput;
+
+    /** Socket offset to apply */
+    UPROPERTY(BlueprintReadWrite, Category = "Output")
+    FVector SocketOffsetOutput;
+
+    /** Has valid socket offset output */
+    UPROPERTY(BlueprintReadOnly, Category = "Output")
+    bool bHasSocketOffsetOutput;
+
+    /** Constructor */
+    FModuleOutput()
+        : ModuleType(ECameraModuleType::None)
+        , Priority(0)
+        , BlendPolicy(EBlendPolicy::Blend)
+        , Weight(1.0f)
+        , PositionOffset(FVector:: ZeroVector)
+        , bHasPositionOutput(false)
+        , RotationOutput(FRotator::ZeroRotator)
+        , bHasRotationOutput(false)
+        , DistanceOutput(0.0f)
+        , bHasDistanceOutput(false)
+        , bDistanceIsMultiplier(false)
+        , FOVOutput(0.0f)
+        , bHasFOVOutput(false)
+        , SocketOffsetOutput(FVector::ZeroVector)
+        , bHasSocketOffsetOutput(false)
+    {}
+
+    /** Create output with position */
+    static FModuleOutput MakePosition(ECameraModuleType Type, const FVector& Position, int32 InPriority = 100, EBlendPolicy Policy = EBlendPolicy::Blend)
+    {
+        FModuleOutput Output;
+        Output.  ModuleType = Type;
+        Output. Priority = InPriority;
+        Output.  BlendPolicy = Policy;
+        Output.  PositionOffset = Position;
+        Output. bHasPositionOutput = true;
+        return Output;
+    }
+
+    /** Create output with rotation */
+    static FModuleOutput MakeRotation(ECameraModuleType Type, const FRotator& Rotation, int32 InPriority = 100, EBlendPolicy Policy = EBlendPolicy::Blend)
+    {
+        FModuleOutput Output;
+        Output.   ModuleType = Type;
+        Output. Priority = InPriority;
+        Output.  BlendPolicy = Policy;
+        Output.  RotationOutput = Rotation;
+        Output.bHasRotationOutput = true;
+        return Output;
+    }
+
+    /** Create output with distance */
+    static FModuleOutput MakeDistance(ECameraModuleType Type, float Distance, bool bIsMultiplier = false, int32 InPriority = 100, EBlendPolicy Policy = EBlendPolicy::Blend)
+    {
+        FModuleOutput Output;
+        Output.  ModuleType = Type;
+        Output. Priority = InPriority;
+        Output.  BlendPolicy = Policy;
+        Output.  DistanceOutput = Distance;
+        Output.bHasDistanceOutput = true;
+        Output.bDistanceIsMultiplier = bIsMultiplier;
+        return Output;
+    }
+
+    /** Create output with FOV */
+    static FModuleOutput MakeFOV(ECameraModuleType Type, float FOV, int32 InPriority = 100, EBlendPolicy Policy = EBlendPolicy::Additive)
+    {
+        FModuleOutput Output;
+        Output.ModuleType = Type;
+        Output.Priority = InPriority;
+        Output. BlendPolicy = Policy;
+        Output.   FOVOutput = FOV;
+        Output.bHasFOVOutput = true;
+        return Output;
+    }
+};
+
+//========================================
+// FModifierOutput - Single Modifier Output (Stage 4)
+//========================================
+/**
+ * Output from a single camera modifier
+ * Modifiers are temporary effects that overlay on the base camera
+ */
+USTRUCT(BlueprintType)
+struct FModifierOutput
+{
+    GENERATED_BODY()
+
+    //--- Modifier Identity ---
+    
+    /** Type of modifier that produced this output */
+    UPROPERTY(BlueprintReadOnly, Category = "Modifier")
+    ECameraModifierType ModifierType;
+
+    /** Current modifier state */
+    UPROPERTY(BlueprintReadOnly, Category = "Modifier")
+    EModifierState State;
+
+    /** Current blend weight (0-1, varies with lifecycle) */
+    UPROPERTY(BlueprintReadOnly, Category = "Modifier")
+    float CurrentWeight;
+
+    /** Time remaining in this modifier */
+    UPROPERTY(BlueprintReadOnly, Category = "Modifier")
+    float TimeRemaining;
+
+    //--- Transform Effects ---
+    
+    /** Position shake/offset */
+    UPROPERTY(BlueprintReadWrite, Category = "Effect")
+    FVector PositionEffect;
+
+    /** Rotation shake/offset */
+    UPROPERTY(BlueprintReadWrite, Category = "Effect")
+    FRotator RotationEffect;
+
+    /** Distance offset */
+    UPROPERTY(BlueprintReadWrite, Category = "Effect")
+    float DistanceEffect;
+
+    /** FOV offset */
+    UPROPERTY(BlueprintReadWrite, Category = "Effect")
+    float FOVEffect;
+
+    //--- Post Process Effects ---
+    
+    /** Vignette intensity addition */
+    UPROPERTY(BlueprintReadWrite, Category = "PostProcess")
+    float VignetteEffect;
+
+    /** Color tint effect */
+    UPROPERTY(BlueprintReadWrite, Category = "PostProcess")
+    FLinearColor ColorTintEffect;
+
+    /** Saturation multiplier (1 = normal) */
+    UPROPERTY(BlueprintReadWrite, Category = "PostProcess")
+    float SaturationEffect;
+
+    //--- Special Effects ---
+    
+    /** Time dilation effect (1 = normal speed) */
+    UPROPERTY(BlueprintReadWrite, Category = "Special")
+    float TimeDilationEffect;
+
+    /** Should override camera completely (cinematic) */
+    UPROPERTY(BlueprintReadOnly, Category = "Special")
+    bool bOverrideCamera;
+
+    /** Override camera transform (only if bOverrideCamera) */
+    UPROPERTY(BlueprintReadWrite, Category = "Special")
+    FTransform OverrideTransform;
+
+    /** Constructor */
+    FModifierOutput()
+        : ModifierType(ECameraModifierType::None)
+        , State(EModifierState:: Inactive)
+        , CurrentWeight(0.0f)
+        , TimeRemaining(0.0f)
+        , PositionEffect(FVector::ZeroVector)
+        , RotationEffect(FRotator::ZeroRotator)
+        , DistanceEffect(0.0f)
+        , FOVEffect(0.0f)
+        , VignetteEffect(0.0f)
+        , ColorTintEffect(FLinearColor:: White)
+        , SaturationEffect(1.0f)
+        , TimeDilationEffect(1.0f)
+        , bOverrideCamera(false)
+        , OverrideTransform(FTransform::Identity)
+    {}
+
+    /** Check if modifier is currently active */
+    FORCEINLINE bool IsActive() const
+    {
+        return State != EModifierState::Inactive && CurrentWeight > 0.0f;
+    }
+
+    /** Check if this is a camera override modifier */
+    FORCEINLINE bool IsOverride() const
+    {
+        return bOverrideCamera && IsActive();
+    }
+};
+```
+
+2. 代码风格：
+   - FModuleOutput提供静态工厂方法便于创建
+   - bHas*Output标记哪些输出是有效的
+   - FModifierOutput包含完整的效果类型
+   - 提供IsActive()和IsOverride()辅助函数
+
+【验证标准】
+- 编译通过
+- 可创建FModuleOutput和FModifierOutput实例
+- 静态工厂方法可正常调用
+
+【注意事项】
+- 添加在FSoulsCameraOutput之后
+- 依赖SoulsCameraTypes.h中的枚举
+
+【输出要求】
+输出FModuleOutput和FModifierOutput两个结构体代码块。
+
+================================================================================
+                        上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+```
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：Sub-Step 1.5.3 FModuleOutput和FModifierOutput结构体
+- 完成进度：[X/2] 结构体 或 [百分比]
+- 中断位置：[具体说明在哪里中断，例如：完成FModuleOutput，FModifierOutput进行中]
+
+【已完成内容】
+- [列出已完成的结构体]
+- [列出已完成的成员变量和函数]
+
+【未完成内容】
+- [列出剩余结构体]
+- [列出剩余成员变量和函数]
+
+【已生成代码保存提示】
+请将上方已生成的代码添加到SoulsCameraRuntimeTypes.h中FSoulsCameraOutput之后，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Phase 1 Step 1.5 Sub-Step 1.5.3 续接任务。
+创建FModuleOutput和FModifierOutput运行时结构体。
+
+【前置完成】
+- Step 1.1-1.4 所有参数结构体和配置 ✅
+- Sub-Step 1.5.1 FCameraInputContext ✅
+- Sub-Step 1.5.2 FSoulsCameraOutput ✅
+- Sub-Step 1.5.3 部分完成：
+  - [列出已完成的结构体] ✅
+
+【续接任务】
+继续完成SoulsCameraRuntimeTypes.h文件：
+- [列出剩余结构体及其成员]
+
+【已有代码上下文】
+文件：SoulsCameraRuntimeTypes.h
+已有结构体：FCameraInputContext, FSoulsCameraOutput, [已完成的结构体]
+
+【FModuleOutput成员清单（共16个 + 4个静态工厂方法）】
+Module Identity (4个)：
+- ModuleType, Priority, BlendPolicy, Weight
+
+Output Values (12个)：
+- PositionOffset, bHasPositionOutput
+- RotationOutput, bHasRotationOutput
+- DistanceOutput, bHasDistanceOutput, bDistanceIsMultiplier
+- FOVOutput, bHasFOVOutput
+- SocketOffsetOutput, bHasSocketOffsetOutput
+
+静态工厂方法 (4个)：
+- MakePosition(), MakeRotation(), MakeDistance(), MakeFOV()
+
+【FModifierOutput成员清单（共14个 + 2个辅助函数）】
+Modifier Identity (4个)：
+- ModifierType, State, CurrentWeight, TimeRemaining
+
+Transform Effects (4个)：
+- PositionEffect, RotationEffect, DistanceEffect, FOVEffect
+
+PostProcess Effects (3个)：
+- VignetteEffect, ColorTintEffect, SaturationEffect
+
+Special Effects (3个)：
+- TimeDilationEffect, bOverrideCamera, OverrideTransform
+
+辅助函数 (2个)：
+- IsActive(), IsOverride()
+
+【依赖枚举（来自SoulsCameraTypes.h）】
+- ECameraModuleType
+- EBlendPolicy
+- ECameraModifierType
+- EModifierState
+
+【输出要求】
+继续生成剩余代码，完成Sub-Step 1.5.3的所有结构体。
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。如再次达到限制，请再次生成交接信息。
+
+---结束复制---
+
+================================================================================
+```
+
+【交接信息要求】
+1. 交接PROMPT必须是**完全自包含**的，新对话无需任何额外信息即可继续
+2. 包含所有必要的**代码上下文**（关键结构体定义、依赖关系等）
+3. 明确标注**中断位置**和**剩余任务**
+4. 标明目标文件：SoulsCameraRuntimeTypes.h
+5. 本Sub-Step包含两个结构体，需明确标注各自完成状态
+6. 包含完整成员清单（FModuleOutput:  16个成员+4个工厂方法，FModifierOutput:  14个成员+2个辅助函数）
+7. 列出依赖的枚举类型
+
+================================================================================

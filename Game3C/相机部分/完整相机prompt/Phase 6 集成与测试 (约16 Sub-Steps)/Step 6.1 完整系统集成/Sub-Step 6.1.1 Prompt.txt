@@ -1,0 +1,373 @@
+Sub-Step 6.1.1 Prompt
+
+================================================================================
+任务：验证并更新CameraStateEnums.h - 确保所有枚举值完整
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4. 27 C++项目。
+Phase 5完成后，需要验证枚举定义是否与实际实现的策略数量匹配。
+
+【当前进度】
+Phase 6 Step 6. 1 Sub-Step 6.1.1 (共190个Sub-Step中的第175个)
+前置完成：Phase 1-5 全部完成
+
+【任务目标】
+验证并更新文件：`Source/MyProject/Public/Camera/Data/CameraStateEnums.h`
+确保枚举值与实际实现的模块/修改器/策略数量一致。
+
+【⚠️ 重要说明】
+
+1. **使用正确的枚举名称和文件：**
+   - 文件：`CameraStateEnums. h`（不是SoulsCameraTypes.h）
+   - ✅ `ECameraModuleID`（不是ECameraModuleType）
+   - ✅ `ECameraModifierID`（不是ECameraModifierType）
+   - ✅ `ECollisionStrategyID`（不是ECameraCollisionType）
+
+2. **实际实现数量：**
+   - 模块：39个 (P01-P08, R01-R09, D01-D07, F01-F06, O01-O05, C01-C04)
+   - 修改器：26个 (S01-S05, H01-H06, C01-C05, Z01-Z04, E01-E03, X01-X03)
+   - 碰撞策略：20个 (D01-D04, RS01-RS05, OC01-OC04, RC01-RC03, SP01-SP04)
+
+3. **本Sub-Step不创建新文件，仅验证和更新现有文件。**
+
+4. **编码格式：UTF-8 Without BOM，所有注释英文。**
+
+【具体要求】
+
+---
+
+## 第一步：检查文件存在性
+
+确认文件存在：
+```
+Source/MyProject/Public/Camera/Data/CameraStateEnums.h
+```
+
+如果不存在，报告位置并停止。
+
+---
+
+## 第二步：验证 ECameraModuleID 枚举（39个模块）
+
+**确保包含以下所有39个模块（8+9+7+6+5+4=39）：**
+
+```cpp
+UENUM(BlueprintType)
+enum class ECameraModuleID : uint8
+{
+    None = 0 UMETA(DisplayName = "None"),
+
+    //========================================
+    // Position Modules (P01-P08) - 8个
+    //========================================
+    Module_P01_Position_FollowTarget UMETA(DisplayName = "P01: Follow Target"),
+    Module_P02_Position_FollowLagged UMETA(DisplayName = "P02: Follow Target Lagged"),
+    Module_P03_Position_FollowPredictive UMETA(DisplayName = "P03: Follow Target Predictive"),
+    Module_P04_Position_OrbitLockOn UMETA(DisplayName = "P04: Orbit Lock-On"),
+    Module_P05_Position_OrbitBoss UMETA(DisplayName = "P05: Orbit Boss"),
+    Module_P06_Position_FixedPoint UMETA(DisplayName = "P06: Fixed Point"),
+    Module_P07_Position_SplineFollow UMETA(DisplayName = "P07: Spline Follow"),
+    Module_P08_Position_MidPointTwoTarget UMETA(DisplayName = "P08: Mid-Point Two Target"),
+
+    //========================================
+    // Rotation Modules (R01-R09) - 9个
+    //========================================
+    Module_R01_Rotation_PlayerInputFree UMETA(DisplayName = "R01: Player Input Free"),
+    Module_R02_Rotation_PlayerInputLagged UMETA(DisplayName = "R02: Player Input Lagged"),
+    Module_R03_Rotation_LookAtTarget UMETA(DisplayName = "R03: Look At Target"),
+    Module_R04_Rotation_LookAtTargetSoft UMETA(DisplayName = "R04: Look At Target Soft"),
+    Module_R05_Rotation_LookAtBoss UMETA(DisplayName = "R05: Look At Boss"),
+    Module_R06_Rotation_AutoOrientMovement UMETA(DisplayName = "R06: Auto Orient Movement"),
+    Module_R07_Rotation_AutoOrientDelayed UMETA(DisplayName = "R07: Auto Orient Delayed"),
+    Module_R08_Rotation_LookAtPoint UMETA(DisplayName = "R08: Look At Point"),
+    Module_R09_Rotation_SplineRotation UMETA(DisplayName = "R09: Spline Rotation"),
+
+    //========================================
+    // Distance Modules (D01-D07) - 7个
+    //========================================
+    Module_D01_Distance_Base UMETA(DisplayName = "D01: Base Distance"),
+    Module_D02_Distance_TargetSizeMultiplier UMETA(DisplayName = "D02: Target Size Multiplier"),
+    Module_D03_Distance_SpeedOffset UMETA(DisplayName = "D03: Speed Offset"),
+    Module_D04_Distance_CombatAdjust UMETA(DisplayName = "D04: Combat Adjust"),
+    Module_D05_Distance_EnvironmentLimit UMETA(DisplayName = "D05: Environment Limit"),
+    Module_D06_Distance_ProximityAdjust UMETA(DisplayName = "D06: Proximity Adjust"),
+    Module_D07_Distance_BossPhase UMETA(DisplayName = "D07: Boss Phase"),
+
+    //========================================
+    // FOV Modules (F01-F06) - 6个
+    //========================================
+    Module_F01_FOV_Base UMETA(DisplayName = "F01: Base FOV"),
+    Module_F02_FOV_Speed UMETA(DisplayName = "F02: Speed FOV"),
+    Module_F03_FOV_Aim UMETA(DisplayName = "F03: Aim FOV"),
+    Module_F04_FOV_Combat UMETA(DisplayName = "F04: Combat FOV"),
+    Module_F05_FOV_Boss UMETA(DisplayName = "F05: Boss FOV"),
+    Module_F06_FOV_Impact UMETA(DisplayName = "F06: Impact FOV"),
+
+    //========================================
+    // Offset Modules (O01-O05) - 5个
+    //========================================
+    Module_O01_Offset_SocketBase UMETA(DisplayName = "O01: Socket Offset Base"),
+    Module_O02_Offset_Shoulder UMETA(DisplayName = "O02: Shoulder Offset"),
+    Module_O03_Offset_ShoulderSwitch UMETA(DisplayName = "O03: Shoulder Switch"),
+    Module_O04_Offset_Crouch UMETA(DisplayName = "O04: Crouch Offset"),
+    Module_O05_Offset_Mount UMETA(DisplayName = "O05: Mount Offset"),
+
+    //========================================
+    // Constraint Modules (C01-C04) - 4个
+    //========================================
+    Module_C01_Constraint_PitchClamp UMETA(DisplayName = "C01: Pitch Clamp"),
+    Module_C02_Constraint_DistanceClamp UMETA(DisplayName = "C02: Distance Clamp"),
+    Module_C03_Constraint_FOVClamp UMETA(DisplayName = "C03: FOV Clamp"),
+    Module_C04_Constraint_VisibilityEnsure UMETA(DisplayName = "C04: Visibility Ensure"),
+
+    MAX UMETA(Hidden)
+};
+```
+
+---
+
+## 第三步：验证 ECameraModifierID 枚举（26个修改器）
+
+**确保包含以下所有26个修改器（5+6+5+4+3+3=26）：**
+
+```cpp
+UENUM(BlueprintType)
+enum class ECameraModifierID : uint8
+{
+    None = 0 UMETA(DisplayName = "None"),
+
+    //========================================
+    // Shake Modifiers (S01-S05) - 5个
+    //========================================
+    Modifier_S01_Shake_HitLight UMETA(DisplayName = "S01: Hit Shake Light"),
+    Modifier_S02_Shake_HitHeavy UMETA(DisplayName = "S02: Hit Shake Heavy"),
+    Modifier_S03_Shake_Attack UMETA(DisplayName = "S03: Attack Shake"),
+    Modifier_S04_Shake_Land UMETA(DisplayName = "S04: Land Shake"),
+    Modifier_S05_Shake_Environment UMETA(DisplayName = "S05: Environment Shake"),
+
+    //========================================
+    // Hit Reaction Modifiers (H01-H06) - 6个
+    //========================================
+    Modifier_H01_React_Parry UMETA(DisplayName = "H01: Parry React"),
+    Modifier_H02_React_Stagger UMETA(DisplayName = "H02: Stagger React"),
+    Modifier_H03_React_Knockback UMETA(DisplayName = "H03: Knockback React"),
+    Modifier_H04_React_GuardBreak UMETA(DisplayName = "H04: Guard Break React"),
+    Modifier_H05_React_Counter UMETA(DisplayName = "H05: Counter React"),
+    Modifier_H06_React_Dodge UMETA(DisplayName = "H06: Dodge React"),
+
+    //========================================
+    // Cinematic Modifiers (C01-C05) - 5个
+    //========================================
+    Modifier_C01_Cinematic_Execution UMETA(DisplayName = "C01: Execution"),
+    Modifier_C02_Cinematic_Backstab UMETA(DisplayName = "C02: Backstab"),
+    Modifier_C03_Cinematic_Riposte UMETA(DisplayName = "C03: Riposte"),
+    Modifier_C04_Cinematic_BossIntro UMETA(DisplayName = "C04: Boss Intro"),
+    Modifier_C05_Cinematic_BossPhaseChange UMETA(DisplayName = "C05: Boss Phase Change"),
+
+    //========================================
+    // Zoom Modifiers (Z01-Z04) - 4个
+    //========================================
+    Modifier_Z01_Zoom_AttackImpact UMETA(DisplayName = "Z01: Attack Impact Zoom"),
+    Modifier_Z02_Zoom_ChargeRelease UMETA(DisplayName = "Z02: Charge Release Zoom"),
+    Modifier_Z03_Zoom_SkillActivate UMETA(DisplayName = "Z03: Skill Activate Zoom"),
+    Modifier_Z04_Zoom_Dramatic UMETA(DisplayName = "Z04: Dramatic Zoom"),
+
+    //========================================
+    // Effect Modifiers (E01-E03) - 3个
+    //========================================
+    Modifier_E01_Effect_LowHealth UMETA(DisplayName = "E01: Low Health Effect"),
+    Modifier_E02_Effect_StatusAilment UMETA(DisplayName = "E02: Status Ailment Effect"),
+    Modifier_E03_Effect_Environment UMETA(DisplayName = "E03: Environment Effect"),
+
+    //========================================
+    // Special Modifiers (X01-X03) - 3个
+    //========================================
+    Modifier_X01_Special_SlowMotion UMETA(DisplayName = "X01: Slow Motion"),
+    Modifier_X02_Special_HitStop UMETA(DisplayName = "X02: Hit Stop"),
+    Modifier_X03_Special_DeathCam UMETA(DisplayName = "X03: Death Cam"),
+
+    MAX UMETA(Hidden)
+};
+```
+
+---
+
+## 第四步：验证 ECollisionStrategyID 枚举（20个碰撞策略）
+
+**确保包含以下所有20个策略（4+5+4+3+4=20）：**
+
+```cpp
+UENUM(BlueprintType)
+enum class ECollisionStrategyID : uint8
+{
+    CollisionNone = 0 UMETA(DisplayName = "None"),
+
+    //========================================
+    // Detection Strategies (D01-D04) - 4个
+    //========================================
+    Collision_D01_SingleRay UMETA(DisplayName = "D01: Single Ray"),
+    Collision_D02_SphereSweep UMETA(DisplayName = "D02: Sphere Sweep"),
+    Collision_D03_MultiRay UMETA(DisplayName = "D03: Multi Ray"),
+    Collision_D04_MultiSphereSweep UMETA(DisplayName = "D04: Multi Sphere Sweep"),
+
+    //========================================
+    // Response Strategies (RS01-RS05) - 5个
+    //========================================
+    Collision_RS01_PullIn UMETA(DisplayName = "RS01: Pull In"),
+    Collision_RS02_Slide UMETA(DisplayName = "RS02: Slide"),
+    Collision_RS03_Orbit UMETA(DisplayName = "RS03: Orbit"),
+    Collision_RS04_FOVCompensate UMETA(DisplayName = "RS04: FOV Compensate"),
+    Collision_RS05_InstantSnap UMETA(DisplayName = "RS05: Instant Snap"),
+
+    //========================================
+    // Occlusion Strategies (OC01-OC04) - 4个
+    //========================================
+    Collision_OC01_FadeOut UMETA(DisplayName = "OC01: Fade Out"),
+    Collision_OC02_Hide UMETA(DisplayName = "OC02: Hide"),
+    Collision_OC03_PullInFurther UMETA(DisplayName = "OC03: Pull In Further"),
+    Collision_OC04_DitherFade UMETA(DisplayName = "OC04: Dither Fade"),
+
+    //========================================
+    // Recovery Strategies (RC01-RC03) - 3个
+    //========================================
+    Collision_RC01_DelayedRecovery UMETA(DisplayName = "RC01: Delayed Recovery"),
+    Collision_RC02_SmoothRecovery UMETA(DisplayName = "RC02: Smooth Recovery"),
+    Collision_RC03_StepRecovery UMETA(DisplayName = "RC03: Step Recovery"),
+
+    //========================================
+    // Special Strategies (SP01-SP04) - 4个
+    //========================================
+    Collision_SP01_TightSpace UMETA(DisplayName = "SP01: Tight Space"),
+    Collision_SP02_LowCeiling UMETA(DisplayName = "SP02: Low Ceiling"),
+    Collision_SP03_CliffEdge UMETA(DisplayName = "SP03: Cliff Edge"),
+    Collision_SP04_CornerCase UMETA(DisplayName = "SP04: Corner Case"),
+
+    MAX UMETA(Hidden)
+};
+```
+
+---
+
+## 第五步：验证辅助枚举
+
+确保以下枚举存在且完整：
+
+### ECollisionCategory
+```cpp
+UENUM(BlueprintType)
+enum class ECollisionCategory : uint8
+{
+    None = 0 UMETA(DisplayName = "None"),
+    Detection UMETA(DisplayName = "Detection"),
+    Response UMETA(DisplayName = "Response"),
+    Occlusion UMETA(DisplayName = "Occlusion"),
+    Recovery UMETA(DisplayName = "Recovery"),
+    Special UMETA(DisplayName = "Special")
+};
+```
+
+### ECameraModuleCategory
+```cpp
+UENUM(BlueprintType)
+enum class ECameraModuleCategory : uint8
+{
+    None = 0 UMETA(DisplayName = "None"),
+    Position UMETA(DisplayName = "Position"),
+    Rotation UMETA(DisplayName = "Rotation"),
+    Distance UMETA(DisplayName = "Distance"),
+    FOV UMETA(DisplayName = "FOV"),
+    Offset UMETA(DisplayName = "Offset"),
+    Constraint UMETA(DisplayName = "Constraint")
+};
+```
+
+### ECameraModifierCategory
+```cpp
+UENUM(BlueprintType)
+enum class ECameraModifierCategory : uint8
+{
+    None = 0 UMETA(DisplayName = "None"),
+    Shake UMETA(DisplayName = "Shake"),
+    Reaction UMETA(DisplayName = "Reaction"),
+    Cinematic UMETA(DisplayName = "Cinematic"),
+    Zoom UMETA(DisplayName = "Zoom"),
+    Effect UMETA(DisplayName = "Effect"),
+    Special UMETA(DisplayName = "Special")
+};
+```
+
+---
+
+【验证标准】
+
+1. **枚举数量：**
+   - [ ] ECameraModuleID:  39个模块 + None + MAX = 41个枚举值
+   - [ ] ECameraModifierID: 26个修改器 + None + MAX = 28个枚举值
+   - [ ] ECollisionStrategyID: 20个策略 + CollisionNone + MAX = 22个枚举值
+
+2. **命名一致性：**
+   - [ ] Module枚举使用 `Module_` 前缀
+   - [ ] Modifier枚举使用 `Modifier_` 前缀
+   - [ ] Collision枚举使用 `Collision_` 前缀
+   - [ ] 所有枚举值有 UMETA(DisplayName)
+
+3. **编译验证：**
+   - [ ] 编译通过（0 errors）
+   - [ ] 无重复定义警告
+
+---
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 6.1.1 完成报告
+================================================================================
+
+【验证结果】
+
+文件位置：
+Source/MyProject/Public/Camera/Data/CameraStateEnums. h
+
+【ECameraModuleID】
+- 当前数量：[数量]
+- 预期数量：39
+- 状态：[✅ 正确 / ⚠️ 需要更新]
+- 缺失项：[如果有，列出]
+- 多余项：[如果有，列出]
+
+【ECameraModifierID】
+- 当前数量：[数量]
+- 预期数量：26
+- 状态：[✅ 正确 / ⚠️ 需要更新]
+- 缺失项：[如果有，列出]
+- 多余项：[如果有，列出]
+
+【ECollisionStrategyID】
+- 当前数量：[数量]
+- 预期数量：20
+- 状态：[✅ 正确 / ⚠️ 需要更新]
+- 缺失项：[如果有，列出]
+- 多余项：[如果有，列出]
+
+【辅助枚举】
+- ECollisionCategory: [✅ 正确 / ⚠️ 需要更新 / ❌ 不存在]
+- ECameraModuleCategory: [✅ 正确 / ⚠️ 需要更新 / ❌ 不存在]
+- ECameraModifierCategory:  [✅ 正确 / ⚠️ 需要更新 / ❌ 不存在]
+
+【更新内容】
+[如果有更新，列出具体添加/修改的枚举值]
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【最终状态】
+✅ 所有枚举定义完整且一致 / ⚠️ 部分需要更新
+
+================================================================================
+```
+
+================================================================================

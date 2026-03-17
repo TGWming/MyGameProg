@@ -1,0 +1,521 @@
+Sub-Step 4.2.2 Prompt
+
+================================================================================
+任务：创建CameraModifier_Shake.  cpp - ShakeBase基类实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.  27 C++项目。
+实现Shake修改器的基类，提供通用抖动功能。
+这是所有5个Shake修改器共享的核心实现。
+
+【ShakeBase职责】
+```
+UCameraModifier_ShakeBase职责：
+
+1. 抖动生成
+   ├─ 使用Perlin噪声生成自然抖动
+   ├─ 支持位置抖动（X, Y, Z）
+   └─ 支持旋转抖动（Pitch, Yaw, Roll）
+
+2. 参数管理
+   ├─ 抖动幅度（位置/旋转）
+   ├─ 抖动频率
+   └─ 随机种子（每次触发不同）
+
+3. 方向性支持
+   └─ 可选的方向偏移（受击方向）
+
+4. 效果计算
+   └─ 在ComputeEffect中生成抖动效果值
+```
+
+【当前进度】
+Phase 4 Step 4.  2 Sub-Step 4.2.2 (共190个Sub-Step中的第113个)
+前置完成：4. 2.1 CameraModifier_Shake.  h ✅
+
+【任务目标】
+创建文件：Source/[ProjectName]/Private/Camera/Modifiers/CameraModifier_Shake.  cpp
+本Sub-Step实现文件框架和ShakeBase基类。
+
+【⚠️ 重要提醒】
+
+1. **必须Regenerate：**
+   本Sub-Step创建新的.   cpp文件。
+   创建文件后：
+   - 保存所有文件
+   - 右键.  uproject → Generate Visual Studio project files
+   - 重新加载解决方案
+   - 然后编译
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **本Sub-Step只实现ShakeBase：**
+   S01-S05的具体实现在后续Sub-Step中添加。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modifiers/CameraModifier_Shake.cpp
+
+2. **完整文件内容：**
+
+```cpp
+// Copyright Epic Games, Inc.   All Rights Reserved.  
+
+#include "Camera/Modifiers/CameraModifier_Shake.h"
+#include "Camera/Core/SoulsCameraManager.h"
+
+/**
+ * CameraModifier_Shake.  cpp
+ * 
+ * This file contains the implementations of the Shake modifier base class
+ * and all 5 Shake modifiers (S01-S05).
+ * 
+ * Shake modifiers use Perlin noise to generate organic camera shake effects.
+ * The base class provides common shake generation functionality, while
+ * derived classes configure specific parameters for different use cases.
+ * 
+ * Implementation Structure:
+ * - ShakeBase: Common shake generation (this Sub-Step)
+ * - S01-S02: Hit shakes (Sub-Step 4.2.3)
+ * - S03-S05: Attack, Landing, Environment shakes (Sub-Step 4.2.4)
+ */
+
+
+//========================================
+// ShakeBase - Common Shake Functionality
+//========================================
+
+/**
+ * Constructor - Initialize default shake parameters
+ * 
+ * Default values are moderate and suitable for most shakes.
+ * Derived classes will override these in their constructors.
+ */
+UCameraModifier_ShakeBase:: UCameraModifier_ShakeBase()
+	: PositionAmplitude(5.0f)
+	, RotationAmplitude(1.0f)
+	, ShakeFrequency(25.0f)
+	, bApplyPositionShake(true)
+	, bApplyRotationShake(true)
+	, RandomSeed(0.0f)
+	, ShakeTime(0.0f)
+	, HitDirection(FVector:: ZeroVector)
+	, DirectionalBias(0.0f)
+{
+}
+
+/**
+ * OnTriggered - Reset shake state when triggered
+ * 
+ * Generates a new random seed for variation and resets timing.  
+ * Also caches hit direction from trigger data for directional shakes.  
+ */
+void UCameraModifier_ShakeBase:: OnTriggered(const FModifierTriggerData& InTriggerData)
+{
+	// Call parent
+	Super::OnTriggered(InTriggerData);
+	
+	// Reset shake time
+	ShakeTime = 0.0f;
+	
+	// Generate new random seed for this shake instance
+	// This ensures each trigger produces a unique shake pattern
+	RandomSeed = FMath::FRand() * 1000.0f;
+	
+	// Cache hit direction for directional bias (if provided)
+	if (!InTriggerData.  SourceDirection.IsNearlyZero())
+	{
+		HitDirection = InTriggerData. SourceDirection.  GetSafeNormal();
+	}
+	else
+	{
+		HitDirection = FVector::ZeroVector;
+	}
+}
+
+/**
+ * ComputeEffect - Generate shake effect values each frame
+ * 
+ * This is the core shake computation.  It: 
+ * 1. Accumulates shake time
+ * 2. Calculates effective amplitude (weight * intensity)
+ * 3. Generates position shake using Perlin noise
+ * 4. Generates rotation shake using Perlin noise
+ * 5. Applies directional bias if configured
+ * 
+ * The generated values are stored in PositionEffect and RotationEffect,
+ * which will be applied (with weight) in GetOutput().
+ */
+void UCameraModifier_ShakeBase::  ComputeEffect(float DeltaTime, const FStageExecutionContext& Context)
+{
+	// Accumulate shake time for noise sampling
+	ShakeTime += DeltaTime;
+	
+	// Calculate effective amplitude based on current weight and intensity
+	float EffectiveAmp = GetEffectiveAmplitude();
+	
+	// Skip computation if amplitude is negligible
+	if (EffectiveAmp < KINDA_SMALL_NUMBER)
+	{
+		PositionEffect = FVector::ZeroVector;
+		RotationEffect = FRotator::ZeroRotator;
+		return;
+	}
+	
+	// Generate position shake
+	if (bApplyPositionShake)
+	{
+		FVector BasePositionShake = GeneratePositionShake(
+			ShakeTime, 
+			ShakeFrequency, 
+			PositionAmplitude * EffectiveAmp
+		);
+		
+		// Apply directional bias if configured and direction is valid
+		if (DirectionalBias > 0.0f && ! HitDirection.IsNearlyZero())
+		{
+			PositionEffect = ApplyDirectionalBias(BasePositionShake, HitDirection, DirectionalBias);
+		}
+		else
+		{
+			PositionEffect = BasePositionShake;
+		}
+	}
+	else
+	{
+		PositionEffect = FVector::  ZeroVector;
+	}
+	
+	// Generate rotation shake
+	if (bApplyRotationShake)
+	{
+		RotationEffect = GenerateRotationShake(
+			ShakeTime, 
+			ShakeFrequency, 
+			RotationAmplitude * EffectiveAmp
+		);
+	}
+	else
+	{
+		RotationEffect = FRotator:: ZeroRotator;
+	}
+}
+
+/**
+ * GeneratePositionShake - Generate position offset using Perlin noise
+ * 
+ * Uses three separate Perlin noise samples for X, Y, Z axes. 
+ * Each axis has a slightly different frequency multiplier and offset
+ * to prevent synchronized/repetitive motion.
+ * 
+ * Z (vertical) shake is reduced by 50% for a more natural feel,
+ * as excessive vertical shake can be disorienting.
+ * 
+ * @param Time Current shake time
+ * @param Frequency Oscillation frequency (Hz)
+ * @param Amplitude Maximum offset magnitude (cm)
+ * @return Position offset vector
+ */
+FVector UCameraModifier_ShakeBase::GeneratePositionShake(float Time, float Frequency, float Amplitude) const
+{
+	// Early out if no amplitude
+	if (Amplitude <= KINDA_SMALL_NUMBER)
+	{
+		return FVector::ZeroVector;
+	}
+	
+	// Scale time by frequency for noise sampling
+	float TimeScaled = Time * Frequency;
+	
+	// Use different offsets for each axis to break synchronization
+	// RandomSeed ensures each trigger has unique offsets
+	float OffsetX = RandomSeed;
+	float OffsetY = RandomSeed + 100.0f;
+	float OffsetZ = RandomSeed + 200.0f;
+	
+	// Generate noise for each axis
+	// Slightly different frequency multipliers add organic variation
+	FVector Shake;
+	Shake.X = FMath:: PerlinNoise1D(TimeScaled * 1.0f + OffsetX) * Amplitude;
+	Shake.Y = FMath::PerlinNoise1D(TimeScaled * 1.1f + OffsetY) * Amplitude;
+	Shake.Z = FMath::PerlinNoise1D(TimeScaled * 0.9f + OffsetZ) * Amplitude * 0.5f;  // Reduced vertical
+	
+	return Shake;
+}
+
+/**
+ * GenerateRotationShake - Generate rotation offset using Perlin noise
+ * 
+ * Uses three separate Perlin noise samples for Pitch, Yaw, Roll.
+ * Roll is significantly reduced (30%) as excessive roll
+ * is very disorienting for players.
+ * 
+ * @param Time Current shake time
+ * @param Frequency Oscillation frequency (Hz)
+ * @param Amplitude Maximum rotation magnitude (degrees)
+ * @return Rotation offset
+ */
+FRotator UCameraModifier_ShakeBase:: GenerateRotationShake(float Time, float Frequency, float Amplitude) const
+{
+	// Early out if no amplitude
+	if (Amplitude <= KINDA_SMALL_NUMBER)
+	{
+		return FRotator:: ZeroRotator;
+	}
+	
+	// Scale time by frequency for noise sampling
+	float TimeScaled = Time * Frequency;
+	
+	// Use different offsets for each rotation axis
+	float OffsetPitch = RandomSeed + 300.0f;
+	float OffsetYaw = RandomSeed + 400.0f;
+	float OffsetRoll = RandomSeed + 500.0f;
+	
+	// Generate noise for each axis
+	// Different frequency multipliers for organic motion
+	FRotator Shake;
+	Shake.Pitch = FMath::  PerlinNoise1D(TimeScaled * 1.2f + OffsetPitch) * Amplitude;
+	Shake.Yaw = FMath::PerlinNoise1D(TimeScaled * 0.8f + OffsetYaw) * Amplitude;
+	Shake.  Roll = FMath::PerlinNoise1D(TimeScaled * 1.0f + OffsetRoll) * Amplitude * 0.3f;  // Minimal roll
+	
+	return Shake;
+}
+
+/**
+ * GetEffectiveAmplitude - Calculate amplitude considering weight and intensity
+ * 
+ * The effective amplitude is the product of: 
+ * - CurrentWeight:  Blend weight from lifecycle (0 during blend, 1 when active)
+ * - CurrentIntensity:  Trigger intensity from FModifierTriggerData
+ * 
+ * This allows both smooth blending and per-trigger intensity scaling.
+ * 
+ * @return Amplitude multiplier (typically 0-1, can exceed 1 for intense triggers)
+ */
+float UCameraModifier_ShakeBase:: GetEffectiveAmplitude() const
+{
+	return CurrentWeight * CurrentIntensity;
+}
+
+/**
+ * ApplyDirectionalBias - Bias shake towards a specific direction
+ * 
+ * For hit reactions, we want the camera to shake more in the direction
+ * of the hit.  This function blends random shake with directional shake.
+ * 
+ * @param BaseShake The randomly generated shake vector
+ * @param Direction The direction to bias towards (normalized)
+ * @param Bias Blend factor (0 = pure random, 1 = pure directional)
+ * @return Blended shake vector
+ */
+FVector UCameraModifier_ShakeBase::ApplyDirectionalBias(const FVector& BaseShake, const FVector& Direction, float Bias) const
+{
+	// Validate inputs
+	if (Bias <= KINDA_SMALL_NUMBER || Direction.IsNearlyZero())
+	{
+		return BaseShake;
+	}
+	
+	// Clamp bias to valid range
+	float ClampedBias = FMath:: Clamp(Bias, 0.0f, 1.0f);
+	
+	// Calculate directional component
+	// Use the magnitude of the base shake but apply it in the hit direction
+	float ShakeMagnitude = BaseShake.Size();
+	FVector DirectionalShake = Direction * ShakeMagnitude;
+	
+	// Blend between random and directional
+	// Add some oscillation to the directional component for variety
+	float Oscillation = FMath::  Sin(ShakeTime * ShakeFrequency * 2.0f * PI);
+	DirectionalShake *= (0.5f + 0.5f * Oscillation);  // Oscillate between 0 and 1
+	
+	// Lerp between base shake and directional shake
+	return FMath:: Lerp(BaseShake, DirectionalShake, ClampedBias);
+}
+
+
+//========================================
+// S01-S05: Implementations in subsequent Sub-Steps
+//========================================
+
+// S01: UCameraModifier_S01_Shake_Hit_Light - Sub-Step 4.2.3
+// S02: UCameraModifier_S02_Shake_Hit_Heavy - Sub-Step 4.2.3
+// S03: UCameraModifier_S03_Shake_Attack_Swing - Sub-Step 4.2.4
+// S04: UCameraModifier_S04_Shake_Landing_Impact - Sub-Step 4.2.4
+// S05: UCameraModifier_S05_Shake_Environment_Rumble - Sub-Step 4.2.4
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 文件头注释说明整体结构
+   - 每个方法都有详细的文档注释
+   - 解释算法选择的原因
+   - 所有注释英文
+
+2. **格式：**
+   - Tab缩进
+   - 清晰的区块分隔
+   - 方法间空两行
+
+3. **防御性编程：**
+   - 振幅检查避免无效计算
+   - 方向向量规范化检查
+   - KINDA_SMALL_NUMBER用于浮点比较
+
+【技术说明】
+
+### 1. Perlin噪声的优势
+
+```
+为什么用Perlin噪声而不是随机数？
+
+随机数：
+├─ 每帧独立，不连续
+├─ 产生抖动感
+└─ 不自然
+
+Perlin噪声：
+├─ 连续平滑曲线
+├─ 不同频率可叠加
+└─ 有机、自然的运动感
+```
+
+### 2. 频率偏移设计
+
+```cpp
+// 不同轴使用略微不同的频率
+Shake.X = PerlinNoise(Time * 1.0f + OffsetX);  // 基础频率
+Shake. Y = PerlinNoise(Time * 1.1f + OffsetY);  // 快10%
+Shake. Z = PerlinNoise(Time * 0.9f + OffsetZ);  // 慢10%
+
+// 这避免了所有轴同步运动，产生更自然的抖动
+```
+
+### 3. Roll限制的原因
+
+```
+Roll（翻滚）为什么要限制到30%？
+
+- Roll是最容易导致晕动症的旋转
+- 人类视觉系统对Roll敏感
+- 游戏中很少有真实Roll场景
+- 过度Roll会让玩家迷失方向
+
+建议值：
+- Position Z: 50% of XY
+- Rotation Roll: 30% of Pitch/Yaw
+```
+
+### 4. 方向性偏移算法
+
+```cpp
+// 受击抖动偏向受击方向
+
+// 1. 获取基础随机抖动
+FVector BaseShake = GeneratePositionShake(... );
+
+// 2. 计算方向性分量
+FVector DirectionalShake = HitDirection * ShakeMagnitude;
+
+// 3. 添加振荡避免静态感
+DirectionalShake *= (0.5 + 0.5 * sin(Time * Freq));
+
+// 4. 混合
+FinalShake = Lerp(BaseShake, DirectionalShake, Bias);
+
+// Bias=0: 纯随机
+// Bias=0.3: 30%方向偏移（推荐）
+// Bias=1: 纯方向性（不自然）
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] Regenerate执行
+   - [ ] 编译通过（0 errors）
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] 构造函数初始化所有成员
+   - [ ] OnTriggered重置状态
+   - [ ] ComputeEffect完整实现
+   - [ ] GeneratePositionShake完整实现
+   - [ ] GenerateRotationShake完整实现
+   - [ ] GetEffectiveAmplitude完整实现
+   - [ ] ApplyDirectionalBias完整实现
+
+3. **与.  h文件一致性：**
+   - [ ] 所有声明的方法都有实现
+   - [ ] 成员变量初始化与声明一致
+
+【注意事项】
+
+1. **Include路径：**
+   ```cpp
+   #include "Camera/Modifiers/CameraModifier_Shake.h"
+   ```
+
+2. **FMath::PerlinNoise1D：**
+   这是UE4内置的1D Perlin噪声函数，返回-1到1之间的值。
+
+3. **KINDA_SMALL_NUMBER：**
+   UE4内置常量（约0.0001），用于浮点数比较。
+
+4. **Super::OnTriggered：**
+   调用父类的OnTriggered确保基类状态正确重置。
+
+5. **S01-S05占位：**
+   在文件末尾添加注释说明后续Sub-Step将添加具体实现。
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 4.2.2 完成报告
+================================================================================
+
+【创建的文件】
+- 文件：CameraModifier_Shake.  cpp
+- 路径：Source/[ProjectName]/Private/Camera/Modifiers/
+- 代码行数：约XXX行
+
+【实现的功能】
+- ✅ 构造函数（初始化所有参数）
+- ✅ OnTriggered（重置状态，生成随机种子）
+- ✅ ComputeEffect（计算抖动效果）
+- ✅ GeneratePositionShake（Perlin噪声位置抖动）
+- ✅ GenerateRotationShake（Perlin噪声旋转抖动）
+- ✅ GetEffectiveAmplitude（计算有效振幅）
+- ✅ ApplyDirectionalBias（方向性偏移）
+
+【编译结果】
+- Regenerate：[已执行]
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【最终状态】
+✅ ShakeBase基类实现完成
+
+================================================================================
+```
+
+【后续步骤】
+
+ShakeBase完成后：
+- [x] ✅ 4.  2. 1: CameraModifier_Shake. h
+- [x] ✅ 4.2.2: CameraModifier_Shake.  cpp - ShakeBase
+- [ ] ⏳ 4.2.3: S01-S02实现（下一步）
+- [ ] ⏳ 4.2.4: S03-S05实现
+- [ ] ⏳ 4.2.5: 注册到ModifierManager
+
+**Shake修改器进度：基类完成，0/5具体修改器实现**
+
+================================================================================

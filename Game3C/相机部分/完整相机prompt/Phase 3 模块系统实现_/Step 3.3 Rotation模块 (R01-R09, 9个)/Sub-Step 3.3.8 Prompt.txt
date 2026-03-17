@@ -1,0 +1,742 @@
+Sub-Step 3.3.8 Prompt
+
+================================================================================
+任务：在CameraModule_Rotation. cpp中添加R07 AutoOrient_Delayed实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+R07在玩家一段时间不输入后自动回中相机，将相机朝向重置到角色后方。
+这是常见的第三人称相机辅助功能，提高导航的便利性。
+
+【当前进度】
+Phase 3 Step 3.3 Sub-Step 3.3.8 (共190个Sub-Step中的第76个)
+前置完成：3.3.7 R06实现 ✅
+
+【任务目标】
+在CameraModule_Rotation.cpp中完整实现R07模块，替换现有的占位符。
+
+【⚠️ 重要提醒】
+
+1. **编译前必做步骤：**
+   本Sub-Step只修改现有. cpp文件，不添加新文件。
+   因此**不需要Regenerate**，可以直接编译。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   确认StateConfig和InputContext的字段路径与项目实际结构一致。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_Rotation. cpp
+
+2. **定位修改位置：**
+
+在文件中找到R07的占位符实现部分：
+
+```cpp
+//========================================
+// R07: AutoOrient Delayed - Delayed auto-center
+//========================================
+
+// TODO: Will be implemented in Sub-Step 3.3.8
+// ...  占位符代码
+```
+
+**将上述占位符代码完整替换为下方的完整实现。**
+
+---
+
+3. **R07完整实现代码：**
+
+**A. 构造函数实现（已存在，保持或增强）：**
+
+**当前占位符代码：**
+```cpp
+UCameraModule_R07_AutoOrient_Delayed::UCameraModule_R07_AutoOrient_Delayed()
+	: TimeSinceInput(0.0f)
+	, bIsAutoCentering(false)
+{
+}
+```
+
+**保持或增强注释：**
+```cpp
+/**
+ * Constructor - Initialize auto-center timer state
+ * 
+ * Sets up initial values for delayed auto-centering. 
+ * TimeSinceInput tracks how long since last camera input. 
+ * bIsAutoCentering tracks whether auto-centering is currently active. 
+ */
+UCameraModule_R07_AutoOrient_Delayed::UCameraModule_R07_AutoOrient_Delayed()
+	: TimeSinceInput(0.0f)
+	, bIsAutoCentering(false)
+{
+}
+```
+
+---
+
+**B. ShouldActivate() 实现：**
+
+**当前占位符代码：**
+```cpp
+bool UCameraModule_R07_AutoOrient_Delayed::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Placeholder:  Will be properly implemented in Sub-Step 3.3.8
+	// Should activate after input timeout
+	return false;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * ShouldActivate - Determine if delayed auto-center should be active
+ * 
+ * R07 activates when:
+ * - Module is enabled
+ * - No target is locked (free camera mode)
+ * - Auto-center feature is enabled in StateConfig
+ * 
+ * Note: This checks basic conditions.  The actual timing logic
+ * (checking if delay has passed) is handled in Compute().
+ * 
+ * Priority 80 (lowest among rotation modules) ensures this is
+ * the most passive assistive feature, easily overridden by others.
+ * 
+ * Use Cases:
+ * - Player stops adjusting camera during exploration
+ * - Automatic recovery to default camera position
+ * - Improved navigation without manual correction
+ */
+bool UCameraModule_R07_AutoOrient_Delayed::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (! bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Don't activate when target is locked
+	// Combat camera is handled by lock-on modules
+	if (Context. InputContext.bHasTarget)
+	{
+		return false;
+	}
+	
+	// Check if auto-center feature is enabled in config
+	// This allows designers to enable/disable per camera state
+	if (! StateConfig.StateBase.AutoCorrect.bEnableAutoCenter)
+	{
+		return false;
+	}
+	
+	// All conditions met - activate delayed auto-center
+	// Actual timing check happens in Compute()
+	return true;
+}
+```
+
+**说明：**
+- 三个基础条件：启用 + 无锁定 + 功能开关
+- 时间检查在Compute()中处理
+- 优先级80（最低，最被动）
+
+**⚠️ StateConfig字段注意：**
+如果没有StateBase.AutoCorrect.bEnableAutoCenter字段，可以简化：
+```cpp
+// 简化版本（总是激活，由时间控制）
+bool UCameraModule_R07_AutoOrient_Delayed::ShouldActivate(... ) const
+{
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	if (Context.InputContext.bHasTarget)
+	{
+		return false;
+	}
+	
+	return true;  // 总是满足基础条件
+}
+```
+
+---
+
+**C. Compute() 实现：**
+
+**当前占位符代码：**
+```cpp
+bool UCameraModule_R07_AutoOrient_Delayed::Compute(...)
+{
+	// Placeholder
+	OutOutput = CreateBaseOutput();
+	OutOutput.RotationOutput = Context.InputContext.PreviousCameraRotation;
+	OutOutput.bHasRotationOutput = true;
+	return true;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * Compute - Calculate delayed auto-center rotation
+ * 
+ * This module implements a timer-based auto-centering system: 
+ * 1. Tracks time since last camera input
+ * 2. Waits for configured delay period
+ * 3. Gradually blends camera to default position (behind character)
+ * 4. Resets if player provides new input
+ * 
+ * Steps:
+ * 1. Check for camera input (resets timer if found)
+ * 2. Accumulate time since last input
+ * 3. Wait for delay period to pass
+ * 4. Calculate target rotation (behind character)
+ * 5. Calculate blend weight (increases over time)
+ * 6. Output with blend policy
+ * 
+ * Key Features:
+ * - Configurable delay (typically 2-3 seconds)
+ * - Gradual blend (not sudden snap)
+ * - Resets immediately on input
+ * - Only affects yaw (horizontal centering)
+ * - Uses blend policy with dynamic weight
+ * 
+ * @param Context The current pipeline execution context
+ * @param StateConfig The current camera state configuration
+ * @param OutOutput Output structure to fill with computed values
+ * @return True if computation succeeded
+ */
+bool UCameraModule_R07_AutoOrient_Delayed::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Step 1: Check for camera input
+	// If player is actively controlling camera, reset timer and don't apply
+	FVector2D CameraInput = Context. InputContext.CameraInput;
+	float InputMagnitude = CameraInput.Size();
+	
+	if (InputMagnitude > 0.1f)
+	{
+		// Player is controlling camera - reset timer and state
+		TimeSinceInput = 0.0f;
+		bIsAutoCentering = false;
+		
+		// Don't apply auto-center rotation
+		OutOutput.bHasRotationOutput = false;
+		return false;
+	}
+	
+	// Step 2: Accumulate time since last input
+	TimeSinceInput += Context.DeltaTime;
+	
+	// Step 3: Get auto-center delay from config
+	float AutoCenterDelay = StateConfig.StateBase. AutoCorrect.AutoCenterDelay;
+	
+	// If AutoCenterDelay not configured, use default
+	if (AutoCenterDelay <= 0.0f)
+	{
+		AutoCenterDelay = 2.0f;  // Default:  2 seconds delay
+	}
+	
+	// Check if delay period has passed
+	if (TimeSinceInput < AutoCenterDelay)
+	{
+		// Still waiting for delay to pass
+		// Don't apply auto-center yet
+		OutOutput.bHasRotationOutput = false;
+		return false;
+	}
+	
+	// Delay has passed - start auto-centering
+	bIsAutoCentering = true;
+	
+	// Step 4: Calculate target rotation (behind character)
+	// We want camera to face the direction character is facing
+	FRotator CharacterRotation = Context.InputContext.CharacterRotation;
+	
+	// Construct target rotation
+	FRotator TargetRotation;
+	
+	// Yaw:  Align to character's facing direction
+	// This positions camera behind character
+	TargetRotation.Yaw = CharacterRotation.Yaw;
+	
+	// Pitch: Reset to level/horizontal (0 degrees)
+	// This provides neutral vertical angle
+	TargetRotation. Pitch = 0.0f;
+	
+	// Roll:  Always zero
+	TargetRotation.Roll = 0.0f;
+	
+	// Step 5: Calculate blend weight based on time past delay
+	// Weight increases gradually after delay passes
+	// This creates smooth transition, not sudden snap
+	
+	float TimePastDelay = TimeSinceInput - AutoCenterDelay;
+	
+	// Blend duration: how long to reach full auto-center effect
+	// Longer duration = more gradual
+	const float BlendDuration = 2.0f;  // 2 seconds to fully blend
+	
+	// Calculate weight:  0 at start, increases linearly over BlendDuration
+	// Clamped to max 0.5 (50% influence, assistive not dominant)
+	float Weight = FMath::Clamp(TimePastDelay / BlendDuration, 0.0f, 0.5f);
+	
+	// Alternative:  Exponential blend for smoother feel
+	// float Weight = (1.0f - FMath::Exp(-TimePastDelay / BlendDuration)) * 0.5f;
+	
+	// Step 6: Fill output structure
+	OutOutput.RotationOutput = TargetRotation;
+	OutOutput.bHasRotationOutput = true;
+	
+	// Set weight for blending
+	// Lower weight = subtle effect
+	// Higher weight = more noticeable
+	OutOutput.Weight = Weight;
+	
+	// Ensure blend policy is set (should be from CreateBaseOutput)
+	// But explicitly set for clarity
+	OutOutput.BlendPolicy = EBlendPolicy:: Blend;
+	
+	return true;
+}
+```
+
+**说明：**
+- 计时器逻辑（累积+检查）
+- 输入检测（重置计时器）
+- 目标旋转（角色朝向）
+- 动态权重（渐进混合）
+- Blend策略（辅助性）
+
+---
+
+4. **完整的R07代码块（用于复制粘贴）：**
+
+```cpp
+//========================================
+// R07: AutoOrient Delayed - Delayed auto-center
+//========================================
+
+/**
+ * Constructor - Initialize auto-center timer state
+ */
+UCameraModule_R07_AutoOrient_Delayed::UCameraModule_R07_AutoOrient_Delayed()
+	: TimeSinceInput(0.0f)
+	, bIsAutoCentering(false)
+{
+}
+
+/**
+ * ShouldActivate - Activate when auto-center is enabled
+ */
+bool UCameraModule_R07_AutoOrient_Delayed:: ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Don't activate when target is locked
+	if (Context.InputContext.bHasTarget)
+	{
+		return false;
+	}
+	
+	// Check if auto-center feature is enabled
+	if (!StateConfig.StateBase.AutoCorrect.bEnableAutoCenter)
+	{
+		return false;
+	}
+	
+	return true;
+}
+
+/**
+ * Compute - Calculate delayed auto-center rotation with gradual blend
+ */
+bool UCameraModule_R07_AutoOrient_Delayed::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output
+	OutOutput = CreateBaseOutput();
+	
+	// Check for camera input
+	FVector2D CameraInput = Context.InputContext.CameraInput;
+	float InputMagnitude = CameraInput.Size();
+	
+	if (InputMagnitude > 0.1f)
+	{
+		// Player controlling camera - reset timer
+		TimeSinceInput = 0.0f;
+		bIsAutoCentering = false;
+		OutOutput.bHasRotationOutput = false;
+		return false;
+	}
+	
+	// Accumulate time since last input
+	TimeSinceInput += Context.DeltaTime;
+	
+	// Get auto-center delay from config
+	float AutoCenterDelay = StateConfig.StateBase.AutoCorrect.AutoCenterDelay;
+	if (AutoCenterDelay <= 0.0f)
+	{
+		AutoCenterDelay = 2.0f;  // Default: 2 seconds
+	}
+	
+	// Check if delay has passed
+	if (TimeSinceInput < AutoCenterDelay)
+	{
+		// Still waiting
+		OutOutput.bHasRotationOutput = false;
+		return false;
+	}
+	
+	// Delay passed - start auto-centering
+	bIsAutoCentering = true;
+	
+	// Calculate target rotation (behind character)
+	FRotator CharacterRotation = Context.InputContext.CharacterRotation;
+	
+	FRotator TargetRotation;
+	TargetRotation.Yaw = CharacterRotation.Yaw;
+	TargetRotation.Pitch = 0.0f;  // Level
+	TargetRotation.Roll = 0.0f;
+	
+	// Calculate blend weight based on time past delay
+	float TimePastDelay = TimeSinceInput - AutoCenterDelay;
+	const float BlendDuration = 2.0f;  // 2 seconds to fully blend
+	
+	float Weight = FMath::Clamp(TimePastDelay / BlendDuration, 0.0f, 0.5f);
+	
+	// Fill output
+	OutOutput.RotationOutput = TargetRotation;
+	OutOutput.bHasRotationOutput = true;
+	OutOutput.Weight = Weight;
+	OutOutput.BlendPolicy = EBlendPolicy::Blend;
+	
+	return true;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 说明计时器逻辑
+   - 解释渐进混合
+   - 说明重置机制
+   - 所有注释英文
+
+2. **格式：**
+   - Tab缩进
+   - 清晰步骤标注
+   - 方法间空两行
+
+3. **常量使用：**
+   - AutoCenterDelay默认2.0秒
+   - BlendDuration = 2.0秒
+   - MaxWeight = 0.5（50%）
+   - 输入阈值0.1
+
+【技术说明】
+
+**R07的核心机制：**
+
+### 1. 计时器状态机
+
+**状态转换：**
+```
+状态1：有输入（初始状态）
+- TimeSinceInput = 0
+- bIsAutoCentering = false
+- 不输出旋转
+
+↓ 玩家停止输入
+
+状态2：等待延迟
+- TimeSinceInput累积
+- TimeSinceInput < AutoCenterDelay
+- 仍不输出旋转
+
+↓ 延迟时间到
+
+状态3：自动回中
+- TimeSinceInput >= AutoCenterDelay
+- bIsAutoCentering = true
+- 输出回中旋转，权重逐渐增加
+
+↓ 玩家输入（任何时候）
+
+→ 回到状态1（重置）
+```
+
+### 2. 为什么需要延迟？
+
+**不延迟的问题：**
+```
+场景：玩家快速环视四周
+
+无延迟：
+- 停顿0.1秒 → 立即开始回中
+- 玩家继续转相机 → 打断回中
+- 再停顿0.1秒 → 又开始回中
+- 循环... 
+
+结果：
+- 相机抖动
+- 干扰玩家意图
+- 体验差
+
+有延迟（2秒）：
+- 停顿0.5秒 → 继续等待
+- 停顿1秒 → 继续等待
+- 停顿2秒 → 开始回中
+- 玩家输入 → 立即停止回中
+
+结果：
+- 仅在确实"放置不管"时回中
+- 不干扰主动操作
+- 体验好 ✅
+```
+
+### 3. 渐进混合的作用
+
+**为什么不立即回中？**
+
+```
+立即回中（假设）：
+T=2. 0s:  Weight = 0
+T=2.01s: Weight = 0.5（突然跳到50%）
+→ 相机突然转动（jarring）
+
+渐进混合：
+T=2.0s: Weight = 0
+T=2.5s: Weight = 0.125
+T=3.0s: Weight = 0.25
+T=4.0s: Weight = 0.5（最大）
+→ 相机平滑旋转（smooth）
+
+公式：
+Weight = Clamp((TimePastDelay / BlendDuration), 0, 0.5)
+      = Clamp((TimeSinceInput - 2.0) / 2.0, 0, 0.5)
+```
+
+**BlendDuration的影响：**
+
+| BlendDuration | 效果 | 说明 |
+|---------------|------|------|
+| 1.0秒 | 快速回中 | 1秒内达到最大权重 |
+| 2.0秒 | 适度回中 | ✅ 推荐，自然 |
+| 4.0秒 | 缓慢回中 | 很长时间才完全回中 |
+
+### 4. 与R06的对比
+
+| 特性 | R06 (AutoOrient Movement) | R07 (AutoOrient Delayed) |
+|------|--------------------------|-------------------------|
+| **触发条件** | 移动中 | 无输入一段时间 |
+| **目标朝向** | 移动方向 | 角色朝向 |
+| **延迟** | 无（即时） | 有（2秒） |
+| **权重计算** | 基于速度 | 基于时间 |
+| **优先级** | 90 | 80 |
+| **使用场景** | 主动移动 | 静止/被动 |
+
+**可能的冲突：**
+```
+场景：玩家向前跑，不动相机
+
+R06可能激活：
+- 条件：移动 + 无输入
+- 目标：朝向移动方向
+
+R07可能激活：
+- 条件：无输入一段时间
+- 目标：朝向角色方向
+
+解决：
+- R06优先级90 > R07优先级80
+- R06先执行
+- 如果R06满足条件，Stage 5优先考虑R06
+- 实际效果：移动时R06生效，静止时R07生效
+```
+
+### 5. 权重上限50%的原因
+
+**为什么最大0.5而非1.0？**
+
+```
+Weight = 1.0（假设）：
+- R07完全控制相机
+- 回中效果强制性
+- 玩家感觉失控
+
+Weight = 0.5（实际）：
+- R07提供50%影响
+- 如果R01也激活（玩家有轻微输入）
+  - R01: 1.0
+  - R07: 0.5
+  - 混合：67% R01 + 33% R07
+- 回中是辅助，不是强制
+- 玩家仍有控制感 ✅
+```
+
+### 6. 实际使用场景
+
+**场景1：玩家放下手柄**
+```
+T=0s: 玩家放下手柄，相机偏向右侧45°
+T=0-2s: 等待延迟期
+T=2s: 开始回中（权重0）
+T=3s: 回中权重0.25（相机偏移减小到30°）
+T=4s: 回中权重0.5（相机偏移减小到20°）
+T=5s:  完全回中（相机在角色后方）
+
+效果：
+- 不立即打扰玩家
+- 延迟后自然回中
+- 提高导航便利性
+```
+
+**场景2：玩家暂停思考**
+```
+玩家查看左侧，然后思考下一步：
+
+T=0-1.5s: 查看左侧，有输入
+T=1.5s: 停止输入，思考
+T=1.5-3. 5s: 等待延迟（2秒）
+T=3.5s: 开始回中
+
+如果玩家在T=2. 5s恢复输入：
+- 计时器重置
+- 不回中
+- 尊重玩家意图
+
+如果玩家持续思考：
+- T=5. 5s完全回中
+- 方便下次操作
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] 构造函数完整
+   - [ ] ShouldActivate()完整
+   - [ ] Compute()完整
+   - [ ] 成员变量正确使用
+
+3. **逻辑正确性：**
+   - [ ] 计时器累积正确
+   - [ ] 输入检测和重置正确
+   - [ ] 延迟检查正确
+   - [ ] 权重计算正确
+   - [ ] Blend策略正确
+
+4. **字段访问：**
+   - [ ] TimeSinceInput成员变量
+   - [ ] bIsAutoCentering成员变量
+   - [ ] Context.InputContext.CameraInput
+   - [ ] Context.InputContext.CharacterRotation
+   - [ ] StateConfig.StateBase.AutoCorrect.bEnableAutoCenter
+   - [ ] StateConfig.StateBase.AutoCorrect.AutoCenterDelay
+
+【注意事项】
+
+1. **不需要Regenerate**
+
+2. **字段缺失处理：**
+   ```cpp
+   // 如果AutoCorrect结构不存在
+   // 方案1：直接使用默认值
+   float AutoCenterDelay = 2.0f;
+   
+   // 方案2：总是激活
+   // 在ShouldActivate中不检查bEnableAutoCenter
+   ```
+
+3. **AutoCenterDelay调整：**
+   ```cpp
+   // 1. 0秒:  太快，可能打扰
+   // 2.0秒: 推荐 ✅
+   // 3.0秒: 较慢，更被动
+   // 5.0秒: 很慢，几乎不自动
+   ```
+
+4. **BlendDuration调整：**
+   ```cpp
+   // 1.0秒: 快速回中
+   // 2.0秒: 推荐 ✅
+   // 3.0秒: 缓慢回中
+   ```
+
+5. **测试建议：**
+   - 转动相机后放手 → 2秒后应开始回中
+   - 回中过程中输入 → 应立即停止
+   - 不同延迟时间测试
+   - 观察权重渐变效果
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 3. 3. 8 完成报告
+================================================================================
+
+【修改内容】
+- 文件：CameraModule_Rotation.cpp
+- 修改位置：R07模块
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ 构造函数：初始化计时器
+- ✅ ShouldActivate：检查基础条件
+- ✅ Compute：延迟回中逻辑
+
+【编译结果】
+- 编译状态：[成功/失败]
+
+【最终状态】
+✅ R07完成，提供延迟自动回中功能
+
+================================================================================
+```
+
+【后续步骤】
+
+R07完成后：
+- [x] ✅ 3.3.7:  R06 - AutoOrient Movement
+- [x] ✅ 3.3.8: R07 - AutoOrient Delayed
+- [ ] ⏳ 3.3.9: R08 - LookAt Point（下一步）
+- [ ] ⏳ 3.3.10: R09 - Spline Rotation
+
+**Rotation模块完成度：7/9 (77.8%)**
+
+**下一步：** R08和R09是特殊场景模块（相对简单）
+
+================================================================================

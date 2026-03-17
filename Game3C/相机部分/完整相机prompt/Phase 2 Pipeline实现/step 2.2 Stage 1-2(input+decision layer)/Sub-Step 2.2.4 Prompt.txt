@@ -1,0 +1,577 @@
+================================================================================
+任务：创建CameraStage_StateMachine. cpp - Stage 2实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4. 27 C++项目。
+实现Stage 2的状态管理逻辑。
+
+【当前进度】
+Phase 2 Step 2. 2 Sub-Step 2.2.4 (共190个Sub-Step中的第42个)
+
+前置完成：
+- Phase 1 全部完成 ✅
+- Sub-Step 2.1.1-2.1.3:  Pipeline骨架 ✅
+- Sub-Step 2.2.1-2.2.2: Stage 1 (InputGather) ✅
+- Sub-Step 2.2.3:  CameraStage_StateMachine. h ✅
+
+【任务目标】
+创建文件：Source/[ProjectName]/Camera/Pipeline/CameraStage_StateMachine. cpp
+实现Stage 2。
+
+**这是一个. cpp文件，添加后需要重新Generate Visual Studio project files。**
+
+【具体要求】
+
+1. 文件路径：Source/[ProjectName]/Camera/Pipeline/CameraStage_StateMachine.cpp
+
+2. 完整文件内容：
+
+```cpp
+// Copyright Epic Games, Inc.  All Rights Reserved. 
+
+#include "CameraStage_StateMachine.h"
+#include "Camera/Core/SoulsCameraManager.h"
+#include "Camera/Core/SoulsCameraStateMachine.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogCameraStage_State, Log, All);
+
+//========================================
+// Constructor 构造函数
+//========================================
+
+UCameraStage_StateMachine::UCameraStage_StateMachine()
+    : StateMachine(nullptr)
+    , CurrentStateName(NAME_None)
+    , PreviousStateName(NAME_None)
+    , bCurrentConfigValid(false)
+    , bPreviousConfigValid(false)
+    , TransitionAlpha(1.0f)
+    , TransitionDuration(0.0f)
+    , TransitionElapsed(0.0f)
+    , CurrentBlendType(ECameraBlendType:: Linear)
+    , bIsTransitioning(false)
+{
+}
+
+//========================================
+// ICameraStage Interface 接口实现
+//========================================
+
+EStageResult UCameraStage_StateMachine::Execute(FStageExecutionContext& Context)
+{
+    // Get state machine from manager if not set
+    if (!StateMachine && Context.Manager)
+    {
+        StateMachine = Context.Manager->GetStateMachine();
+    }
+
+    if (!StateMachine)
+    {
+        UE_LOG(LogCameraStage_State, Warning, TEXT("Execute: No state machine available"));
+        return EStageResult::Failed;
+    }
+
+    // Step 1: Evaluate state based on input context
+    EvaluateState(Context);
+
+    // Step 2: Update transition blending
+    UpdateTransition(Context);
+
+    // Step 3: Get current state config
+    if (!StateMachine->GetCurrentStateConfig(CurrentStateConfig))
+    {
+        UE_LOG(LogCameraStage_State, Warning, TEXT("Execute: Failed to get current state config"));
+        // Use default config instead of failing
+        CurrentStateConfig = FCameraStateConfig();
+        bCurrentConfigValid = false;
+    }
+    else
+    {
+        bCurrentConfigValid = true;
+    }
+
+    // Step 4: Apply state config to output (with blending if transitioning)
+    if (StateMachine->IsInTransition())
+    {
+        bIsTransitioning = true;
+        PreviousStateName = StateMachine->GetPreviousStateName();
+        
+        if (StateMachine->GetStateConfig(PreviousStateName, PreviousStateConfig))
+        {
+            bPreviousConfigValid = true;
+            const float RawAlpha = StateMachine->GetBlendAlpha();
+            const float CurvedAlpha = ApplyBlendCurve(RawAlpha, CurrentBlendType);
+            BlendStateConfigs(Context, PreviousStateConfig, CurrentStateConfig, CurvedAlpha);
+        }
+        else
+        {
+            bPreviousConfigValid = false;
+            ApplyStateConfig(Context, CurrentStateConfig);
+        }
+    }
+    else
+    {
+        bIsTransitioning = false;
+        ApplyStateConfig(Context, CurrentStateConfig);
+    }
+
+    // Step 5: Set state info in output
+    Context.Output.CurrentStateName = StateMachine->GetCurrentStateName();
+    Context.Output.StateBlendAlpha = StateMachine->GetBlendAlpha();
+    Context.Output. bIsInTransition = StateMachine->IsInTransition();
+
+    // Cache current state name
+    CurrentStateName = Context.Output.CurrentStateName;
+
+    return EStageResult:: Success;
+}
+
+void UCameraStage_StateMachine::OnPreExecute(const FStageExecutionContext& Context)
+{
+    UE_LOG(LogCameraStage_State, VeryVerbose, TEXT("Stage 2 StateMachine:  PreExecute"));
+}
+
+void UCameraStage_StateMachine::OnPostExecute(const FStageExecutionContext& Context, EStageResult Result)
+{
+    UE_LOG(LogCameraStage_State, VeryVerbose, TEXT("Stage 2 StateMachine: PostExecute - State: %s, Transitioning: %s"),
+        *CurrentStateName. ToString(),
+        bIsTransitioning ?  TEXT("Yes") : TEXT("No"));
+}
+
+//========================================
+// State Machine Reference 状态机引用
+//========================================
+
+void UCameraStage_StateMachine::SetStateMachine(USoulsCameraStateMachine* InStateMachine)
+{
+    StateMachine = InStateMachine;
+    
+    if (StateMachine)
+    {
+        UE_LOG(LogCameraStage_State, Log, TEXT("State machine set successfully"));
+    }
+}
+
+//========================================
+// State Evaluation 状态评估
+//========================================
+
+void UCameraStage_StateMachine::EvaluateState(FStageExecutionContext& Context)
+{
+    if (! StateMachine)
+    {
+        return;
+    }
+
+    // Determine desired state based on input context
+    const FName DesiredState = DetermineDesiredState(Context);
+
+    // Request state change if different from current
+    if (DesiredState != NAME_None && DesiredState != StateMachine->GetCurrentStateName())
+    {
+        StateMachine->RequestStateChange(DesiredState);
+    }
+
+    // Let state machine evaluate its own conditions as well
+    StateMachine->EvaluateState(Context. InputContext);
+}
+
+FName UCameraStage_StateMachine:: DetermineDesiredState(const FStageExecutionContext& Context) const
+{
+    const FCameraInputContext& Input = Context.InputContext;
+
+    // Priority-based state determination (higher priority first)
+    
+    // 1. Death state (highest priority)
+    if (Input. HealthRatio <= 0.0f)
+    {
+        return FName(TEXT("Death"));
+    }
+
+    // 2. Boss lock-on
+    if (Input. bHasTarget && Input.bTargetIsBoss)
+    {
+        return FName(TEXT("BossLockOn"));
+    }
+
+    // 3. Regular lock-on
+    if (Input.bHasTarget)
+    {
+        return FName(TEXT("LockOn"));
+    }
+
+    // 4. Combat (no target but in combat)
+    if (Input.bIsInCombat)
+    {
+        return FName(TEXT("Combat"));
+    }
+
+    // 5. Sprint
+    if (Input. bIsSprinting)
+    {
+        return FName(TEXT("Sprint"));
+    }
+
+    // 6. In air
+    if (Input.bIsInAir)
+    {
+        return FName(TEXT("InAir"));
+    }
+
+    // 7. Crouch
+    if (Input.bIsCrouching)
+    {
+        return FName(TEXT("Crouch"));
+    }
+
+    // 8. Default exploration
+    return FName(TEXT("Exploration"));
+}
+
+//========================================
+// State Transition 状态过渡
+//========================================
+
+void UCameraStage_StateMachine::UpdateTransition(FStageExecutionContext& Context)
+{
+    if (!StateMachine)
+    {
+        return;
+    }
+
+    // Update transition timing in state machine
+    StateMachine->UpdateTransition(Context.DeltaTime);
+
+    // Cache transition state
+    bIsTransitioning = StateMachine->IsInTransition();
+    TransitionAlpha = StateMachine->GetBlendAlpha();
+}
+
+bool UCameraStage_StateMachine::IsInTransition() const
+{
+    return bIsTransitioning;
+}
+
+//========================================
+// Configuration Application 配置应用
+//========================================
+
+void UCameraStage_StateMachine:: ApplyStateConfig(FStageExecutionContext& Context, const FCameraStateConfig& Config)
+{
+    // Apply StateBase parameters to output
+    const FStateBaseParams& StateBase = Config.StateBase;
+
+    // Distance
+    Context.Output.Distance = StateBase.Distance. BaseDistance;
+
+    // FOV
+    Context.Output.FOV = StateBase. FOV.BaseFOV;
+
+    // Calculate focus point from character location + offsets
+    FVector FocusOffset = StateBase. Offset.FocusOffset;
+    FocusOffset.Z += StateBase.Offset.VerticalOffset;
+    Context. Output.FocusPoint = Context.InputContext.CharacterLocation + FocusOffset;
+
+    // Socket and target offsets
+    Context.Output.SocketOffset = StateBase.Offset. SocketOffset;
+    Context.Output. TargetOffset = StateBase.Offset.TargetOffset;
+
+    // Initial rotation from character (will be modified by rotation modules in Stage 3)
+    Context.Output.Rotation = Context.InputContext. CharacterRotation;
+
+    UE_LOG(LogCameraStage_State, VeryVerbose, TEXT("ApplyStateConfig: Distance=%.1f, FOV=%.1f"),
+        Context.Output.Distance, Context. Output.FOV);
+}
+
+void UCameraStage_StateMachine::BlendStateConfigs(
+    FStageExecutionContext& Context,
+    const FCameraStateConfig& FromConfig,
+    const FCameraStateConfig& ToConfig,
+    float BlendAlpha)
+{
+    const FStateBaseParams& FromState = FromConfig.StateBase;
+    const FStateBaseParams& ToState = ToConfig.StateBase;
+
+    // Clamp alpha to valid range
+    BlendAlpha = FMath::Clamp(BlendAlpha, 0.0f, 1.0f);
+
+    // Blend Distance
+    Context.Output. Distance = FMath::Lerp(
+        FromState. Distance.BaseDistance,
+        ToState. Distance. BaseDistance,
+        BlendAlpha
+    );
+
+    // Blend FOV
+    Context.Output. FOV = FMath::Lerp(
+        FromState.FOV.BaseFOV,
+        ToState.FOV.BaseFOV,
+        BlendAlpha
+    );
+
+    // Blend Focus Offset (including vertical offset)
+    FVector FromFocusOffset = FromState.Offset.FocusOffset;
+    FVector ToFocusOffset = ToState. Offset.FocusOffset;
+    FromFocusOffset.Z += FromState.Offset. VerticalOffset;
+    ToFocusOffset.Z += ToState.Offset. VerticalOffset;
+
+    const FVector BlendedFocusOffset = FMath::Lerp(FromFocusOffset, ToFocusOffset, BlendAlpha);
+    Context.Output.FocusPoint = Context. InputContext.CharacterLocation + BlendedFocusOffset;
+
+    // Blend Socket Offset
+    Context.Output.SocketOffset = FMath::Lerp(
+        FromState. Offset.SocketOffset,
+        ToState.Offset. SocketOffset,
+        BlendAlpha
+    );
+
+    // Blend Target Offset
+    Context. Output.TargetOffset = FMath::Lerp(
+        FromState. Offset.TargetOffset,
+        ToState.Offset.TargetOffset,
+        BlendAlpha
+    );
+
+    // Initial rotation from character
+    Context.Output.Rotation = Context.InputContext.CharacterRotation;
+
+    UE_LOG(LogCameraStage_State, VeryVerbose, TEXT("BlendStateConfigs:  Alpha=%.2f, Distance=%.1f, FOV=%.1f"),
+        BlendAlpha, Context.Output.Distance, Context. Output.FOV);
+}
+
+float UCameraStage_StateMachine::ApplyBlendCurve(float Alpha, ECameraBlendType BlendType) const
+{
+    // Clamp input
+    Alpha = FMath::Clamp(Alpha, 0.0f, 1.0f);
+
+    switch (BlendType)
+    {
+        case ECameraBlendType::Cut:
+        case ECameraBlendType:: Instant:
+            return (Alpha >= 1.0f) ? 1.0f : 0.0f;
+
+        case ECameraBlendType::Linear:
+            return Alpha;
+
+        case ECameraBlendType:: SmoothStep: 
+            // Hermite interpolation (3t^2 - 2t^3)
+            return Alpha * Alpha * (3.0f - 2.0f * Alpha);
+
+        case ECameraBlendType::EaseIn:
+            // Quadratic ease in (t^2)
+            return Alpha * Alpha;
+
+        case ECameraBlendType::EaseOut:
+            // Quadratic ease out (1 - (1-t)^2)
+            return 1.0f - FMath::Square(1.0f - Alpha);
+
+        case ECameraBlendType::EaseInOut:
+            // Quadratic ease in-out
+            if (Alpha < 0.5f)
+            {
+                return 2.0f * Alpha * Alpha;
+            }
+            else
+            {
+                return 1.0f - FMath::Pow(-2.0f * Alpha + 2.0f, 2.0f) / 2.0f;
+            }
+
+        case ECameraBlendType::Cubic:
+            // Cubic interpolation (t^3)
+            return Alpha * Alpha * Alpha;
+
+        case ECameraBlendType::Exponential:
+            // Exponential ease out
+            return (Alpha >= 1.0f) ? 1.0f : 1.0f - FMath::Pow(2.0f, -10.0f * Alpha);
+
+        case ECameraBlendType:: Circular:
+            // Circular ease out
+            return FMath::Sqrt(1.0f - FMath::Square(Alpha - 1.0f));
+
+        case ECameraBlendType:: Spring:
+            // Simple spring approximation
+            {
+                const float C4 = (2.0f * PI) / 3.0f;
+                return (Alpha >= 1.0f) ? 1.0f :  
+                    FMath:: Pow(2.0f, -10.0f * Alpha) * FMath:: Sin((Alpha * 10.0f - 0.75f) * C4) + 1.0f;
+            }
+
+        case ECameraBlendType::Custom:
+        default:
+            // Default to linear for custom (would need curve asset)
+            return Alpha;
+    }
+}
+
+//========================================
+// State Priority 状态优先级
+//========================================
+
+int32 UCameraStage_StateMachine:: GetStatePriority(ECameraStateCategory Category) const
+{
+    // Higher number = higher priority
+    switch (Category)
+    {
+        case ECameraStateCategory:: Death:
+            return 1000;
+        case ECameraStateCategory:: Cinematic:
+            return 900;
+        case ECameraStateCategory::Boss:
+            return 800;
+        case ECameraStateCategory:: LockOn:
+            return 700;
+        case ECameraStateCategory::Combat:
+            return 600;
+        case ECameraStateCategory:: Sprint:
+            return 500;
+        case ECameraStateCategory:: Mount:
+            return 400;
+        case ECameraStateCategory:: Swim:
+            return 350;
+        case ECameraStateCategory:: Climb:
+            return 300;
+        case ECameraStateCategory:: NPC:
+            return 250;
+        case ECameraStateCategory::Item:
+            return 200;
+        case ECameraStateCategory:: RestPoint:
+            return 150;
+        case ECameraStateCategory:: Explore:
+        case ECameraStateCategory::FreeExploration:
+            return 100;
+        case ECameraStateCategory:: Environment:
+            return 50;
+        default:
+            return 0;
+    }
+}
+```
+
+3. 代码风格：
+   - 使用专用日志类别 `LogCameraStage_State`
+   - 委托状态评估给StateMachine
+   - 实现完整的状态优先级判定
+   - 支持状态切换时的参数混合
+   - 实现所有混合曲线类型
+   - 设置初始输出值供后续Stage修改
+   - 中英文注释分组
+
+【验证标准】
+- 编译通过
+- 状态正确评估和切换
+- 参数正确混合
+- 混合曲线正确应用
+
+【注意事项】
+- 依赖SoulsCameraManager的GetStateMachine()方法
+- 依赖SoulsCameraStateMachine的多个方法
+- **这是. cpp文件，添加后需要重新Generate Visual Studio project files**
+
+【输出要求】
+输出完整的CameraStage_StateMachine.cpp文件代码。
+
+================================================================================
+                        上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+```
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：Sub-Step 2.2.4 创建CameraStage_StateMachine. cpp - Stage 2实现
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断，例如：完成到BlendStateConfigs，未完成ApplyBlendCurve]
+
+【已完成内容】
+- 构造函数
+- Execute方法
+- OnPreExecute/OnPostExecute
+- [列出已完成的方法]
+
+【未完成内容】
+- [列出剩余方法]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存到CameraStage_StateMachine.cpp，然后开启新对话。
+
+【编译注意】
+添加. cpp文件后需要：
+1. 右键. uproject → Generate Visual Studio project files
+2. 重新打开. sln
+
+================================================================================
+                    继续任务 - 新对话PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Phase 2 Step 2.2 Sub-Step 2.2.4 续接任务。
+完成CameraStage_StateMachine.cpp实现。
+
+【前置完成】
+- Phase 1 全部完成 ✅
+- Sub-Step 2.1.1-2.1.3: Pipeline骨架 ✅
+- Sub-Step 2.2.1-2.2.2: Stage 1 (InputGather) ✅
+- Sub-Step 2.2.3: CameraStage_StateMachine. h ✅
+- Sub-Step 2.2.4 部分完成：
+  - [列出已完成的方法] ✅
+
+【续接任务】
+继续完成CameraStage_StateMachine. cpp：
+- [列出剩余方法]
+
+【目标文件】
+Source/[ProjectName]/Camera/Pipeline/CameraStage_StateMachine.cpp
+
+【方法清单】
+- 构造函数
+- Execute() / OnPreExecute() / OnPostExecute()
+- SetStateMachine() / GetStateMachine()
+- EvaluateState() / DetermineDesiredState()
+- UpdateTransition() / IsInTransition()
+- ApplyStateConfig() / BlendStateConfigs()
+- ApplyBlendCurve() - 实现所有ECameraBlendType曲线
+- GetStatePriority()
+
+【编译注意】
+添加.cpp文件后需要：
+1. 右键. uproject → Generate Visual Studio project files
+2. 重新打开.sln
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================
+```
+
+【交接信息要求】
+1. 交接PROMPT必须是**完全自包含**的
+2. 明确标注目标文件和前置依赖
+3. 包含完整方法清单
+4. **强调这是.cpp文件，需要Generate**
+
+================================================================================

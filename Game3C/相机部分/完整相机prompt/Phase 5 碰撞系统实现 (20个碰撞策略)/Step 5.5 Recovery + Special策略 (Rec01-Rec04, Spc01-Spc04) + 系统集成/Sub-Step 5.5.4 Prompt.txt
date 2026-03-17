@@ -1,0 +1,824 @@
+Sub-Step 5.5. 4 Prompt
+
+================================================================================
+任务：创建CameraCollision_Special.h - Special策略头文件
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.     27 C++项目。
+Special策略处理特殊场景的碰撞，如狭窄空间、低矮天花板、悬崖边缘等。
+
+【Special策略设计】
+```
+Special策略类型（4个）：
+├── SP01:   TightSpace    - 狭窄空间处理
+├── SP02: LowCeiling    - 低矮天花板处理
+├── SP03: CliffEdge     - 悬崖边缘处理
+└── SP04: CornerCase    - 角落情况处理
+
+优先级设计（高于其他类别）：
+├── SP01: TightSpace (150)    - 高
+├── SP02: LowCeiling (145)    - 中高
+├── SP03: CliffEdge (140)     - 中
+└── SP04: CornerCase (155)    - 最高
+```
+
+【当前进度】
+Phase 5 Step 5.     5 Sub-Step 5.5.4 (共190个Sub-Step中的第171个)
+前置完成：
+- 5.5.1:  CameraCollision_Recovery.h ✅
+- 5.5.2: RecoveryBase + RC01 ✅
+- 5.5.3: RC02 + RC03 ✅
+
+【任务目标】
+创建文件：Source/MyProject/Public/Camera/Collision/CameraCollision_Special.h
+定义SpecialBase基类和所有4个Special策略类（SP01-SP04）。
+
+【⚠️ 重要提醒】
+
+1. **本Sub-Step创建新文件**
+   创建后需要：
+   - 保存文件
+   - 右键. uproject → Generate Visual Studio project files
+   - 重新加载解决方案
+   - 编译
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **确保枚举名称匹配：**
+   - 检查 ECollisionStrategyID 中的枚举名称
+   - 类名格式：`UCameraCollision_SP0X_名称`
+   - 与 CameraCollisionResolver.cpp 中的TODO注释一致
+
+4. **Execute方法签名（与基类一致）：**
+   ```cpp
+   virtual bool Execute(
+       const FStageExecutionContext& Context,
+       const FCollisionDetectionResult& DetectionResult,
+       FCollisionResponseOutput& OutResponse
+   ) override;
+   ```
+
+5. **Special策略特点：**
+   - 高优先级（150+）
+   - 处理特殊环境情况
+   - 可能同时产生多种调整（距离、FOV、旋转）
+
+【具体要求】
+
+**文件路径：** `Source/MyProject/Public/Camera/Collision/CameraCollision_Special.h`
+
+**完整文件内容：**
+
+```cpp
+// Copyright Epic Games, Inc.    All Rights Reserved.  
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "CameraCollisionBase.h"
+#include "CameraCollision_Special.generated.h"
+
+/**
+ * Special Strategy Declarations (SP01-SP04)
+ * 
+ * This file contains the 4 Special strategies for the collision system.  
+ * Special strategies handle unique environmental situations that require
+ * custom camera behavior beyond standard collision response.  
+ * 
+ * All special strategies inherit from UCameraCollision_SpecialBase which
+ * provides common functionality for environment detection and response.  
+ * 
+ * Key Characteristics:
+ * - Execute during the Special Phase of collision resolution
+ * - Higher priority than standard collision strategies (150+)
+ * - Handle specific environmental conditions
+ * - May produce multiple adjustment types simultaneously
+ * 
+ * Special Types:
+ * - SP01: TightSpace - Confined area handling (corridors, rooms)
+ * - SP02: LowCeiling - Low overhead clearance handling
+ * - SP03: CliffEdge - Edge/drop-off handling
+ * - SP04: CornerCase - Corner geometry handling
+ */
+
+
+//========================================
+// Special Base Class
+//========================================
+
+/**
+ * UCameraCollision_SpecialBase
+ * 
+ * Abstract base class for all special strategies.   
+ * Provides common functionality for environment detection and response.  
+ */
+UCLASS(Abstract, BlueprintType)
+class MYPROJECT_API UCameraCollision_SpecialBase : public UCameraCollisionBase
+{
+    GENERATED_BODY()
+
+public:
+    UCameraCollision_SpecialBase();
+
+    //========================================
+    // Strategy Identity
+    //========================================
+
+    /** All special strategies belong to Special category */
+    virtual ECollisionCategory GetStrategyCategory() const override { return ECollisionCategory::Special; }
+
+    //========================================
+    // Lifecycle
+    //========================================
+
+    /** Update special state each frame */
+    virtual void Update(float DeltaTime, const FStageExecutionContext& Context) override;
+
+    /** Reset special to initial state */
+    virtual void Reset() override;
+
+protected:
+    //========================================
+    // Common Special Methods
+    //========================================
+
+    /**
+     * Perform environment probe in multiple directions
+     * @param Context Execution context
+     * @param ProbeDistance Distance to probe
+     * @param OutHits Array of hit results for each direction
+     * @return Number of directions blocked
+     */
+    int32 PerformEnvironmentProbe(
+        const FStageExecutionContext& Context,
+        float ProbeDistance,
+        TArray<FHitResult>& OutHits
+    ) const;
+
+    /**
+     * Check if a direction is blocked
+     * @param Context Execution context
+     * @param Direction Direction to check (normalized)
+     * @param Distance Check distance
+     * @param OutHit Hit result if blocked
+     * @return True if direction is blocked
+     */
+    bool IsDirectionBlocked(
+        const FStageExecutionContext& Context,
+        const FVector& Direction,
+        float Distance,
+        FHitResult& OutHit
+    ) const;
+
+    /**
+     * Calculate clearance in a direction
+     * @param Context Execution context
+     * @param Direction Direction to check
+     * @param MaxDistance Maximum check distance
+     * @return Clearance distance (MaxDistance if not blocked)
+     */
+    float GetClearanceInDirection(
+        const FStageExecutionContext& Context,
+        const FVector& Direction,
+        float MaxDistance
+    ) const;
+
+    /**
+     * Get camera location from context
+     * @param Context Execution context
+     * @return Camera world location
+     */
+    FVector GetCameraLocation(const FStageExecutionContext& Context) const;
+
+    /**
+     * Interpolate special factor for smooth transitions
+     * @param Current Current factor value
+     * @param Target Target factor value
+     * @param DeltaTime Time since last frame
+     * @param Speed Interpolation speed
+     * @return Interpolated factor
+     */
+    float InterpolateSpecialFactor(float Current, float Target, float DeltaTime, float Speed) const;
+
+    //========================================
+    // Common Configuration
+    //========================================
+
+    /** Base detection distance for environment probes */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special|Config", meta = (ClampMin = "50.0", ClampMax = "500.0"))
+    float BaseProbeDistance;
+
+    /** Transition speed for special mode activation */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special|Config", meta = (ClampMin = "1.0", ClampMax = "20.0"))
+    float TransitionSpeed;
+
+    /** Minimum factor to consider special mode active */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special|Config", meta = (ClampMin = "0.01", ClampMax = "0.5"))
+    float ActivationThreshold;
+
+    //========================================
+    // Runtime State
+    //========================================
+
+    /** Current special mode factor (0-1) */
+    UPROPERTY(BlueprintReadOnly, Category = "Special|State")
+    float CurrentSpecialFactor;
+
+    /** Is special mode currently active */
+    UPROPERTY(BlueprintReadOnly, Category = "Special|State")
+    bool bSpecialModeActive;
+
+    /** Time in special mode */
+    float TimeInSpecialMode;
+
+    /** Cached delta time */
+    float CachedDeltaTime;
+};
+
+
+//========================================
+// SP01: Tight Space
+//========================================
+
+/**
+ * UCameraCollision_SP01_TightSpace
+ * 
+ * SP01: Handle confined/tight spaces
+ * 
+ * Detects when camera is in a confined area and adjusts behavior: 
+ * - Increases FOV to maintain visibility
+ * - Allows closer minimum distance
+ * - Applies special handling for narrow corridors
+ * 
+ * Use Cases:
+ * - Narrow corridors
+ * - Small rooms
+ * - Confined indoor spaces
+ * 
+ * Characteristics:
+ * - Multi-directional environment probe
+ * - FOV compensation
+ * - Priority:  150
+ */
+UCLASS(BlueprintType, Blueprintable)
+class MYPROJECT_API UCameraCollision_SP01_TightSpace : public UCameraCollision_SpecialBase
+{
+    GENERATED_BODY()
+
+public:
+    UCameraCollision_SP01_TightSpace();
+
+    //========================================
+    // Strategy Identity
+    //========================================
+
+    virtual ECollisionStrategyID GetStrategyType() const override 
+    { 
+        return ECollisionStrategyID:: Collision_SP01_TightSpace; 
+    }
+    
+    virtual FString GetStrategyDescription() const override 
+    { 
+        return TEXT("Handle confined/tight spaces with FOV compensation"); 
+    }
+    
+    virtual int32 GetPriority() const override { return 150; }
+
+    //========================================
+    // Execution
+    //========================================
+
+    virtual bool ShouldExecute(const FStageExecutionContext& Context) const override;
+
+    virtual bool Execute(
+        const FStageExecutionContext& Context,
+        const FCollisionDetectionResult& DetectionResult,
+        FCollisionResponseOutput& OutResponse
+    ) override;
+
+    virtual void Update(float DeltaTime, const FStageExecutionContext& Context) override;
+    virtual void Reset() override;
+
+    //========================================
+    // Public Query
+    //========================================
+
+    /** Is currently in tight space */
+    UFUNCTION(BlueprintPure, Category = "Special")
+    bool IsInTightSpace() const { return bInTightSpace; }
+
+    /** Get current tight space factor */
+    UFUNCTION(BlueprintPure, Category = "Special")
+    float GetTightSpaceFactor() const { return TightSpaceFactor; }
+
+protected:
+    //========================================
+    // Configuration
+    //========================================
+
+    /** Distance threshold to consider area tight */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special|TightSpace", meta = (ClampMin = "50.0", ClampMax = "300.0"))
+    float TightSpaceThreshold;
+
+    /** Number of blocked directions to trigger tight space */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special|TightSpace", meta = (ClampMin = "2", ClampMax = "5"))
+    int32 BlockedDirectionsThreshold;
+
+    /** FOV increase in tight spaces (degrees) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special|TightSpace", meta = (ClampMin = "0.0", ClampMax = "30.0"))
+    float TightSpaceFOVBonus;
+
+    /** Minimum distance override in tight space */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special|TightSpace", meta = (ClampMin = "20.0", ClampMax = "100.0"))
+    float TightSpaceMinDistance;
+
+    //========================================
+    // Runtime State
+    //========================================
+
+    /** Is in tight space */
+    bool bInTightSpace;
+
+    /** Current tight space factor (0-1) */
+    float TightSpaceFactor;
+
+    /** Number of currently blocked directions */
+    int32 CurrentBlockedDirections;
+
+    //========================================
+    // Helper Methods
+    //========================================
+
+    /** Detect if current area is a tight space */
+    bool DetectTightSpace(const FStageExecutionContext& Context);
+};
+
+
+//========================================
+// SP02: Low Ceiling
+//========================================
+
+/**
+ * UCameraCollision_SP02_LowCeiling
+ * 
+ * SP02: Handle low ceiling/overhead obstruction
+ * 
+ * Detects when camera is constrained by low ceiling and adjusts: 
+ * - Limits upward camera movement
+ * - Adjusts pitch constraints
+ * - May increase distance to compensate
+ * 
+ * Use Cases: 
+ * - Low passages
+ * - Overhanging structures
+ * - Cave entrances
+ * 
+ * Characteristics:
+ * - Vertical clearance detection
+ * - Pitch constraint modification
+ * - Priority: 145
+ */
+UCLASS(BlueprintType, Blueprintable)
+class MYPROJECT_API UCameraCollision_SP02_LowCeiling : public UCameraCollision_SpecialBase
+{
+    GENERATED_BODY()
+
+public:
+    UCameraCollision_SP02_LowCeiling();
+
+    //========================================
+    // Strategy Identity
+    //========================================
+
+    virtual ECollisionStrategyID GetStrategyType() const override 
+    { 
+        return ECollisionStrategyID:: Collision_SP02_LowCeiling; 
+    }
+    
+    virtual FString GetStrategyDescription() const override 
+    { 
+        return TEXT("Handle low ceiling with pitch adjustment"); 
+    }
+    
+    virtual int32 GetPriority() const override { return 145; }
+
+    //========================================
+    // Execution
+    //========================================
+
+    virtual bool ShouldExecute(const FStageExecutionContext& Context) const override;
+
+    virtual bool Execute(
+        const FStageExecutionContext& Context,
+        const FCollisionDetectionResult& DetectionResult,
+        FCollisionResponseOutput& OutResponse
+    ) override;
+
+    virtual void Update(float DeltaTime, const FStageExecutionContext& Context) override;
+    virtual void Reset() override;
+
+    //========================================
+    // Public Query
+    //========================================
+
+    /** Get current overhead clearance */
+    UFUNCTION(BlueprintPure, Category = "Special")
+    float GetOverheadClearance() const { return CurrentOverheadClearance; }
+
+protected:
+    //========================================
+    // Configuration
+    //========================================
+
+    /** Minimum overhead clearance before activation (cm) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special|LowCeiling", meta = (ClampMin = "50.0", ClampMax = "300.0"))
+    float LowCeilingThreshold;
+
+    /** Maximum pitch adjustment when ceiling is low (degrees) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special|LowCeiling", meta = (ClampMin = "0.0", ClampMax = "45.0"))
+    float MaxPitchAdjustment;
+
+    /** Push camera down when ceiling is very low */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special|LowCeiling")
+    bool bPushCameraDown;
+
+    /** Maximum downward push distance */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special|LowCeiling", meta = (ClampMin = "0.0", ClampMax = "100.0", EditCondition = "bPushCameraDown"))
+    float MaxDownwardPush;
+
+    //========================================
+    // Runtime State
+    //========================================
+
+    /** Current overhead clearance */
+    float CurrentOverheadClearance;
+
+    /** Current low ceiling factor (0-1) */
+    float LowCeilingFactor;
+
+    /** Current pitch adjustment being applied */
+    float CurrentPitchAdjustment;
+};
+
+
+//========================================
+// SP03: Cliff Edge
+//========================================
+
+/**
+ * UCameraCollision_SP03_CliffEdge
+ * 
+ * SP03: Handle cliff/edge situations
+ * 
+ * Detects when camera is near an edge or drop-off and adjusts:
+ * - Prevents camera from going over edge
+ * - Adjusts viewing angle for better perspective
+ * - May pull camera back from edge
+ * 
+ * Use Cases: 
+ * - Cliff edges
+ * - Building edges
+ * - Elevated platforms
+ * 
+ * Characteristics:
+ * - Ground detection
+ * - Edge proximity handling
+ * - Priority: 140
+ */
+UCLASS(BlueprintType, Blueprintable)
+class MYPROJECT_API UCameraCollision_SP03_CliffEdge : public UCameraCollision_SpecialBase
+{
+    GENERATED_BODY()
+
+public:
+    UCameraCollision_SP03_CliffEdge();
+
+    //========================================
+    // Strategy Identity
+    //========================================
+
+    virtual ECollisionStrategyID GetStrategyType() const override 
+    { 
+        return ECollisionStrategyID:: Collision_SP03_CliffEdge; 
+    }
+    
+    virtual FString GetStrategyDescription() const override 
+    { 
+        return TEXT("Handle cliff edge to prevent camera going over"); 
+    }
+    
+    virtual int32 GetPriority() const override { return 140; }
+
+    //========================================
+    // Execution
+    //========================================
+
+    virtual bool ShouldExecute(const FStageExecutionContext& Context) const override;
+
+    virtual bool Execute(
+        const FStageExecutionContext& Context,
+        const FCollisionDetectionResult& DetectionResult,
+        FCollisionResponseOutput& OutResponse
+    ) override;
+
+    virtual void Update(float DeltaTime, const FStageExecutionContext& Context) override;
+    virtual void Reset() override;
+
+    //========================================
+    // Public Query
+    //========================================
+
+    /** Is camera near an edge */
+    UFUNCTION(BlueprintPure, Category = "Special")
+    bool IsNearEdge() const { return bNearEdge; }
+
+protected:
+    //========================================
+    // Configuration
+    //========================================
+
+    /** Distance to check for ground below camera */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special|CliffEdge", meta = (ClampMin = "100.0", ClampMax = "1000.0"))
+    float GroundCheckDistance;
+
+    /** Height difference to consider as cliff edge */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special|CliffEdge", meta = (ClampMin = "50.0", ClampMax = "500.0"))
+    float CliffHeightThreshold;
+
+    /** Distance to pull camera back from edge */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special|CliffEdge", meta = (ClampMin = "0.0", ClampMax = "100.0"))
+    float EdgePullbackDistance;
+
+    /** Pitch adjustment when looking over edge (degrees) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special|CliffEdge", meta = (ClampMin = "-30.0", ClampMax = "30.0"))
+    float EdgePitchAdjustment;
+
+    //========================================
+    // Runtime State
+    //========================================
+
+    /** Is near an edge */
+    bool bNearEdge;
+
+    /** Current edge factor (0-1) */
+    float EdgeFactor;
+
+    /** Ground height at camera position */
+    float GroundHeightAtCamera;
+
+    /** Ground height at character position */
+    float GroundHeightAtCharacter;
+
+    //========================================
+    // Helper Methods
+    //========================================
+
+    /** Check if camera is over an edge/cliff */
+    bool DetectCliffEdge(const FStageExecutionContext& Context);
+
+    /** Get ground height at a location */
+    float GetGroundHeight(const FVector& Location) const;
+};
+
+
+//========================================
+// SP04: Corner Case
+//========================================
+
+/**
+ * UCameraCollision_SP04_CornerCase
+ * 
+ * SP04: Handle corner geometry
+ * 
+ * Detects when camera is in a corner and adjusts to prevent
+ * getting stuck or having poor viewing angles: 
+ * - Detects L-shaped and corner geometry
+ * - Adjusts camera position to escape corner
+ * - May rotate camera to better angle
+ * 
+ * Use Cases: 
+ * - Room corners
+ * - L-shaped corridors
+ * - Alcoves
+ * 
+ * Characteristics:
+ * - Corner geometry detection
+ * - Position/rotation adjustment
+ * - Priority: 155 (highest)
+ */
+UCLASS(BlueprintType, Blueprintable)
+class MYPROJECT_API UCameraCollision_SP04_CornerCase : public UCameraCollision_SpecialBase
+{
+    GENERATED_BODY()
+
+public:
+    UCameraCollision_SP04_CornerCase();
+
+    //========================================
+    // Strategy Identity
+    //========================================
+
+    virtual ECollisionStrategyID GetStrategyType() const override 
+    { 
+        return ECollisionStrategyID:: Collision_SP04_CornerCase; 
+    }
+    
+    virtual FString GetStrategyDescription() const override 
+    { 
+        return TEXT("Handle corner geometry to prevent getting stuck"); 
+    }
+    
+    virtual int32 GetPriority() const override { return 155; }
+
+    //========================================
+    // Execution
+    //========================================
+
+    virtual bool ShouldExecute(const FStageExecutionContext& Context) const override;
+
+    virtual bool Execute(
+        const FStageExecutionContext& Context,
+        const FCollisionDetectionResult& DetectionResult,
+        FCollisionResponseOutput& OutResponse
+    ) override;
+
+    virtual void Update(float DeltaTime, const FStageExecutionContext& Context) override;
+    virtual void Reset() override;
+
+    //========================================
+    // Public Query
+    //========================================
+
+    /** Is camera in a corner */
+    UFUNCTION(BlueprintPure, Category = "Special")
+    bool IsInCorner() const { return bInCorner; }
+
+protected:
+    //========================================
+    // Configuration
+    //========================================
+
+    /** Angle threshold to detect corner (degrees) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special|Corner", meta = (ClampMin = "30.0", ClampMax = "120.0"))
+    float CornerAngleThreshold;
+
+    /** Distance to check for corner walls */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special|Corner", meta = (ClampMin = "50.0", ClampMax = "200.0"))
+    float CornerCheckDistance;
+
+    /** Maximum position adjustment to escape corner */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special|Corner", meta = (ClampMin = "10.0", ClampMax = "100.0"))
+    float MaxCornerEscapeDistance;
+
+    /** Maximum yaw adjustment in corner (degrees) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special|Corner", meta = (ClampMin = "0.0", ClampMax = "45.0"))
+    float MaxCornerYawAdjustment;
+
+    //========================================
+    // Runtime State
+    //========================================
+
+    /** Is in a corner */
+    bool bInCorner;
+
+    /** Current corner factor (0-1) */
+    float CornerFactor;
+
+    /** Detected corner direction (bisector of corner walls) */
+    FVector CornerEscapeDirection;
+
+    /** Wall normals forming the corner */
+    FVector WallNormal1;
+    FVector WallNormal2;
+
+    //========================================
+    // Helper Methods
+    //========================================
+
+    /** Detect if camera is in a corner */
+    bool DetectCorner(const FStageExecutionContext& Context);
+
+    /** Calculate escape direction from corner */
+    FVector CalculateEscapeDirection() const;
+};
+```
+
+---
+
+【代码设计说明】
+
+### 1. 类继承结构
+
+```
+UCameraCollisionBase
+└── UCameraCollision_SpecialBase (特殊环境基类)
+    ├── UCameraCollision_SP01_TightSpace
+    ├── UCameraCollision_SP02_LowCeiling
+    ├── UCameraCollision_SP03_CliffEdge
+    └── UCameraCollision_SP04_CornerCase
+```
+
+### 2. 优先级设计（高于其他类别）
+
+| 策略 | 优先级 | 说明 |
+|------|--------|------|
+| SP04 CornerCase | 155 | 最高，角落优先处理 |
+| SP01 TightSpace | 150 | 高，狭窄空间 |
+| SP02 LowCeiling | 145 | 中高，低天花板 |
+| SP03 CliffEdge | 140 | 中，悬崖边缘 |
+
+### 3. SpecialBase提供的辅助方法
+
+```cpp
+PerformEnvironmentProbe()     // 多方向环境探测
+IsDirectionBlocked()          // 检查方向是否被阻挡
+GetClearanceInDirection()     // 获取某方向的净空距离
+GetCameraLocation()           // 获取相机位置
+InterpolateSpecialFactor()    // 平滑插值特殊因子
+```
+
+### 4. 四种Special策略特点
+
+| 策略 | 检测方法 | 调整类型 | 适用场景 |
+|------|----------|----------|----------|
+| SP01 TightSpace | 多向探测 | FOV + 距离 | 走廊、小房间 |
+| SP02 LowCeiling | 垂直探测 | Pitch + 位置 | 矮通道、洞穴 |
+| SP03 CliffEdge | 地面探测 | 位置 + Pitch | 悬崖、平台边缘 |
+| SP04 CornerCase | 角度探测 | 位置 + Yaw | 墙角、L型走廊 |
+
+### 5. 与Resolver中TODO匹配
+
+```cpp
+// CameraCollisionResolver.cpp 中的TODO：
+// RegisterStrategy(NewObject<UCameraCollision_SP01_TightSpace>(Outer));
+// RegisterStrategy(NewObject<UCameraCollision_SP02_LowCeiling>(Outer));
+// RegisterStrategy(NewObject<UCameraCollision_SP03_CliffEdge>(Outer));
+// RegisterStrategy(NewObject<UCameraCollision_SP04_CornerCase>(Outer));
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] Regenerate执行
+   - [ ] 编译通过（0 errors）
+
+2. **代码完整性：**
+   - [ ] SpecialBase基类完整
+   - [ ] SP01 TightSpace类完整
+   - [ ] SP02 LowCeiling类完整
+   - [ ] SP03 CliffEdge类完整
+   - [ ] SP04 CornerCase类完整
+
+3. **命名一致性：**
+   - [ ] 类名与ECollisionStrategyID枚举匹配
+   - [ ] 所有类返回正确的策略类型
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 5. 5. 4 完成报告
+================================================================================
+
+【创建的文件】
+- 文件：CameraCollision_Special.h
+- 路径：Source/MyProject/Public/Camera/Collision/
+
+【定义的类】
+基类：
+- ✅ UCameraCollision_SpecialBase
+
+策略类：
+- ✅ UCameraCollision_SP01_TightSpace (Priority: 150)
+- ✅ UCameraCollision_SP02_LowCeiling (Priority: 145)
+- ✅ UCameraCollision_SP03_CliffEdge (Priority:  140)
+- ✅ UCameraCollision_SP04_CornerCase (Priority: 155)
+
+【编译结果】
+- Regenerate：[已执行]
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【最终状态】
+✅ Special策略头文件创建完成
+
+================================================================================
+```
+
+【后续步骤】
+
+5. 5.4完成后：
+- [x] ✅ 5.5.1:  CameraCollision_Recovery.h
+- [x] ✅ 5.5.2: RecoveryBase + RC01
+- [x] ✅ 5.5.3: RC02 + RC03
+- [x] ✅ 5.5.4: CameraCollision_Special.h（当前）
+- [ ] ⏳ 5.5.5: SpecialBase + SP01-SP02实现
+- [ ] ⏳ 5.5.6: SP03-SP04实现 + 注册所有策略
+
+**Phase 5. 5进度：4/6**
+
+================================================================================

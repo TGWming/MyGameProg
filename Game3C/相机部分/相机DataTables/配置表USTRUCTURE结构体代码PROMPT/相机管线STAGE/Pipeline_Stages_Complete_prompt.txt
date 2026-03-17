@@ -1,0 +1,131 @@
+## 任务：为 Pipeline_Stages_Complete.csv 创建 UE4.27 C++ 数据结构
+
+### 项目背景
+这是一个类魂游戏相机系统项目，需要将CSV配置数据导入UE4.27引擎使用。
+当前任务是为 Pipeline_Stages_Complete.csv 创建对应的C++数据结构。
+
+### CSV 结构信息
+- 文件名：Pipeline_Stages_Complete.csv
+- 字段：StageID, StageName, ChineseName, Layer, ExecutionOrder, Description, InputData, OutputData, Dependencies, CanSkip, SkipCondition, EstimatedCostPercent
+- 记录数：8条
+- 用途：定义相机系统渲染管线的各个执行阶段配置
+
+### CSV字段详细说明
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| StageID | FName | 全局唯一标识，格式如PipelineStageComplete_1 |
+| StageName | FName | 阶段英文名称，如InputContextGather |
+| ChineseName | FString | 阶段中文名称，如输入上下文收集 |
+| Layer | FString/Enum | 所属层级，如InputLayer, DecisionLayer等 |
+| ExecutionOrder | int32 | 执行顺序，1-8 |
+| Description | FString | 阶段功能描述 |
+| InputData | FString | 输入数据，多个用/分隔 |
+| OutputData | FString | 输出数据 |
+| Dependencies | FString | 依赖的前置阶段，如Stage1, Stage2等 |
+| CanSkip | bool | 是否可跳过 |
+| SkipCondition | FString | 跳过条件描述 |
+| EstimatedCostPercent | int32 | 预估性能开销百分比 |
+
+### Layer字段的所有可能值（5个）
+- InputLayer (输入层) - 收集输入数据
+- DecisionLayer (决策层) - 状态机决策
+- ComputeLayer (计算层) - 核心计算逻辑
+- SafetyLayer (安全层) - 碰撞检测等安全处理
+- OutputLayer (输出层) - 最终输出应用
+
+---
+
+### 需要创建的文件清单
+
+#### 文件1：PipelineStageEnums.h
+路径：Source/[YourProject]/Public/Camera/Data/PipelineStageEnums.h
+
+内容要求：
+1. 创建 EPipelineLayer 枚举（BlueprintType）
+   - 包含：None, InputLayer, DecisionLayer, ComputeLayer, SafetyLayer, OutputLayer
+   - 每个枚举值添加 UMETA(DisplayName = "中文名称")
+   - 添加中文注释说明每个层级的职责
+
+#### 文件2：PipelineStageData.h
+路径：Source/[YourProject]/Public/Camera/Data/PipelineStageData.h
+
+内容要求：
+- 创建 FPipelineStageData 结构体，继承自 FTableRowBase
+- 包含以下字段（全部使用UPROPERTY宏暴露给蓝图）：
+  * StageID (FName) - 阶段唯一标识ID，作为DataTable的行名，Category="Identity"
+  * StageName (FName) - 阶段英文名称，Category="Identity"
+  * ChineseName (FString) - 阶段中文名称，Category="Identity"
+  * Layer (EPipelineLayer) - 所属层级枚举，Category="Classification"
+  * ExecutionOrder (int32) - 执行顺序，Category="Execution"，添加ClampMin=1, ClampMax=100的meta
+  * Description (FString) - 阶段功能描述，Category="Description"，使用MultiLine meta
+  * InputData (FString) - 输入数据描述，Category="DataFlow"
+  * OutputData (FString) - 输出数据描述，Category="DataFlow"
+  * Dependencies (FString) - 依赖的前置阶段，Category="Execution"
+  * bCanSkip (bool) - 是否可跳过，Category="Execution"
+  * SkipCondition (FString) - 跳过条件描述，Category="Execution"
+  * EstimatedCostPercent (int32) - 预估性能开销百分比，Category="Performance"，添加ClampMin=0, ClampMax=100的meta
+- 添加默认构造函数初始化所有成员
+- 每个字段添加中文注释说明用途
+
+#### 文件3：PipelineStageHelpers. h（可选但推荐）
+路径：Source/[YourProject]/Public/Camera/Data/PipelineStageHelpers.h
+
+内容要求：
+- 创建静态辅助类 UPipelineStageHelpers（继承UBlueprintFunctionLibrary）
+- 实现以下函数：
+  * StringToLayer(const FString&) -> EPipelineLayer
+  * LayerToString(EPipelineLayer) -> FString
+  * GetLayerDisplayName(EPipelineLayer) -> FString（返回中文名称）
+  * ParseInputDataArray(const FString&) -> TArray<FString>（将/分隔的字符串解析为数组）
+  * ParseDependencies(const FString&) -> TArray<FName>（解析依赖阶段列表）
+- 所有函数标记为 UFUNCTION(BlueprintPure) 可在蓝图中调用
+
+---
+
+### UE4.27 兼容性要求
+1. 使用 GENERATED_BODY() 宏（不是GENERATED_USTRUCT_BODY）
+2. #include "XXX.generated.h" 必须是最后一个include
+3. 枚举使用 enum class 语法配合 UENUM(BlueprintType)
+4. 结构体使用 USTRUCT(BlueprintType) 配合 FTableRowBase 基类
+5. 辅助类继承 UBlueprintFunctionLibrary
+6. bool类型字段命名以小写b开头（如bCanSkip）
+
+### 目录结构
+
+Source/[YourProject]/ ├── Public/ │ └── Camera/ │ └── Data/ │ ├── PipelineStageEnums.h │ ├── PipelineStageData.h │ └── PipelineStageHelpers.h
+
+
+### 完成后验证步骤
+1. 保存所有文件
+2. 在Visual Studio中编译项目（Build）
+3. 确认编译通过，无错误和警告
+4. 如果编译失败，分析错误信息并修复
+5. 报告编译结果和创建的文件列表
+
+### Build. cs 依赖检查
+确保项目的 Build. cs 文件中包含以下模块依赖：
+- "Core"
+- "CoreUObject"
+- "Engine"
+
+---
+
+### 上下文窗口限制说明
+如果在执行过程中遇到上下文窗口限制，请使用以下交接信息开始新会话：
+
+**交接Prompt模板：**
+
+继续上一个会话的任务：为UE4.27相机系统创建CSV数据结构
+
+已完成的工作：
+
+[列出已创建的文件]
+[列出已完成的步骤]
+当前进度：
+
+正在处理：Pipeline_Stages_Complete.csv
+状态：[描述当前状态]
+待完成的工作：
+
+[列出剩余任务]
+请继续完成剩余工作。

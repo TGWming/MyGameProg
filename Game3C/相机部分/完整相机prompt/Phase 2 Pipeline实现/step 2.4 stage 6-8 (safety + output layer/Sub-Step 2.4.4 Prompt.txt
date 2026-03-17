@@ -1,0 +1,462 @@
+================================================================================
+任务：创建CameraStage_PostProcess.  cpp - Stage 7实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.  27 C++项目。
+实现Stage 7的后处理逻辑。
+
+【当前进度】
+Phase 2 Step 2.  4 Sub-Step 2. 4. 4 (共190个Sub-Step中的第52个)
+
+前置完成：
+- Phase 1 全部完成 ✅
+- Sub-Step 2.1.  1-2. 1. 3:   Pipeline骨架 ✅
+- Sub-Step 2.2.1-2.2.4:  Stage 1-2 ✅
+- Sub-Step 2.3.1-2.3.6: Stage 3-5 ✅
+- Sub-Step 2.4.1-2.4.2: Stage 6 (CollisionResolve) ✅
+- Sub-Step 2.4.3: CameraStage_PostProcess.  h ✅
+
+【任务目标】
+创建文件：Source/[ProjectName]/Camera/Pipeline/CameraStage_PostProcess.cpp
+实现Stage 7。
+
+**这是一个.  cpp文件，添加后需要重新Generate Visual Studio project files。**
+**这是第三个可跳过的Stage。**
+
+【具体要求】
+
+1. 文件路径：Source/[ProjectName]/Camera/Pipeline/CameraStage_PostProcess. cpp
+
+2. 完整文件内容：
+
+```cpp
+// Copyright Epic Games, Inc.   All Rights Reserved.  
+
+#include "CameraStage_PostProcess.h"
+#include "Camera/Core/SoulsCameraManager.h"
+#include "Camera/Core/SoulsCameraGlobalConfig.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogCameraStage_PostProcess, Log, All);
+
+//========================================
+// Constructor 构造函数
+//========================================
+
+UCameraStage_PostProcess::UCameraStage_PostProcess()
+    : GlobalConfig(nullptr)
+    , bFirstFrame(true)
+    , PositionSmoothSpeed(20.0f)
+    , RotationSmoothSpeed(15.0f)
+    , GlobalMinDistance(50.0f)
+    , GlobalMaxDistance(1500.0f)
+    , GlobalMinFOV(40.0f)
+    , GlobalMaxFOV(120.0f)
+    , GlobalMinPitch(-80.0f)
+    , GlobalMaxPitch(80.0f)
+    , TotalPostProcessTimeMs(0.0f)
+    , ValuesClampedCount(0)
+{
+}
+
+//========================================
+// ICameraStage Interface 接口实现
+//========================================
+
+bool UCameraStage_PostProcess::ShouldExecute(const FStageExecutionContext& Context) const
+{
+    // Post-process stage is generally useful, so execute by default
+    // Could be skipped in performance-critical scenarios
+    
+    UE_LOG(LogCameraStage_PostProcess, VeryVerbose, TEXT("ShouldExecute: true"));
+    return true;
+}
+
+EStageResult UCameraStage_PostProcess::Execute(FStageExecutionContext& Context)
+{
+    // Reset statistics
+    ValuesClampedCount = 0;
+    const double StartTime = FPlatformTime:: Seconds();
+
+    // Step 1: Apply global limits
+    ApplyGlobalLimits(Context);
+
+    // Step 2: Apply final smoothing (skip on first frame)
+    if (!bFirstFrame)
+    {
+        ApplyFinalSmoothing(Context);
+    }
+
+    // Step 3: Build post-process settings
+    BuildPostProcessSettings(Context);
+
+    // Step 4: Normalize and validate output
+    NormalizeRotation(Context);
+    ValidateOutput(Context);
+
+    // Store for next frame's smoothing
+    PreviousOutput = Context.Output;
+    bFirstFrame = false;
+
+    TotalPostProcessTimeMs = static_cast<float>((FPlatformTime::  Seconds() - StartTime) * 1000.0);
+
+    UE_LOG(LogCameraStage_PostProcess, Verbose, TEXT("Execute: %d values clamped, Time=%.2fms"),
+        ValuesClampedCount, TotalPostProcessTimeMs);
+
+    return EStageResult::  Success;
+}
+
+void UCameraStage_PostProcess::OnPreExecute(const FStageExecutionContext& Context)
+{
+    UE_LOG(LogCameraStage_PostProcess, VeryVerbose, TEXT("Stage 7 PostProcess: PreExecute - Distance=%.1f, FOV=%.1f"),
+        Context.Output. Distance, Context.Output.FOV);
+}
+
+void UCameraStage_PostProcess::OnPostExecute(const FStageExecutionContext& Context, EStageResult Result)
+{
+    UE_LOG(LogCameraStage_PostProcess, VeryVerbose, TEXT("Stage 7 PostProcess: PostExecute - Distance=%. 1f, FOV=%.1f, Pitch=%.1f"),
+        Context.Output.Distance, Context.  Output.FOV, Context.Output. Rotation.Pitch);
+}
+
+//========================================
+// Configuration 配置
+//========================================
+
+void UCameraStage_PostProcess::SetGlobalConfig(USoulsCameraGlobalConfig* InConfig)
+{
+    GlobalConfig = InConfig;
+    
+    if (GlobalConfig)
+    {
+        // Load limits from global config
+        // TODO: Implement when GlobalConfig is fully available
+        // GlobalMinDistance = GlobalConfig->GlobalMinDistance;
+        // GlobalMaxDistance = GlobalConfig->GlobalMaxDistance;
+        // etc... 
+        
+        UE_LOG(LogCameraStage_PostProcess, Log, TEXT("Global config set successfully"));
+    }
+}
+
+//========================================
+// Global Limits 全局限制
+//========================================
+
+void UCameraStage_PostProcess::ApplyGlobalLimits(FStageExecutionContext& Context)
+{
+    // Clamp distance
+    const float OriginalDistance = Context. Output.Distance;
+    Context.Output. Distance = ClampDistance(Context. Output.Distance);
+    if (! FMath::IsNearlyEqual(OriginalDistance, Context.Output.Distance))
+    {
+        ValuesClampedCount++;
+        UE_LOG(LogCameraStage_PostProcess, VeryVerbose, TEXT("Distance clamped:  %.1f -> %. 1f"),
+            OriginalDistance, Context.Output.Distance);
+    }
+
+    // Clamp FOV
+    const float OriginalFOV = Context.Output.FOV;
+    Context.Output.FOV = ClampFOV(Context.Output.FOV);
+    if (!FMath::IsNearlyEqual(OriginalFOV, Context.Output.FOV))
+    {
+        ValuesClampedCount++;
+        UE_LOG(LogCameraStage_PostProcess, VeryVerbose, TEXT("FOV clamped: %. 1f -> %.1f"),
+            OriginalFOV, Context.Output. FOV);
+    }
+
+    // Clamp pitch
+    const float OriginalPitch = Context.Output. Rotation.Pitch;
+    Context.Output.Rotation. Pitch = ClampPitch(Context.Output.Rotation. Pitch);
+    if (!FMath:: IsNearlyEqual(OriginalPitch, Context.Output.Rotation. Pitch))
+    {
+        ValuesClampedCount++;
+        UE_LOG(LogCameraStage_PostProcess, VeryVerbose, TEXT("Pitch clamped: %. 1f -> %.1f"),
+            OriginalPitch, Context.Output. Rotation.Pitch);
+    }
+}
+
+float UCameraStage_PostProcess::ClampDistance(float Distance) const
+{
+    return FMath:: Clamp(Distance, GlobalMinDistance, GlobalMaxDistance);
+}
+
+float UCameraStage_PostProcess:: ClampFOV(float FOV) const
+{
+    return FMath:: Clamp(FOV, GlobalMinFOV, GlobalMaxFOV);
+}
+
+float UCameraStage_PostProcess::ClampPitch(float Pitch) const
+{
+    return FMath:: Clamp(Pitch, GlobalMinPitch, GlobalMaxPitch);
+}
+
+//========================================
+// Smoothing 平滑
+//========================================
+
+void UCameraStage_PostProcess::ApplyFinalSmoothing(FStageExecutionContext& Context)
+{
+    // Light smoothing for any remaining jitter
+    // This is a final pass after all other processing
+    
+    Context.Output.FocusPoint = SmoothPosition(
+        Context.  Output.  FocusPoint,
+        PreviousOutput.  FocusPoint,
+        Context.DeltaTime
+    );
+
+    Context.Output. Rotation = SmoothRotation(
+        Context.  Output. Rotation,
+        PreviousOutput.  Rotation,
+        Context.  DeltaTime
+    );
+
+    // Smooth distance
+    const float DistanceAlpha = FMath::Clamp(Context.DeltaTime * PositionSmoothSpeed, 0.0f, 1.0f);
+    Context.Output. Distance = FMath::Lerp(PreviousOutput.Distance, Context.Output. Distance, DistanceAlpha);
+
+    // Smooth FOV
+    const float FOVAlpha = FMath::Clamp(Context.DeltaTime * PositionSmoothSpeed, 0.0f, 1.0f);
+    Context.Output.FOV = FMath::Lerp(PreviousOutput. FOV, Context. Output.FOV, FOVAlpha);
+}
+
+FVector UCameraStage_PostProcess::SmoothPosition(const FVector& Current, const FVector& Previous, float DeltaTime)
+{
+    const float Alpha = FMath:: Clamp(DeltaTime * PositionSmoothSpeed, 0.0f, 1.0f);
+    return FMath:: Lerp(Previous, Current, Alpha);
+}
+
+FRotator UCameraStage_PostProcess::SmoothRotation(const FRotator& Current, const FRotator& Previous, float DeltaTime)
+{
+    // Use quaternion slerp for better rotation interpolation
+    const FQuat PrevQuat = Previous.Quaternion();
+    const FQuat CurrQuat = Current.  Quaternion();
+    
+    const float Alpha = FMath:: Clamp(DeltaTime * RotationSmoothSpeed, 0.0f, 1.0f);
+    const FQuat SmoothedQuat = FQuat::Slerp(PrevQuat, CurrQuat, Alpha);
+    
+    return SmoothedQuat. Rotator();
+}
+
+//========================================
+// Post-Process Effects 后处理效果
+//========================================
+
+void UCameraStage_PostProcess::BuildPostProcessSettings(FStageExecutionContext& Context)
+{
+    // Apply and validate post-process effects
+    ApplyVignetteEffect(Context);
+    ApplyColorTintEffect(Context);
+
+    // DOF focal distance defaults to target distance if not set
+    if (Context.Output.DOFFocalDistance <= 0.0f && Context.InputContext.bHasTarget)
+    {
+        Context. Output.DOFFocalDistance = Context.InputContext. TargetDistance;
+    }
+
+    // Time dilation clamping
+    Context.Output.TimeDilation = FMath::Clamp(Context.Output.TimeDilation, 0.01f, 2.0f);
+}
+
+void UCameraStage_PostProcess::ApplyVignetteEffect(FStageExecutionContext& Context)
+{
+    // Clamp vignette intensity to valid range
+    Context. Output.VignetteIntensity = FMath:: Clamp(Context. Output.VignetteIntensity, 0.0f, 1.0f);
+}
+
+void UCameraStage_PostProcess:: ApplyColorTintEffect(FStageExecutionContext& Context)
+{
+    // Ensure color tint alpha is valid
+    Context.Output.ColorTint. A = 1.0f;
+    
+    // Clamp color components
+    Context.Output. ColorTint.R = FMath:: Clamp(Context.Output.ColorTint.R, 0.0f, 2.0f);
+    Context.Output. ColorTint.G = FMath:: Clamp(Context.Output.ColorTint.G, 0.0f, 2.0f);
+    Context.Output.ColorTint.B = FMath::Clamp(Context.Output. ColorTint.B, 0.0f, 2.0f);
+}
+
+//========================================
+// Normalization 归一化
+//========================================
+
+void UCameraStage_PostProcess::NormalizeRotation(FStageExecutionContext& Context)
+{
+    // Normalize rotation to prevent angle wraparound issues
+    Context.Output.Rotation.Normalize();
+    
+    // Ensure yaw is in -180 to 180 range
+    Context.Output.Rotation.Yaw = FMath::UnwindDegrees(Context.Output. Rotation.Yaw);
+}
+
+void UCameraStage_PostProcess:: ValidateOutput(FStageExecutionContext& Context)
+{
+    // Check for NaN or invalid values and fix them
+    
+    // Position
+    if (!Context.Output.FocusPoint.ContainsNaN())
+    {
+        // Position is valid
+    }
+    else
+    {
+        UE_LOG(LogCameraStage_PostProcess, Warning, TEXT("ValidateOutput: FocusPoint contains NaN, using fallback"));
+        Context.Output.FocusPoint = Context.InputContext.CharacterLocation;
+        ValuesClampedCount++;
+    }
+
+    // Rotation
+    if (Context.Output. Rotation.ContainsNaN())
+    {
+        UE_LOG(LogCameraStage_PostProcess, Warning, TEXT("ValidateOutput:  Rotation contains NaN, using fallback"));
+        Context.Output.Rotation = Context.InputContext.CharacterRotation;
+        ValuesClampedCount++;
+    }
+
+    // Distance
+    if (! FMath::IsFinite(Context.Output.Distance) || Context.Output. Distance <= 0.0f)
+    {
+        UE_LOG(LogCameraStage_PostProcess, Warning, TEXT("ValidateOutput:  Invalid distance, using fallback"));
+        Context.Output. Distance = GlobalMinDistance;
+        ValuesClampedCount++;
+    }
+
+    // FOV
+    if (!FMath::IsFinite(Context.Output. FOV) || Context.Output.FOV <= 0.0f)
+    {
+        UE_LOG(LogCameraStage_PostProcess, Warning, TEXT("ValidateOutput: Invalid FOV, using fallback"));
+        Context.Output.FOV = 90.0f;
+        ValuesClampedCount++;
+    }
+}
+```
+
+3. 代码风格：
+   - 使用专用日志类别 `LogCameraStage_PostProcess`
+   - 初始化.  h中声明的所有成员变量
+   - 实现所有全局限制方法
+   - 实现所有平滑方法（使用四元数Slerp）
+   - 实现后处理效果验证
+   - 实现旋转归一化和输出验证
+   - 处理NaN和无效值
+   - 中英文注释分组
+
+【验证标准】
+- 编译通过
+- 全局限制正确应用
+- 平滑插值正确工作
+- 日志输出正确
+
+【注意事项】
+- 使用FQuat::  Slerp进行旋转平滑
+- 验证NaN和无效值，提供回退值
+- 包含SoulsCameraGlobalConfig.h（尽管目前使用默认值）
+- **这是.  cpp文件，添加后需要重新Generate Visual Studio project files**
+
+【输出要求】
+输出完整的CameraStage_PostProcess.cpp文件代码。
+
+================================================================================
+                        上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+```
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：Sub-Step 2.4. 4 创建CameraStage_PostProcess.  cpp - Stage 7实现
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断，例如：完成到ApplyFinalSmoothing，未完成BuildPostProcessSettings]
+
+【已完成内容】
+- 构造函数
+- ICameraStage接口实现
+- 配置方法
+- [列出已完成的方法]
+
+【未完成内容】
+- [列出剩余方法]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存到CameraStage_PostProcess.  cpp，然后开启新对话。
+
+【编译注意】
+添加.  cpp文件后需要：
+1. 右键.  uproject → Generate Visual Studio project files
+2. 重新打开.  sln
+
+================================================================================
+                    继续任务 - 新对话PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Phase 2 Step 2.4 Sub-Step 2.4.4 续接任务。
+完成CameraStage_PostProcess. cpp实现。
+
+【前置完成】
+- Phase 1 全部完成 ✅
+- Sub-Step 2.1.1-2.1.3:  Pipeline骨架 ✅
+- Sub-Step 2.2.1-2.2.4: Stage 1-2 ✅
+- Sub-Step 2.3.1-2.3.6: Stage 3-5 ✅
+- Sub-Step 2.4.1-2.4.2: Stage 6 ✅
+- Sub-Step 2.4.3: CameraStage_PostProcess. h ✅
+- Sub-Step 2.4.4 部分完成：
+  - [列出已完成的方法] ✅
+
+【续接任务】
+继续完成CameraStage_PostProcess.cpp：
+- [列出剩余方法]
+
+【目标文件】
+Source/[ProjectName]/Camera/Pipeline/CameraStage_PostProcess.cpp
+
+【方法清单】
+- 构造函数
+- ShouldExecute() / Execute() / OnPreExecute() / OnPostExecute()
+- SetGlobalConfig()
+- ApplyGlobalLimits() / ClampDistance() / ClampFOV() / ClampPitch()
+- ApplyFinalSmoothing() / SmoothPosition() / SmoothRotation()
+- BuildPostProcessSettings() / ApplyVignetteEffect() / ApplyColorTintEffect()
+- NormalizeRotation() / ValidateOutput()
+
+【编译注意】
+添加. cpp文件后需要：
+1. 右键. uproject → Generate Visual Studio project files
+2. 重新打开. sln
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================
+```
+
+【交接信息要求】
+1. 交接PROMPT必须是**完全自包含**的
+2. 明确标注目标文件和前置依赖
+3. 包含完整方法清单
+4. **强调这是. cpp文件，需要Generate**
+
+================================================================================

@@ -1,0 +1,495 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>C2CS.Runtime</name>
+    </assembly>
+    <members>
+        <member name="T:bottlenoselabs.C2CS.Runtime.CConstAttribute">
+            <summary>
+                Specifies a C `const` for a parameter or return value.
+            </summary>
+        </member>
+        <member name="T:bottlenoselabs.C2CS.Runtime.CNodeAttribute">
+            <summary>
+                Specifies a C node with a specific kind for a C# type.
+            </summary>
+        </member>
+        <member name="P:bottlenoselabs.C2CS.Runtime.CNodeAttribute.Kind">
+            <summary>
+                Gets or sets the C node kind.
+            </summary>
+        </member>
+        <member name="T:bottlenoselabs.C2CS.Runtime.CBool">
+            <summary>
+                A boolean value type with the same memory layout as a <see cref="T:System.Byte" /> in both managed and unmanaged contexts;
+                equivalent to a standard bool found in C/C++/ObjC where <c>0</c> is <c>false</c> and any other value is
+                <c>true</c>.
+            </summary>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CBool.op_Implicit(System.Boolean)~bottlenoselabs.C2CS.Runtime.CBool">
+            <summary>
+                Converts the specified <see cref="T:System.Boolean" /> to a <see cref="T:bottlenoselabs.C2CS.Runtime.CBool" />.
+            </summary>
+            <param name="value">The value.</param>
+            <returns>A <see cref="T:bottlenoselabs.C2CS.Runtime.CBool" />.</returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CBool.FromBoolean(System.Boolean)">
+            <summary>
+                Converts the specified <see cref="T:System.Boolean" /> to a <see cref="T:bottlenoselabs.C2CS.Runtime.CBool" />.
+            </summary>
+            <param name="value">The value.</param>
+            <returns>A <see cref="T:bottlenoselabs.C2CS.Runtime.CBool" />.</returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CBool.op_Implicit(bottlenoselabs.C2CS.Runtime.CBool)~System.Boolean">
+            <summary>
+                Converts the specified <see cref="T:bottlenoselabs.C2CS.Runtime.CBool" /> to a <see cref="T:System.Boolean" />.
+            </summary>
+            <param name="value">The value.</param>
+            <returns>A <see cref="T:System.Boolean" />.</returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CBool.ToBoolean(bottlenoselabs.C2CS.Runtime.CBool)">
+            <summary>
+                Converts the specified <see cref="T:bottlenoselabs.C2CS.Runtime.CBool" /> to a <see cref="T:System.Boolean" />.
+            </summary>
+            <param name="value">The value.</param>
+            <returns>A <see cref="T:System.Boolean" />.</returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CBool.ToString">
+            <inheritdoc />
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CBool.Equals(System.Object)">
+            <inheritdoc />
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CBool.Equals(bottlenoselabs.C2CS.Runtime.CBool)">
+            <inheritdoc />
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CBool.GetHashCode">
+            <inheritdoc />
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CBool.op_Equality(bottlenoselabs.C2CS.Runtime.CBool,bottlenoselabs.C2CS.Runtime.CBool)">
+            <summary>
+                Returns a value that indicates whether two specified <see cref="T:bottlenoselabs.C2CS.Runtime.CBool" /> structures are equal.
+            </summary>
+            <param name="left">The first <see cref="T:bottlenoselabs.C2CS.Runtime.CBool" /> to compare.</param>
+            <param name="right">The second <see cref="T:bottlenoselabs.C2CS.Runtime.CBool" /> to compare.</param>
+            <returns><c>true</c> if <paramref name="left" /> and <paramref name="right" /> are equal; otherwise, <c>false</c>.</returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CBool.op_Inequality(bottlenoselabs.C2CS.Runtime.CBool,bottlenoselabs.C2CS.Runtime.CBool)">
+            <summary>
+                Returns a value that indicates whether two specified <see cref="T:bottlenoselabs.C2CS.Runtime.CBool" /> structures are not equal.
+            </summary>
+            <param name="left">The first <see cref="T:bottlenoselabs.C2CS.Runtime.CBool" /> to compare.</param>
+            <param name="right">The second <see cref="T:bottlenoselabs.C2CS.Runtime.CBool" /> to compare.</param>
+            <returns><c>true</c> if <paramref name="left" /> and <paramref name="right" /> are not equal; otherwise, <c>false</c>.</returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CBool.Equals(bottlenoselabs.C2CS.Runtime.CBool,bottlenoselabs.C2CS.Runtime.CBool)">
+            <summary>
+                Returns a value that indicates whether two specified <see cref="T:bottlenoselabs.C2CS.Runtime.CBool" /> structures are equal.
+            </summary>
+            <param name="left">The first <see cref="T:bottlenoselabs.C2CS.Runtime.CBool" /> to compare.</param>
+            <param name="right">The second <see cref="T:bottlenoselabs.C2CS.Runtime.CBool" /> to compare.</param>
+            <returns><c>true</c> if <paramref name="left" /> and <paramref name="right" /> are equal; otherwise, <c>false</c>.</returns>
+        </member>
+        <member name="T:bottlenoselabs.C2CS.Runtime.CChar">
+            <summary>
+                A value type with the same memory layout as a <see cref="T:System.Byte" /> in a managed context and <c>char</c> in
+                an unmanaged context.
+            </summary>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CChar.op_Implicit(System.Byte)~bottlenoselabs.C2CS.Runtime.CChar">
+            <summary>
+                Converts the specified <see cref="T:System.Byte" /> to a <see cref="T:bottlenoselabs.C2CS.Runtime.CChar" />.
+            </summary>
+            <param name="value">The value.</param>
+            <returns>A <see cref="T:bottlenoselabs.C2CS.Runtime.CChar" />.</returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CChar.FromByte(System.Byte)">
+            <summary>
+                Converts the specified <see cref="T:System.Byte" /> to a <see cref="T:bottlenoselabs.C2CS.Runtime.CChar" />.
+            </summary>
+            <param name="value">The value.</param>
+            <returns>A <see cref="T:bottlenoselabs.C2CS.Runtime.CChar" />.</returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CChar.op_Implicit(bottlenoselabs.C2CS.Runtime.CChar)~System.Byte">
+            <summary>
+                Converts the specified <see cref="T:bottlenoselabs.C2CS.Runtime.CChar" /> to a <see cref="T:System.Byte" />.
+            </summary>
+            <param name="value">The value.</param>
+            <returns>A <see cref="T:System.Byte" />.</returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CChar.ToByte(bottlenoselabs.C2CS.Runtime.CChar)">
+            <summary>
+                Converts the specified <see cref="T:bottlenoselabs.C2CS.Runtime.CChar" /> to a <see cref="T:System.Byte" />.
+            </summary>
+            <param name="value">The value.</param>
+            <returns>A <see cref="T:System.Byte" />.</returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CChar.ToString">
+            <inheritdoc />
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CChar.Equals(System.Object)">
+            <inheritdoc />
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CChar.Equals(System.Byte)">
+            <inheritdoc />
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CChar.Equals(bottlenoselabs.C2CS.Runtime.CChar)">
+            <inheritdoc />
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CChar.GetHashCode">
+            <inheritdoc />
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CChar.op_Equality(bottlenoselabs.C2CS.Runtime.CChar,bottlenoselabs.C2CS.Runtime.CChar)">
+            <summary>
+                Returns a value that indicates whether two specified <see cref="T:bottlenoselabs.C2CS.Runtime.CChar" /> structures are equal.
+            </summary>
+            <param name="left">The first <see cref="T:bottlenoselabs.C2CS.Runtime.CChar" /> to compare.</param>
+            <param name="right">The second <see cref="T:bottlenoselabs.C2CS.Runtime.CChar" /> to compare.</param>
+            <returns><c>true</c> if <paramref name="left" /> and <paramref name="right" /> are equal; otherwise, <c>false</c>.</returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CChar.op_Inequality(bottlenoselabs.C2CS.Runtime.CChar,bottlenoselabs.C2CS.Runtime.CChar)">
+            <summary>
+                Returns a value that indicates whether two specified <see cref="T:bottlenoselabs.C2CS.Runtime.CChar" /> structures are not equal.
+            </summary>
+            <param name="left">The first <see cref="T:bottlenoselabs.C2CS.Runtime.CChar" /> to compare.</param>
+            <param name="right">The second <see cref="T:bottlenoselabs.C2CS.Runtime.CChar" /> to compare.</param>
+            <returns><c>true</c> if <paramref name="left" /> and <paramref name="right" /> are not equal; otherwise, <c>false</c>.</returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CChar.Equals(bottlenoselabs.C2CS.Runtime.CChar,bottlenoselabs.C2CS.Runtime.CChar)">
+            <summary>
+                Returns a value that indicates whether two specified <see cref="T:bottlenoselabs.C2CS.Runtime.CChar" /> structures are equal.
+            </summary>
+            <param name="left">The first <see cref="T:bottlenoselabs.C2CS.Runtime.CChar" /> to compare.</param>
+            <param name="right">The second <see cref="T:bottlenoselabs.C2CS.Runtime.CChar" /> to compare.</param>
+            <returns><c>true</c> if <paramref name="left" /> and <paramref name="right" /> are equal; otherwise, <c>false</c>.</returns>
+        </member>
+        <member name="T:bottlenoselabs.C2CS.Runtime.CString">
+            <summary>
+                A pointer value type of bytes that represent a string; the C type `char*`.
+            </summary>
+        </member>
+        <member name="P:bottlenoselabs.C2CS.Runtime.CString.IsNull">
+            <summary>
+                Gets a value indicating whether this <see cref="T:bottlenoselabs.C2CS.Runtime.CString" /> is a null pointer.
+            </summary>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CString.#ctor(System.Byte*)">
+            <summary>
+                Initializes a new instance of the <see cref="T:bottlenoselabs.C2CS.Runtime.CString" /> struct.
+            </summary>
+            <param name="value">The pointer value.</param>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CString.#ctor(System.IntPtr)">
+            <summary>
+                Initializes a new instance of the <see cref="T:bottlenoselabs.C2CS.Runtime.CString" /> struct.
+            </summary>
+            <param name="value">The pointer value.</param>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CString.#ctor(System.String)">
+            <summary>
+                Initializes a new instance of the <see cref="T:bottlenoselabs.C2CS.Runtime.CString" /> struct.
+            </summary>
+            <param name="s">The string value.</param>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CString.Dispose">
+            <summary>
+                Attempts to free the memory pointed by the <see cref="T:bottlenoselabs.C2CS.Runtime.CString"/>.
+            </summary>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CString.op_Explicit(System.IntPtr)~bottlenoselabs.C2CS.Runtime.CString">
+            <summary>
+                Performs an explicit conversion from an <see cref="T:System.IntPtr" /> to a <see cref="T:bottlenoselabs.C2CS.Runtime.CString" />.
+            </summary>
+            <param name="value">The pointer value.</param>
+            <returns>
+                The resulting <see cref="T:bottlenoselabs.C2CS.Runtime.CString" />.
+            </returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CString.FromIntPtr(System.IntPtr)">
+            <summary>
+                Performs an explicit conversion from an <see cref="T:System.IntPtr" /> to a <see cref="T:bottlenoselabs.C2CS.Runtime.CString" />.
+            </summary>
+            <param name="value">The pointer value.</param>
+            <returns>
+                The resulting <see cref="T:bottlenoselabs.C2CS.Runtime.CString" />.
+            </returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CString.op_Implicit(System.Byte*)~bottlenoselabs.C2CS.Runtime.CString">
+            <summary>
+                Performs an implicit conversion from a byte pointer to a <see cref="T:bottlenoselabs.C2CS.Runtime.CString" />.
+            </summary>
+            <param name="value">The pointer value.</param>
+            <returns>
+                The resulting <see cref="T:bottlenoselabs.C2CS.Runtime.CString" />.
+            </returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CString.From(System.Byte*)">
+            <summary>
+                Performs an implicit conversion from a byte pointer to a <see cref="T:bottlenoselabs.C2CS.Runtime.CString" />.
+            </summary>
+            <param name="value">The pointer value.</param>
+            <returns>
+                The resulting <see cref="T:bottlenoselabs.C2CS.Runtime.CString" />.
+            </returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CString.op_Implicit(bottlenoselabs.C2CS.Runtime.CString)~System.IntPtr">
+            <summary>
+                Performs an implicit conversion from a <see cref="T:bottlenoselabs.C2CS.Runtime.CString" /> to a <see cref="T:System.IntPtr" />.
+            </summary>
+            <param name="value">The pointer.</param>
+            <returns>
+                The resulting <see cref="T:System.IntPtr" />.
+            </returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CString.ToIntPtr(bottlenoselabs.C2CS.Runtime.CString)">
+            <summary>
+                Performs an implicit conversion from a <see cref="T:bottlenoselabs.C2CS.Runtime.CString" /> to a <see cref="T:System.IntPtr" />.
+            </summary>
+            <param name="value">The pointer.</param>
+            <returns>
+                The resulting <see cref="T:System.IntPtr" />.
+            </returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CString.op_Explicit(bottlenoselabs.C2CS.Runtime.CString)~System.String">
+            <summary>
+                Performs an explicit conversion from a <see cref="T:bottlenoselabs.C2CS.Runtime.CString" /> to a <see cref="T:System.String" />.
+            </summary>
+            <param name="value">The <see cref="T:bottlenoselabs.C2CS.Runtime.CString" />.</param>
+            <returns>
+                The resulting <see cref="T:System.String" />.
+            </returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CString.ToString(bottlenoselabs.C2CS.Runtime.CString)">
+            <summary>
+                Converts a C style string (ANSI or UTF-8) of type `char` (one dimensional byte array
+                terminated by a <c>0x0</c>) to a UTF-16 <see cref="T:System.String" /> by allocating and copying.
+            </summary>
+            <param name="value">A pointer to the C string.</param>
+            <returns>A <see cref="T:System.String" /> equivalent of <paramref name="value" />.</returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CString.op_Explicit(System.String)~bottlenoselabs.C2CS.Runtime.CString">
+            <summary>
+                Performs an explicit conversion from a <see cref="T:System.String" /> to a <see cref="T:bottlenoselabs.C2CS.Runtime.CString" />.
+            </summary>
+            <param name="s">The <see cref="T:System.String" />.</param>
+            <returns>
+                The resulting <see cref="T:bottlenoselabs.C2CS.Runtime.CString" />.
+            </returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CString.FromString(System.String)">
+            <summary>
+                Converts a UTF-16 <see cref="T:System.String" /> to a C style string (one dimensional byte array terminated by a
+                <c>0x0</c>) by allocating and copying.
+            </summary>
+            <param name="str">The <see cref="T:System.String" />.</param>
+            <returns>A C string pointer.</returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CString.ToString">
+            <inheritdoc />
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CString.Equals(System.Object)">
+            <inheritdoc />
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CString.Equals(bottlenoselabs.C2CS.Runtime.CString)">
+            <inheritdoc />
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CString.GetHashCode">
+            <inheritdoc />
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CString.op_Equality(bottlenoselabs.C2CS.Runtime.CString,bottlenoselabs.C2CS.Runtime.CString)">
+            <summary>
+                Returns a value that indicates whether two specified <see cref="T:bottlenoselabs.C2CS.Runtime.CString" /> structures are equal.
+            </summary>
+            <param name="left">The first <see cref="T:bottlenoselabs.C2CS.Runtime.CString" /> to compare.</param>
+            <param name="right">The second <see cref="T:bottlenoselabs.C2CS.Runtime.CString" /> to compare.</param>
+            <returns><c>true</c> if <paramref name="left" /> and <paramref name="right" /> are equal; otherwise, <c>false</c>.</returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CString.op_Inequality(bottlenoselabs.C2CS.Runtime.CString,bottlenoselabs.C2CS.Runtime.CString)">
+            <summary>
+                Returns a value that indicates whether two specified <see cref="T:bottlenoselabs.C2CS.Runtime.CBool" /> structures are not equal.
+            </summary>
+            <param name="left">The first <see cref="T:bottlenoselabs.C2CS.Runtime.CString" /> to compare.</param>
+            <param name="right">The second <see cref="T:bottlenoselabs.C2CS.Runtime.CString" /> to compare.</param>
+            <returns><c>true</c> if <paramref name="left" /> and <paramref name="right" /> are not equal; otherwise, <c>false</c>.</returns>
+        </member>
+        <member name="T:bottlenoselabs.C2CS.Runtime.CStrings">
+            <summary>
+                Utility methods for interoperability with C style strings in C#.
+            </summary>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CStrings.CStringArray(System.ReadOnlySpan{System.String})">
+            <summary>
+                Converts an array of strings to an array of C strings of type `char` (multi-dimensional array of one
+                dimensional byte arrays each terminated by a <c>0x0</c>) by allocating and copying if not already cached.
+            </summary>
+            <remarks>
+                <para>Calls <see cref="T:bottlenoselabs.C2CS.Runtime.CString" />.</para>
+            </remarks>
+            <param name="values">The strings.</param>
+            <returns>An array pointer of C string pointers. You are responsible for freeing the returned pointer.</returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CStrings.CStringWideArray(System.ReadOnlySpan{System.String})">
+            <summary>
+                Converts an array of strings to an array of C strings of type `wchar_t` (multi-dimensional array of one
+                dimensional ushort arrays each terminated by a <c>0x0</c>) by allocating and copying if not already cached.
+            </summary>
+            <remarks>
+                <para>Calls <see cref="T:bottlenoselabs.C2CS.Runtime.CString" />.</para>
+            </remarks>
+            <param name="values">The strings.</param>
+            <returns>An array pointer of C string pointers. You are responsible for freeing the returned pointer.</returns>
+        </member>
+        <member name="T:bottlenoselabs.C2CS.Runtime.CStringWide">
+            <summary>
+                A pointer value type that represents a wide string; C type `wchar_t*`.
+            </summary>
+        </member>
+        <member name="P:bottlenoselabs.C2CS.Runtime.CStringWide.IsNull">
+            <summary>
+                Gets a value indicating whether this <see cref="T:bottlenoselabs.C2CS.Runtime.CStringWide" /> is a null pointer.
+            </summary>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CStringWide.#ctor(System.Byte*)">
+            <summary>
+                Initializes a new instance of the <see cref="T:bottlenoselabs.C2CS.Runtime.CStringWide" /> struct.
+            </summary>
+            <param name="value">The pointer value.</param>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CStringWide.#ctor(System.IntPtr)">
+            <summary>
+                Initializes a new instance of the <see cref="T:bottlenoselabs.C2CS.Runtime.CStringWide" /> struct.
+            </summary>
+            <param name="value">The pointer value.</param>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CStringWide.#ctor(System.String)">
+            <summary>
+                Initializes a new instance of the <see cref="T:bottlenoselabs.C2CS.Runtime.CStringWide" /> struct.
+            </summary>
+            <param name="s">The string value.</param>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CStringWide.op_Explicit(System.IntPtr)~bottlenoselabs.C2CS.Runtime.CStringWide">
+            <summary>
+                Performs an explicit conversion from a <see cref="T:System.IntPtr" /> to a <see cref="T:bottlenoselabs.C2CS.Runtime.CStringWide" />.
+            </summary>
+            <param name="value">The pointer value.</param>
+            <returns>
+                The resulting <see cref="T:bottlenoselabs.C2CS.Runtime.CStringWide" />.
+            </returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CStringWide.FromIntPtr(System.IntPtr)">
+            <summary>
+                Performs an explicit conversion from a <see cref="T:System.IntPtr" /> to a <see cref="T:bottlenoselabs.C2CS.Runtime.CStringWide" />.
+            </summary>
+            <param name="value">The pointer value.</param>
+            <returns>
+                The resulting <see cref="T:bottlenoselabs.C2CS.Runtime.CStringWide" />.
+            </returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CStringWide.op_Implicit(System.Byte*)~bottlenoselabs.C2CS.Runtime.CStringWide">
+            <summary>
+                Performs an implicit conversion from a byte pointer to a <see cref="T:bottlenoselabs.C2CS.Runtime.CStringWide" />.
+            </summary>
+            <param name="value">The pointer value.</param>
+            <returns>
+                The resulting <see cref="T:bottlenoselabs.C2CS.Runtime.CStringWide" />.
+            </returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CStringWide.From(System.Byte*)">
+            <summary>
+                Performs an implicit conversion from a byte pointer to a <see cref="T:bottlenoselabs.C2CS.Runtime.CStringWide" />.
+            </summary>
+            <param name="value">The pointer value.</param>
+            <returns>
+                The resulting <see cref="T:bottlenoselabs.C2CS.Runtime.CStringWide" />.
+            </returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CStringWide.op_Implicit(bottlenoselabs.C2CS.Runtime.CStringWide)~System.IntPtr">
+            <summary>
+                Performs an implicit conversion from a <see cref="T:bottlenoselabs.C2CS.Runtime.CStringWide" /> to a <see cref="T:System.IntPtr" />.
+            </summary>
+            <param name="value">The pointer.</param>
+            <returns>
+                The resulting <see cref="T:System.IntPtr" />.
+            </returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CStringWide.ToIntPtr(bottlenoselabs.C2CS.Runtime.CStringWide)">
+            <summary>
+                Performs an implicit conversion from a <see cref="T:bottlenoselabs.C2CS.Runtime.CStringWide" /> to a <see cref="T:System.IntPtr" />.
+            </summary>
+            <param name="value">The pointer.</param>
+            <returns>
+                The resulting <see cref="T:System.IntPtr" />.
+            </returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CStringWide.op_Explicit(bottlenoselabs.C2CS.Runtime.CStringWide)~System.String">
+            <summary>
+                Performs an explicit conversion from a <see cref="T:bottlenoselabs.C2CS.Runtime.CStringWide" /> to a <see cref="T:System.String" />.
+            </summary>
+            <param name="value">The <see cref="T:bottlenoselabs.C2CS.Runtime.CStringWide" />.</param>
+            <returns>
+                The resulting <see cref="T:System.String" />.
+            </returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CStringWide.ToString(bottlenoselabs.C2CS.Runtime.CStringWide)">
+            <summary>
+                Converts a C style string (unicode) of type `wchar_t` (one dimensional ushort array
+                terminated by a <c>0x0</c>) to a UTF-16 <see cref="T:System.String" /> by allocating and copying.
+            </summary>
+            <param name="value">A pointer to the C string.</param>
+            <returns>A <see cref="T:System.String" /> equivalent of <paramref name="value" />.</returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CStringWide.op_Explicit(System.String)~bottlenoselabs.C2CS.Runtime.CStringWide">
+            <summary>
+                Performs an explicit conversion from a <see cref="T:System.String" /> to a <see cref="T:bottlenoselabs.C2CS.Runtime.CStringWide" />.
+            </summary>
+            <param name="s">The <see cref="T:System.String" />.</param>
+            <returns>
+                The resulting <see cref="T:bottlenoselabs.C2CS.Runtime.CStringWide" />.
+            </returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CStringWide.FromString(System.String)">
+            <summary>
+                Converts a C string pointer (one dimensional byte array terminated by a
+                <c>0x0</c>) for a specified <see cref="T:System.String" /> by allocating and copying if not already cached.
+            </summary>
+            <param name="str">The <see cref="T:System.String" />.</param>
+            <returns>A C string pointer.</returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CStringWide.ToString">
+            <inheritdoc />
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CStringWide.Equals(System.Object)">
+            <inheritdoc />
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CStringWide.Equals(bottlenoselabs.C2CS.Runtime.CStringWide)">
+            <inheritdoc />
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CStringWide.GetHashCode">
+            <inheritdoc />
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CStringWide.op_Equality(bottlenoselabs.C2CS.Runtime.CStringWide,bottlenoselabs.C2CS.Runtime.CStringWide)">
+            <summary>
+                Returns a value that indicates whether two specified <see cref="T:bottlenoselabs.C2CS.Runtime.CStringWide" /> structures are equal.
+            </summary>
+            <param name="left">The first <see cref="T:bottlenoselabs.C2CS.Runtime.CStringWide" /> to compare.</param>
+            <param name="right">The second <see cref="T:bottlenoselabs.C2CS.Runtime.CStringWide" /> to compare.</param>
+            <returns><c>true</c> if <paramref name="left" /> and <paramref name="right" /> are equal; otherwise, <c>false</c>.</returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CStringWide.op_Inequality(bottlenoselabs.C2CS.Runtime.CStringWide,bottlenoselabs.C2CS.Runtime.CStringWide)">
+            <summary>
+                Returns a value that indicates whether two specified <see cref="T:bottlenoselabs.C2CS.Runtime.CBool" /> structures are not equal.
+            </summary>
+            <param name="left">The first <see cref="T:bottlenoselabs.C2CS.Runtime.CStringWide" /> to compare.</param>
+            <param name="right">The second <see cref="T:bottlenoselabs.C2CS.Runtime.CStringWide" /> to compare.</param>
+            <returns><c>true</c> if <paramref name="left" /> and <paramref name="right" /> are not equal; otherwise, <c>false</c>.</returns>
+        </member>
+        <member name="M:bottlenoselabs.C2CS.Runtime.CStringWide.Equals(bottlenoselabs.C2CS.Runtime.CStringWide,bottlenoselabs.C2CS.Runtime.CStringWide)">
+            <summary>
+                Returns a value that indicates whether two specified <see cref="T:bottlenoselabs.C2CS.Runtime.CStringWide" /> structures are equal.
+            </summary>
+            <param name="left">The first <see cref="T:bottlenoselabs.C2CS.Runtime.CStringWide" /> to compare.</param>
+            <param name="right">The second <see cref="T:bottlenoselabs.C2CS.Runtime.CStringWide" /> to compare.</param>
+            <returns><c>true</c> if <paramref name="left" /> and <paramref name="right" /> are equal; otherwise, <c>false</c>.</returns>
+        </member>
+    </members>
+</doc>

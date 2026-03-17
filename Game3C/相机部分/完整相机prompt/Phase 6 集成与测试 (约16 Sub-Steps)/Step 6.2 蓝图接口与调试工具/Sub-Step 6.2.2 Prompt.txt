@@ -1,0 +1,290 @@
+Sub-Step 6.2.2 Prompt
+
+================================================================================
+任务：创建SoulsCameraBlueprintLibrary. cpp - 蓝图函数库实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4. 27 C++项目。
+实现蓝图函数库的所有函数。
+
+【当前进度】
+Phase 6 Step 6. 2 Sub-Step 6.2.2 (共190个Sub-Step中的第180个)
+前置完成：6.2.1 蓝图函数库头文件
+
+【任务目标】
+创建文件：Source/MyProject/Camera/Utility/SoulsCameraBlueprintLibrary.cpp
+实现蓝图函数库。
+
+【SoulsCameraManager已有接口】
+以下是SoulsCameraManager. h中已确认存在的公共方法，实现时只能调用这些方法：
+
+状态管理：
+- RequestStateChange(FName NewStateName, bool bForce) -> bool
+- GetCurrentStateName() -> FName
+- GetCurrentCategory() -> ECameraStateCategory
+- IsInTransition() -> bool
+
+目标锁定：
+- SetLockOnTarget(AActor* Target)
+- ClearLockOnTarget()
+- GetLockOnTarget() -> AActor*
+- HasLockOnTarget() -> bool
+
+修改器触发：
+- TriggerCameraShake(ECameraModifierID ShakeID, float Intensity)
+- TriggerHitReaction(bool bHeavyHit, float Intensity, FVector HitDirection)
+- TriggerSlowMotion(float Duration, float TimeDilation)
+- TriggerHitStop(float Intensity)
+- TriggerLowHealthEffect(float HealthPercent)
+- StopLowHealthEffect()
+- TriggerDeathCamera(FVector DeathLocation)
+- StopAllModifiers()
+
+碰撞查询：
+- IsCollisionActive() -> bool
+- IsInCollisionRecovery() -> bool
+- IsCharacterOccluded() -> bool
+- IsTargetOccluded() -> bool
+- GetCollisionAdjustedDistance() -> float
+
+输出查询：
+- GetCurrentOutput() -> FSoulsCameraOutput
+
+调试：
+- SetDebugEnabled(bool bEnabled)
+- IsDebugEnabled() -> bool
+
+【FSoulsCameraOutput结构体字段】
+通过GetCurrentOutput()返回的结构体包含：
+- FocusPoint (FVector)
+- Rotation (FRotator)
+- Distance (float)
+- FOV (float)
+- GetCameraLocation() -> FVector (辅助方法，计算相机世界位置)
+
+【具体要求】
+
+1. 文件路径：Source/MyProject/Camera/Utility/SoulsCameraBlueprintLibrary.cpp
+
+2. 必须包含的头文件：
+```cpp
+#include "Camera/Utility/SoulsCameraBlueprintLibrary. h"
+#include "Camera/Core/SoulsCameraManager. h"
+#include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
+#include "GameFramework/Pawn.h"
+```
+
+3. GetSoulsCameraManager核心实现：
+```cpp
+USoulsCameraManager* USoulsCameraBlueprintLibrary:: GetSoulsCameraManager(const UObject* WorldContextObject, int32 PlayerIndex)
+{
+    if (!WorldContextObject)
+    {
+        return nullptr;
+    }
+
+    UWorld* World = WorldContextObject->GetWorld();
+    if (!World)
+    {
+        return nullptr;
+    }
+
+    // 获取指定PlayerIndex的PlayerController
+    APlayerController* PC = nullptr;
+    if (PlayerIndex == 0)
+    {
+        PC = World->GetFirstPlayerController();
+    }
+    else
+    {
+        int32 CurrentIndex = 0;
+        for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+        {
+            if (CurrentIndex == PlayerIndex)
+            {
+                PC = It->Get();
+                break;
+            }
+            CurrentIndex++;
+        }
+    }
+
+    if (!PC)
+    {
+        return nullptr;
+    }
+
+    APawn* Pawn = PC->GetPawn();
+    if (!Pawn)
+    {
+        return nullptr;
+    }
+
+    return Pawn->FindComponentByClass<USoulsCameraManager>();
+}
+```
+
+4. 各分类实现要点：
+
+【State Control】
+```cpp
+bool USoulsCameraBlueprintLibrary::RequestCameraStateChange(const UObject* WorldContextObject, FName NewStateName, bool bForce, int32 PlayerIndex)
+{
+    USoulsCameraManager* Manager = GetSoulsCameraManager(WorldContextObject, PlayerIndex);
+    if (!Manager)
+    {
+        return false;
+    }
+    return Manager->RequestStateChange(NewStateName, bForce);
+}
+
+FName USoulsCameraBlueprintLibrary:: GetCurrentCameraStateName(const UObject* WorldContextObject, int32 PlayerIndex)
+{
+    USoulsCameraManager* Manager = GetSoulsCameraManager(WorldContextObject, PlayerIndex);
+    if (!Manager)
+    {
+        return NAME_None;
+    }
+    return Manager->GetCurrentStateName();
+}
+```
+
+【Output Query - 通过GetCurrentOutput()】
+```cpp
+FVector USoulsCameraBlueprintLibrary::GetCameraLocation(const UObject* WorldContextObject, int32 PlayerIndex)
+{
+    USoulsCameraManager* Manager = GetSoulsCameraManager(WorldContextObject, PlayerIndex);
+    if (!Manager)
+    {
+        return FVector::ZeroVector;
+    }
+    FSoulsCameraOutput Output = Manager->GetCurrentOutput();
+    return Output.GetCameraLocation();
+}
+
+FRotator USoulsCameraBlueprintLibrary::GetCameraRotation(const UObject* WorldContextObject, int32 PlayerIndex)
+{
+    USoulsCameraManager* Manager = GetSoulsCameraManager(WorldContextObject, PlayerIndex);
+    if (!Manager)
+    {
+        return FRotator::ZeroRotator;
+    }
+    FSoulsCameraOutput Output = Manager->GetCurrentOutput();
+    return Output. Rotation;
+}
+
+float USoulsCameraBlueprintLibrary::GetCameraDistance(const UObject* WorldContextObject, int32 PlayerIndex)
+{
+    USoulsCameraManager* Manager = GetSoulsCameraManager(WorldContextObject, PlayerIndex);
+    if (!Manager)
+    {
+        return 0.0f;
+    }
+    FSoulsCameraOutput Output = Manager->GetCurrentOutput();
+    return Output.Distance;
+}
+
+float USoulsCameraBlueprintLibrary:: GetCameraFOV(const UObject* WorldContextObject, int32 PlayerIndex)
+{
+    USoulsCameraManager* Manager = GetSoulsCameraManager(WorldContextObject, PlayerIndex);
+    if (!Manager)
+    {
+        return 70.0f; // 默认FOV
+    }
+    FSoulsCameraOutput Output = Manager->GetCurrentOutput();
+    return Output.FOV;
+}
+```
+
+【Camera Effects - 直接调用Manager方法】
+```cpp
+void USoulsCameraBlueprintLibrary::TriggerCameraShakeByID(const UObject* WorldContextObject, ECameraModifierID ShakeID, float Intensity, int32 PlayerIndex)
+{
+    USoulsCameraManager* Manager = GetSoulsCameraManager(WorldContextObject, PlayerIndex);
+    if (Manager)
+    {
+        Manager->TriggerCameraShake(ShakeID, Intensity);
+    }
+}
+
+void USoulsCameraBlueprintLibrary::TriggerCameraHitReaction(const UObject* WorldContextObject, bool bHeavyHit, float Intensity, FVector HitDirection, int32 PlayerIndex)
+{
+    USoulsCameraManager* Manager = GetSoulsCameraManager(WorldContextObject, PlayerIndex);
+    if (Manager)
+    {
+        Manager->TriggerHitReaction(bHeavyHit, Intensity, HitDirection);
+    }
+}
+```
+
+【Collision Query - 直接调用Manager方法】
+```cpp
+bool USoulsCameraBlueprintLibrary::IsCameraCollisionActive(const UObject* WorldContextObject, int32 PlayerIndex)
+{
+    USoulsCameraManager* Manager = GetSoulsCameraManager(WorldContextObject, PlayerIndex);
+    if (!Manager)
+    {
+        return false;
+    }
+    return Manager->IsCollisionActive();
+}
+```
+
+5. 需要实现的完整函数列表：
+
+Camera Manager Access: 
+- GetSoulsCameraManager
+- GetSoulsCameraManagerFromActor
+
+State Control:
+- RequestCameraStateChange
+- GetCurrentCameraStateName
+- GetCurrentCameraCategory
+- IsCameraInTransition
+
+Target Lock:
+- SetCameraLockOnTarget
+- ClearCameraLockOnTarget
+- GetCameraLockOnTarget
+- HasCameraLockOnTarget
+
+Camera Effects:
+- TriggerCameraShakeByID
+- TriggerCameraHitReaction
+- TriggerCameraSlowMotion
+- TriggerCameraHitStop
+- TriggerCameraLowHealthEffect
+- StopCameraLowHealthEffect
+- TriggerCameraDeathEffect
+- StopAllCameraModifiers
+
+Collision Query: 
+- IsCameraCollisionActive
+- IsCameraInCollisionRecovery
+- IsCameraCharacterOccluded
+- IsCameraTargetOccluded
+- GetCameraCollisionAdjustedDistance
+
+Output Query:
+- GetCameraCurrentOutput
+- GetCameraLocation
+- GetCameraRotation
+- GetCameraDistance
+- GetCameraFOV
+
+Debug:
+- SetCameraDebugEnabled
+- IsCameraDebugEnabled
+
+【验证标准】
+- 编译通过
+- 蓝图中可调用所有函数
+- 只调用SoulsCameraManager中已确认存在的方法
+- Output查询通过GetCurrentOutput()获取数据
+- 所有函数都有空指针检查
+
+【输出要求】
+输出完整的SoulsCameraBlueprintLibrary.cpp文件代码。
+================================================================================

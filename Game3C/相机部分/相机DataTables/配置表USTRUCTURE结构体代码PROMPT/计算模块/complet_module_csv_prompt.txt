@@ -1,0 +1,298 @@
+在我的UE4.27工程中创建相机模块数据表的C++结构体代码。
+
+## 任务要求
+
+### 任务1：创建 CameraModuleEnums.h
+路径：Source/[YourProject]/Public/Camera/Data/CameraModuleEnums.h
+
+创建必要的枚举类型：
+- ECameraModuleCategory - 模块分类枚举（Position, Rotation, Distance, FOV, Offset, Constraint）
+- ECameraModuleBlendPolicy - 混合策略枚举（Override, Additive, Multiplicative, Minimum, Blend）
+
+### 任务2：创建 CameraModuleData.h
+路径：Source/[YourProject]/Public/Camera/Data/CameraModuleData. h
+
+创建一个继承自 FTableRowBase 的 USTRUCT，用于从CSV导入相机模块配置数据
+
+CSV文件结构如下（共39行数据）：
+- ModuleID: FString - 模块唯一标识符，格式如 "CompleteModule_P01"（注意：此字段会自动成为RowName，结构体中可保留但导入后为空）
+- ModuleName: FName - 模块名称，作为程序引用标识符（如 FollowTarget, LookAt_Target）
+- ChineseName: FString - 中文显示名称
+- Category: FString - 主分类（Position, Rotation, Distance, FOV, Offset, Constraint）
+- SubCategory: FString - 子分类（Follow, Orbit, Cinematic, Special, Input, LookAt, AutoOrient, Base, Dynamic, Constraint, Screen, World, Effect, Visibility）
+- Description: FString - 模块功能描述
+- BlendPolicy: FString - 混合策略（Override, Additive, Multiplicative, Minimum, Blend）
+- Priority: int32 - 优先级（数值越大优先级越高，范围40-300）
+- ActiveStates: FString - 激活状态列表，用斜杠分隔（如 "Explore/Sprint/Combat" 或 "All"）
+- InputParams: FString - 输入参数列表，用斜杠分隔（如 "CharacterLocation/FocusOffset/SocketName"）
+- OutputParams: FString - 输出参数名称（如 PositionOverride, RotationOffset, DistanceMultiplier）
+- LagSpeed: float - 惯性速度系数（0表示无惯性，范围0-12）
+- bIsCore: bool - 是否为核心模块（注意：布尔类型字段命名以小写b开头）
+
+结构体命名为 `FCameraModuleRow`
+
+添加必要的UPROPERTY宏，确保：
+- 所有属性可在编辑器中编辑（EditAnywhere）
+- 所有属性可在蓝图中读取（BlueprintReadWrite）
+- 添加Category分组便于编辑器查看
+
+**重要：结构体中不要包含任何UFUNCTION函数，只保留UPROPERTY属性和构造函数**
+
+### 任务3：创建 CameraModuleHelpers.h
+路径：Source/[YourProject]/Public/Camera/Data/CameraModuleHelpers.h
+
+创建 UCameraModuleHelpers 类，继承自 UBlueprintFunctionLibrary
+
+所有函数标记为 UFUNCTION(BlueprintPure, Category = "Camera|Module")
+所有函数为静态函数
+
+需要实现的函数：
+```cpp
+// 数组解析函数
+static TArray<FString> GetActiveStatesArray(const FCameraModuleRow& Row);
+static TArray<FString> GetInputParamsArray(const FCameraModuleRow& Row);
+
+// 分类检查函数
+static bool IsPositionModule(const FCameraModuleRow& Row);
+static bool IsRotationModule(const FCameraModuleRow& Row);
+static bool IsDistanceModule(const FCameraModuleRow& Row);
+static bool IsFOVModule(const FCameraModuleRow& Row);
+static bool IsOffsetModule(const FCameraModuleRow& Row);
+static bool IsConstraintModule(const FCameraModuleRow& Row);
+
+// 混合策略检查函数
+static bool IsOverrideBlend(const FCameraModuleRow& Row);
+static bool IsAdditiveBlend(const FCameraModuleRow& Row);
+static bool IsMultiplicativeBlend(const FCameraModuleRow& Row);
+
+// 状态检查函数
+static bool IsActiveInState(const FCameraModuleRow& Row, const FString& StateName);
+static bool IsActiveInAllStates(const FCameraModuleRow& Row);
+
+// 枚举转换函数
+static ECameraModuleCategory StringToCategory(const FString& CategoryString);
+static FString CategoryToString(ECameraModuleCategory Category);
+static ECameraModuleBlendPolicy StringToBlendPolicy(const FString& BlendPolicyString);
+static FString BlendPolicyToString(ECameraModuleBlendPolicy BlendPolicy);
+
+// 中文显示名称
+static FString GetCategoryDisplayName(ECameraModuleCategory Category);
+static FString GetBlendPolicyDisplayName(ECameraModuleBlendPolicy BlendPolicy);
+```
+
+### 任务4：创建 CameraModuleHelpers.cpp
+路径：Source/[YourProject]/Private/Camera/Data/CameraModuleHelpers.cpp
+
+实现头文件中声明的所有静态函数
+
+## 函数实现逻辑参考
+
+### GetActiveStatesArray
+```cpp
+TArray<FString> Result;
+if (Row.ActiveStates.IsEmpty()) return Result;
+Row.ActiveStates. ParseIntoArray(Result, TEXT("/"), true);
+for (FString& Str : Result) { Str = Str.TrimStartAndEnd(); }
+return Result;
+```
+
+### GetInputParamsArray
+```cpp
+TArray<FString> Result;
+if (Row.InputParams.IsEmpty()) return Result;
+Row.InputParams.ParseIntoArray(Result, TEXT("/"), true);
+for (FString& Str :  Result) { Str = Str.TrimStartAndEnd(); }
+return Result;
+```
+
+### IsPositionModule
+```cpp
+return Row.Category. Equals(TEXT("Position"), ESearchCase::IgnoreCase);
+```
+
+### IsRotationModule
+```cpp
+return Row.Category. Equals(TEXT("Rotation"), ESearchCase::IgnoreCase);
+```
+
+### IsDistanceModule
+```cpp
+return Row.Category.Equals(TEXT("Distance"), ESearchCase:: IgnoreCase);
+```
+
+### IsFOVModule
+```cpp
+return Row. Category.Equals(TEXT("FOV"), ESearchCase:: IgnoreCase);
+```
+
+### IsOffsetModule
+```cpp
+return Row.Category.Equals(TEXT("Offset"), ESearchCase::IgnoreCase);
+```
+
+### IsConstraintModule
+```cpp
+return Row.Category. Equals(TEXT("Constraint"), ESearchCase::IgnoreCase);
+```
+
+### IsOverrideBlend
+```cpp
+return Row.BlendPolicy.Equals(TEXT("Override"), ESearchCase:: IgnoreCase);
+```
+
+### IsAdditiveBlend
+```cpp
+return Row.BlendPolicy. Equals(TEXT("Additive"), ESearchCase::IgnoreCase);
+```
+
+### IsMultiplicativeBlend
+```cpp
+return Row.BlendPolicy. Equals(TEXT("Multiplicative"), ESearchCase::IgnoreCase);
+```
+
+### IsActiveInState
+```cpp
+if (Row.ActiveStates. Equals(TEXT("All"), ESearchCase::IgnoreCase))
+{
+    return true;
+}
+TArray<FString> States = GetActiveStatesArray(Row);
+for (const FString& State :  States)
+{
+    if (State.Equals(StateName, ESearchCase::IgnoreCase))
+    {
+        return true;
+    }
+}
+return false;
+```
+
+### IsActiveInAllStates
+```cpp
+return Row.ActiveStates. Equals(TEXT("All"), ESearchCase::IgnoreCase);
+```
+
+### StringToCategory
+```cpp
+FString TrimmedString = CategoryString.TrimStartAndEnd();
+if (TrimmedString. Equals(TEXT("Position"), ESearchCase:: IgnoreCase))
+    return ECameraModuleCategory:: Position;
+else if (TrimmedString.Equals(TEXT("Rotation"), ESearchCase:: IgnoreCase))
+    return ECameraModuleCategory::Rotation;
+else if (TrimmedString. Equals(TEXT("Distance"), ESearchCase::IgnoreCase))
+    return ECameraModuleCategory:: Distance;
+else if (TrimmedString.Equals(TEXT("FOV"), ESearchCase::IgnoreCase))
+    return ECameraModuleCategory::FOV;
+else if (TrimmedString. Equals(TEXT("Offset"), ESearchCase::IgnoreCase))
+    return ECameraModuleCategory:: Offset;
+else if (TrimmedString.Equals(TEXT("Constraint"), ESearchCase:: IgnoreCase))
+    return ECameraModuleCategory::Constraint;
+return ECameraModuleCategory::Position;
+```
+
+### CategoryToString
+```cpp
+switch (Category)
+{
+case ECameraModuleCategory::Position:   return TEXT("Position");
+case ECameraModuleCategory::Rotation:   return TEXT("Rotation");
+case ECameraModuleCategory::Distance:   return TEXT("Distance");
+case ECameraModuleCategory::FOV:         return TEXT("FOV");
+case ECameraModuleCategory:: Offset:     return TEXT("Offset");
+case ECameraModuleCategory::Constraint:  return TEXT("Constraint");
+default: return TEXT("Position");
+}
+```
+
+### StringToBlendPolicy
+```cpp
+FString TrimmedString = BlendPolicyString.TrimStartAndEnd();
+if (TrimmedString.Equals(TEXT("Override"), ESearchCase:: IgnoreCase))
+    return ECameraModuleBlendPolicy:: Override;
+else if (TrimmedString.Equals(TEXT("Additive"), ESearchCase:: IgnoreCase))
+    return ECameraModuleBlendPolicy:: Additive;
+else if (TrimmedString.Equals(TEXT("Multiplicative"), ESearchCase::IgnoreCase))
+    return ECameraModuleBlendPolicy::Multiplicative;
+else if (TrimmedString. Equals(TEXT("Minimum"), ESearchCase::IgnoreCase))
+    return ECameraModuleBlendPolicy::Minimum;
+else if (TrimmedString. Equals(TEXT("Blend"), ESearchCase::IgnoreCase))
+    return ECameraModuleBlendPolicy::Blend;
+return ECameraModuleBlendPolicy:: Override;
+```
+
+### BlendPolicyToString
+```cpp
+switch (BlendPolicy)
+{
+case ECameraModuleBlendPolicy::Override:       return TEXT("Override");
+case ECameraModuleBlendPolicy:: Additive:       return TEXT("Additive");
+case ECameraModuleBlendPolicy::Multiplicative:  return TEXT("Multiplicative");
+case ECameraModuleBlendPolicy::Minimum:         return TEXT("Minimum");
+case ECameraModuleBlendPolicy::Blend:           return TEXT("Blend");
+default: return TEXT("Override");
+}
+```
+
+### GetCategoryDisplayName
+```cpp
+switch (Category)
+{
+case ECameraModuleCategory::Position:    return TEXT("位置");
+case ECameraModuleCategory:: Rotation:   return TEXT("旋转");
+case ECameraModuleCategory::Distance:   return TEXT("距离");
+case ECameraModuleCategory::FOV:        return TEXT("视野");
+case ECameraModuleCategory:: Offset:     return TEXT("偏移");
+case ECameraModuleCategory::Constraint: return TEXT("约束");
+default: return TEXT("未知");
+}
+```
+
+### GetBlendPolicyDisplayName
+```cpp
+switch (BlendPolicy)
+{
+case ECameraModuleBlendPolicy::Override:        return TEXT("覆盖");
+case ECameraModuleBlendPolicy:: Additive:       return TEXT("叠加");
+case ECameraModuleBlendPolicy::Multiplicative: return TEXT("乘法");
+case ECameraModuleBlendPolicy:: Minimum:        return TEXT("取最小");
+case ECameraModuleBlendPolicy:: Blend:          return TEXT("混合");
+default: return TEXT("未知");
+}
+```
+
+## 示例数据参考
+```csv
+CompleteModule_P01,FollowTarget,目标跟随,Position,Follow,基础跟随角色位置加上焦点偏移,Override,100,All,CharacterLocation/FocusOffset/SocketName,PositionOverride,0,true
+CompleteModule_R04,LookAt_Target_Soft,软锁定看向,Rotation,LookAt,看向目标但允许玩家微调,Override,110,LockOn,TargetLocation/PlayerInput/SoftLockStrength,RotationOverride,10,true
+CompleteModule_D02,TargetSize_Multiplier,目标体型系数,Distance,Dynamic,根据锁定目标的体型调整距离,Multiplicative,90,LockOn/Boss_All,TargetSize/SizeCurve,DistanceMultiplier,4,true
+CompleteModule_F06,Impact_FOV,冲击FOV,FOV,Effect,攻击命中或受击时的FOV脉冲,Additive,120,Combat/LockOn/Boss_All,ImpactIntensity/FOVPunchScale,FOVOffset,10,false
+CompleteModule_C04,Visibility_Ensure,可见性保证,Constraint,Visibility,确保玩家和目标在屏幕中可见,Additive,250,LockOn/Boss_All,PlayerScreenPos/TargetScreenPos,RotationOffset/DistanceOffset,0,true
+```
+
+## 文件结构
+```
+Source/[YourProject]/
+├── Public/
+│   └── Camera/
+│       └── Data/
+│           ├── CameraModuleData.h          (新建-结构体)
+│           ├── CameraModuleEnums.h         (新建-枚举)
+│           └── CameraModuleHelpers.h       (新建-辅助类)
+└── Private/
+    └── Camera/
+        └── Data/
+            └── CameraModuleHelpers.cpp     (新建-辅助类实现)
+```
+
+## UE4.27 兼容性要求
+1. 使用 GENERATED_BODY() 宏
+2. #include "XXX.generated.h" 必须是最后一个include
+3. 辅助类继承 UBlueprintFunctionLibrary
+4. 所有蓝图可调用函数使用 UFUNCTION(BlueprintPure, Category = "...")
+5. **USTRUCT结构体中不能包含UFUNCTION，只能有UPROPERTY和普通构造函数**
+
+## 完成后验证
+1. 编译项目确认无错误
+2. 确认FCameraModuleRow结构体中不包含任何UFUNCTION（只有UPROPERTY属性和构造函数）
+3. 确认UCameraModuleHelpers类包含所有18个静态辅助函数
+4. 确认枚举类型正确定义并可在蓝图中使用

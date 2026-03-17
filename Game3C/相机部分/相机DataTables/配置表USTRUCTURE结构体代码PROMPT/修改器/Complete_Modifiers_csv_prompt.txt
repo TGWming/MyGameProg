@@ -1,0 +1,371 @@
+在我的UE4.27工程中创建相机修改器数据表的C++结构体代码。
+
+## 任务要求
+
+### 任务1：创建 CameraModifierEnums. h
+路径：Source/[YourProject]/Public/Camera/Data/CameraModifierEnums.h
+
+创建必要的枚举类型：
+- ECameraModifierCategory - 修改器分类枚举（Shake, Reaction, Cinematic, Zoom, Effect, Special）
+- ECameraModifierSubCategory - 子分类枚举（Combat, Environment, Movement, Special, Boss, Status, Aim, Time, Death）
+
+### 任务2：创建 CameraModifierData.h
+路径：Source/[YourProject]/Public/Camera/Data/CameraModifierData. h
+
+创建一个继承自 FTableRowBase 的 USTRUCT，用于从CSV导入相机修改器配置数据
+
+CSV文件结构如下（共27行数据）：
+- ModifierID:  FString - 修改器唯一标识符，格式如 "CompleteModifiers_S01"（注意：此字段会自动成为RowName，结构体中可保留但导入后为空）
+- ModifierName: FName - 修改器名称，作为程序引用标识符（如 Shake_Hit_Light, Reaction_Parry）
+- ChineseName: FString - 中文显示名称
+- Category: FString - 主分类（Shake, Reaction, Cinematic, Zoom, Effect, Special）
+- SubCategory: FString - 子分类（Combat, Environment, Movement, Special, Boss, Status, Aim, Time, Death）
+- TriggerEvent: FString - 触发事件描述（如 "玩家受到轻攻击", "弹反成功", "进入Boss区域"）
+- Duration: FString - 持续时间（数值如"0.15"，或描述性文本如"动画长度", "持续", "模式持续", "慢动作持续", "状态持续", "3.0-5.0"）
+- BlendInTime: float - 混合进入时间（秒）
+- BlendOutTime: float - 混合退出时间（秒）
+- Priority: int32 - 优先级（数值越大优先级越高，范围50-255）
+- bAffectsPosition:  bool - 是否影响位置（注意：布尔类型字段命名以小写b开头）
+- bAffectsRotation: bool - 是否影响旋转
+- bAffectsFOV: bool - 是否影响FOV
+- bAffectsPostProcess: bool - 是否影响后处理
+- bIsCore: bool - 是否为核心修改器
+- Description: FString - 修改器功能描述
+
+结构体命名为 `FCameraModifierRow`
+
+添加必要的UPROPERTY宏，确保：
+- 所有属性可在编辑器中编辑（EditAnywhere）
+- 所有属性可在蓝图中读取（BlueprintReadWrite）
+- 添加Category分组便于编辑器查看
+
+**重要：结构体中不要包含任何UFUNCTION函数，只保留UPROPERTY属性和构造函数**
+
+### 任务3：创建 CameraModifierHelpers.h
+路径：Source/[YourProject]/Public/Camera/Data/CameraModifierHelpers.h
+
+创建 UCameraModifierHelpers 类，继承自 UBlueprintFunctionLibrary
+
+所有函数标记为 UFUNCTION(BlueprintPure, Category = "Camera|Modifier")
+所有函数为静态函数
+
+需要实现的函数：
+```cpp
+// Duration解析函数
+static float GetDurationAsFloat(const FCameraModifierRow& Row);
+static bool HasFixedDuration(const FCameraModifierRow& Row);
+static bool GetDurationRange(const FCameraModifierRow& Row, float& OutMin, float& OutMax);
+static bool IsRangeDuration(const FCameraModifierRow& Row);
+
+// 分类检查函数
+static bool IsShakeModifier(const FCameraModifierRow& Row);
+static bool IsReactionModifier(const FCameraModifierRow& Row);
+static bool IsCinematicModifier(const FCameraModifierRow& Row);
+static bool IsZoomModifier(const FCameraModifierRow& Row);
+static bool IsEffectModifier(const FCameraModifierRow& Row);
+static bool IsSpecialModifier(const FCameraModifierRow& Row);
+
+// 子分类检查函数
+static bool IsCombatSubCategory(const FCameraModifierRow& Row);
+static bool IsBossSubCategory(const FCameraModifierRow& Row);
+static bool IsEnvironmentSubCategory(const FCameraModifierRow& Row);
+
+// 影响检查函数
+static bool AffectsTransform(const FCameraModifierRow& Row);
+static bool AffectsVisuals(const FCameraModifierRow& Row);
+
+// 枚举转换函数
+static ECameraModifierCategory StringToCategory(const FString& CategoryString);
+static FString CategoryToString(ECameraModifierCategory Category);
+static ECameraModifierSubCategory StringToSubCategory(const FString& SubCategoryString);
+static FString SubCategoryToString(ECameraModifierSubCategory SubCategory);
+
+// 中文显示名称
+static FString GetCategoryDisplayName(ECameraModifierCategory Category);
+static FString GetSubCategoryDisplayName(ECameraModifierSubCategory SubCategory);
+```
+
+### 任务4：创建 CameraModifierHelpers.cpp
+路径：Source/[YourProject]/Private/Camera/Data/CameraModifierHelpers.cpp
+
+实现头文件中声明的所有静态函数
+
+## 函数实现逻辑参考
+
+### GetDurationAsFloat
+```cpp
+if (Row.Duration. IsEmpty() || Row.Duration == TEXT("-"))
+{
+    return -1.0f;
+}
+
+// 检查是否为范围格式 "x.x-x.x"
+if (Row.Duration.Contains(TEXT("-")) && Row.Duration.Left(1) != TEXT("-"))
+{
+    // 范围格式，返回-1表示需要用GetDurationRange获取
+    return -1.0f;
+}
+
+// 尝试解析为数值
+if (Row.Duration. IsNumeric() || 
+    Row.Duration.Contains(TEXT(". ")) && 
+    ! Row.Duration.Contains(TEXT("动画")) &&
+    !Row.Duration.Contains(TEXT("持续")) &&
+    !Row.Duration.Contains(TEXT("模式")))
+{
+    return FCString::Atof(*Row.Duration);
+}
+
+// 描述性文本，返回-1
+return -1.0f;
+```
+
+### HasFixedDuration
+```cpp
+float Duration = GetDurationAsFloat(Row);
+return Duration >= 0.0f;
+```
+
+### GetDurationRange
+```cpp
+OutMin = 0.0f;
+OutMax = 0.0f;
+
+if (Row.Duration. IsEmpty())
+{
+    return false;
+}
+
+// 检查是否为范围格式 "x.x-x.x"
+int32 DashIndex = INDEX_NONE;
+// 跳过开头可能的负号
+FString CheckString = Row.Duration;
+if (CheckString.StartsWith(TEXT("-")))
+{
+    return false; // 负数不是范围
+}
+
+if (CheckString.FindChar(TEXT('-'), DashIndex) && DashIndex > 0)
+{
+    FString MinStr = CheckString.Left(DashIndex).TrimStartAndEnd();
+    FString MaxStr = CheckString.Mid(DashIndex + 1).TrimStartAndEnd();
+    
+    if (! MinStr.IsEmpty() && !MaxStr.IsEmpty())
+    {
+        OutMin = FCString:: Atof(*MinStr);
+        OutMax = FCString:: Atof(*MaxStr);
+        return OutMax > OutMin;
+    }
+}
+
+return false;
+```
+
+### IsRangeDuration
+```cpp
+float Min, Max;
+return GetDurationRange(Row, Min, Max);
+```
+
+### IsShakeModifier
+```cpp
+return Row.Category. Equals(TEXT("Shake"), ESearchCase::IgnoreCase);
+```
+
+### IsReactionModifier
+```cpp
+return Row.Category. Equals(TEXT("Reaction"), ESearchCase::IgnoreCase);
+```
+
+### IsCinematicModifier
+```cpp
+return Row.Category.Equals(TEXT("Cinematic"), ESearchCase:: IgnoreCase);
+```
+
+### IsZoomModifier
+```cpp
+return Row. Category.Equals(TEXT("Zoom"), ESearchCase:: IgnoreCase);
+```
+
+### IsEffectModifier
+```cpp
+return Row. Category.Equals(TEXT("Effect"), ESearchCase::IgnoreCase);
+```
+
+### IsSpecialModifier
+```cpp
+return Row.Category.Equals(TEXT("Special"), ESearchCase::IgnoreCase);
+```
+
+### IsCombatSubCategory
+```cpp
+return Row.SubCategory.Equals(TEXT("Combat"), ESearchCase::IgnoreCase);
+```
+
+### IsBossSubCategory
+```cpp
+return Row.SubCategory.Equals(TEXT("Boss"), ESearchCase::IgnoreCase);
+```
+
+### IsEnvironmentSubCategory
+```cpp
+return Row.SubCategory.Equals(TEXT("Environment"), ESearchCase::IgnoreCase);
+```
+
+### AffectsTransform
+```cpp
+return Row. bAffectsPosition || Row.bAffectsRotation;
+```
+
+### AffectsVisuals
+```cpp
+return Row.bAffectsFOV || Row.bAffectsPostProcess;
+```
+
+### StringToCategory
+```cpp
+FString TrimmedString = CategoryString.TrimStartAndEnd();
+if (TrimmedString. Equals(TEXT("Shake"), ESearchCase::IgnoreCase))
+    return ECameraModifierCategory:: Shake;
+else if (TrimmedString.Equals(TEXT("Reaction"), ESearchCase:: IgnoreCase))
+    return ECameraModifierCategory::Reaction;
+else if (TrimmedString. Equals(TEXT("Cinematic"), ESearchCase::IgnoreCase))
+    return ECameraModifierCategory::Cinematic;
+else if (TrimmedString. Equals(TEXT("Zoom"), ESearchCase::IgnoreCase))
+    return ECameraModifierCategory::Zoom;
+else if (TrimmedString.Equals(TEXT("Effect"), ESearchCase:: IgnoreCase))
+    return ECameraModifierCategory::Effect;
+else if (TrimmedString. Equals(TEXT("Special"), ESearchCase::IgnoreCase))
+    return ECameraModifierCategory::Special;
+return ECameraModifierCategory:: Shake;
+```
+
+### CategoryToString
+```cpp
+switch (Category)
+{
+case ECameraModifierCategory::Shake:     return TEXT("Shake");
+case ECameraModifierCategory:: Reaction:  return TEXT("Reaction");
+case ECameraModifierCategory::Cinematic: return TEXT("Cinematic");
+case ECameraModifierCategory::Zoom:      return TEXT("Zoom");
+case ECameraModifierCategory::Effect:    return TEXT("Effect");
+case ECameraModifierCategory:: Special:   return TEXT("Special");
+default:  return TEXT("Shake");
+}
+```
+
+### StringToSubCategory
+```cpp
+FString TrimmedString = SubCategoryString.TrimStartAndEnd();
+if (TrimmedString.Equals(TEXT("Combat"), ESearchCase::IgnoreCase))
+    return ECameraModifierSubCategory::Combat;
+else if (TrimmedString. Equals(TEXT("Environment"), ESearchCase::IgnoreCase))
+    return ECameraModifierSubCategory:: Environment;
+else if (TrimmedString.Equals(TEXT("Movement"), ESearchCase::IgnoreCase))
+    return ECameraModifierSubCategory::Movement;
+else if (TrimmedString.Equals(TEXT("Special"), ESearchCase:: IgnoreCase))
+    return ECameraModifierSubCategory::Special;
+else if (TrimmedString.Equals(TEXT("Boss"), ESearchCase::IgnoreCase))
+    return ECameraModifierSubCategory::Boss;
+else if (TrimmedString.Equals(TEXT("Status"), ESearchCase::IgnoreCase))
+    return ECameraModifierSubCategory::Status;
+else if (TrimmedString.Equals(TEXT("Aim"), ESearchCase:: IgnoreCase))
+    return ECameraModifierSubCategory:: Aim;
+else if (TrimmedString.Equals(TEXT("Time"), ESearchCase::IgnoreCase))
+    return ECameraModifierSubCategory::Time;
+else if (TrimmedString.Equals(TEXT("Death"), ESearchCase:: IgnoreCase))
+    return ECameraModifierSubCategory::Death;
+return ECameraModifierSubCategory:: Combat;
+```
+
+### SubCategoryToString
+```cpp
+switch (SubCategory)
+{
+case ECameraModifierSubCategory::Combat:      return TEXT("Combat");
+case ECameraModifierSubCategory::Environment: return TEXT("Environment");
+case ECameraModifierSubCategory:: Movement:    return TEXT("Movement");
+case ECameraModifierSubCategory::Special:     return TEXT("Special");
+case ECameraModifierSubCategory::Boss:        return TEXT("Boss");
+case ECameraModifierSubCategory::Status:      return TEXT("Status");
+case ECameraModifierSubCategory::Aim:         return TEXT("Aim");
+case ECameraModifierSubCategory:: Time:        return TEXT("Time");
+case ECameraModifierSubCategory::Death:       return TEXT("Death");
+default: return TEXT("Combat");
+}
+```
+
+### GetCategoryDisplayName
+```cpp
+switch (Category)
+{
+case ECameraModifierCategory::Shake:     return TEXT("震动");
+case ECameraModifierCategory:: Reaction:  return TEXT("反应");
+case ECameraModifierCategory::Cinematic: return TEXT("过场");
+case ECameraModifierCategory::Zoom:      return TEXT("缩放");
+case ECameraModifierCategory::Effect:    return TEXT("效果");
+case ECameraModifierCategory::Special:   return TEXT("特殊");
+default: return TEXT("未知");
+}
+```
+
+### GetSubCategoryDisplayName
+```cpp
+switch (SubCategory)
+{
+case ECameraModifierSubCategory::Combat:      return TEXT("战斗");
+case ECameraModifierSubCategory::Environment: return TEXT("环境");
+case ECameraModifierSubCategory::Movement:    return TEXT("移动");
+case ECameraModifierSubCategory::Special:     return TEXT("特殊");
+case ECameraModifierSubCategory:: Boss:        return TEXT("Boss");
+case ECameraModifierSubCategory:: Status:      return TEXT("状态");
+case ECameraModifierSubCategory::Aim:         return TEXT("瞄准");
+case ECameraModifierSubCategory::Time:         return TEXT("时间");
+case ECameraModifierSubCategory::Death:       return TEXT("死亡");
+default: return TEXT("未知");
+}
+```
+
+## 特殊处理说明
+- Duration字段有多种格式：
+  - 固定数值：如 "0.15", "0.3", "2"
+  - 范围值：如 "3.0-5.0", "2.0-3.0", "0.05-0.1"
+  - 描述性文本：如 "动画长度", "持续", "模式持续", "慢动作持续", "状态持续"
+- 布尔值在CSV中为 "true"/"false"
+
+## 示例数据参考
+```csv
+CompleteModifiers_S01,Shake_Hit_Light,轻击震动,Shake,Combat,玩家受到轻攻击,0.15,0.02,0.08,100,true,true,false,false,true,轻微受击时的短促震动
+CompleteModifiers_R01,Reaction_Parry,弹反反应,Reaction,Combat,弹反成功,0.25,0.02,0.15,150,true,true,true,false,true,弹反成功时的相机顿挫和特写
+CompleteModifiers_C04,Cinematic_BossIntro,Boss登场,Cinematic,Boss,进入Boss区域,3.0-5.0,0.3,0.5,250,true,true,true,false,true,Boss首次登场的过场相机
+CompleteModifiers_E01,Effect_LowHealth,低血量效果,Effect,Status,血量低于阈值,持续,0.5,0.5,50,false,false,false,true,true,低血量时的视觉警告效果
+CompleteModifiers_X03,Special_DeathCam,死亡相机,Special,Death,玩家死亡,2,0.1,0,255,true,true,true,true,true,死亡时的特殊相机行为
+```
+
+## 文件结构
+```
+Source/[YourProject]/
+├── Public/
+│   └── Camera/
+│       └── Data/
+│           ├── CameraModifierData.h          (新建-结构体)
+│           ├── CameraModifierEnums.h         (新建-枚举)
+│           └── CameraModifierHelpers.h       (新建-辅助类)
+└── Private/
+    └── Camera/
+        └── Data/
+            └── CameraModifierHelpers.cpp     (新建-辅助类实现)
+```
+
+## UE4.27 兼容性要求
+1. 使用 GENERATED_BODY() 宏
+2. #include "XXX.generated.h" 必须是最后一个include
+3. 辅助类继承 UBlueprintFunctionLibrary
+4. 所有蓝图可调用函数使用 UFUNCTION(BlueprintPure, Category = "...")
+5. **USTRUCT结构体中不能包含UFUNCTION，只能有UPROPERTY和普通构造函数**
+
+## 完成后验证
+1. 编译项目确认无错误
+2. 确认FCameraModifierRow结构体中不包含任何UFUNCTION（只有UPROPERTY属性和构造函数）
+3. 确认UCameraModifierHelpers类包含所有22个静态辅助函数
+4. 确认枚举类型正确定义并可在蓝图中使用

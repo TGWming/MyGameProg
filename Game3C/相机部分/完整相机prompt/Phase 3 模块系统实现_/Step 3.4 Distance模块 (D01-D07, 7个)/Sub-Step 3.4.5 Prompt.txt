@@ -1,0 +1,578 @@
+Sub-Step 3.4.5 Prompt
+
+================================================================================
+任务：在CameraModule_Distance. cpp中添加D04 Combat_Adjust实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+D04在战斗状态下调整相机距离，通常拉近以获得更紧凑的战斗视角。
+战斗时相机拉近可以增强紧张感和沉浸感，同时保持对敌人的关注。
+
+【Pipeline中的位置】
+```
+Distance模块计算流程：
+1. D01:  BaseDistance = 400cm (Override)
+2. D02: ×1.2 (Multiplicative) → 480cm
+3. D03: +50cm (Additive) → 530cm
+4. D04: -80cm (Additive，战斗调整) ← 当前
+   → 530 - 80 = 450cm（战斗时更近）
+5. D05-D07: 后续调整
+```
+
+【当前进度】
+Phase 3 Step 3.4 Sub-Step 3.4.5 (共190个Sub-Step中的第83个)
+前置完成：3.4.4 D03实现 ✅
+
+【任务目标】
+在CameraModule_Distance.cpp中完整实现D04模块，替换现有的占位符。
+
+【⚠️ 重要提醒】
+
+1. **编译前必做步骤：**
+   本Sub-Step只修改现有. cpp文件，不添加新文件。
+   因此**不需要Regenerate**，可以直接编译。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   确认StateConfig和InputContext的字段路径与项目实际结构一致。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_Distance.cpp
+
+2. **定位修改位置：**
+
+在文件中找到D04的占位符实现部分：
+
+```cpp
+//========================================
+// D04: Combat Adjust
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.4.5
+// ...  占位符代码
+```
+
+**将上述占位符代码完整替换为下方的完整实现。**
+
+---
+
+3. **D04完整实现代码：**
+
+**A. ShouldActivate() 实现：**
+
+**当前占位符代码：**
+```cpp
+bool UCameraModule_D04_Combat_Adjust:: ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Placeholder:  Will be properly implemented in Sub-Step 3.4.5
+	return false;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * ShouldActivate - Determine if combat distance adjustment should be active
+ * 
+ * D04 activates when: 
+ * - Module is enabled
+ * - Player is in combat state (bIsInCombat)
+ * 
+ * Note: This activates whether or not a target is locked. 
+ * - With locked target: Full combat adjustment
+ * - Without locked target:  Partial adjustment (combat awareness)
+ * 
+ * Priority 115 (higher than D03 speed offset), uses Additive policy. 
+ * Combat typically brings camera closer for more intense framing.
+ * 
+ * Use Cases:
+ * - Lock-on melee combat (closer camera)
+ * - General combat awareness (moderate adjustment)
+ * - Boss fights (combined with D07 phase scaling)
+ */
+bool UCameraModule_D04_Combat_Adjust::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if player is in combat state
+	// This flag is set by gameplay systems when enemies are engaged
+	if (! Context.InputContext. bIsInCombat)
+	{
+		return false;
+	}
+	
+	// All conditions met - activate combat adjustment
+	return true;
+}
+```
+
+**说明：**
+- 简单条件：启用 + 战斗状态
+- 不要求锁定目标（战斗状态即可）
+- 优先级115（高于D03）
+
+---
+
+**B.  Compute() 实现：**
+
+**当前占位符代码：**
+```cpp
+bool UCameraModule_D04_Combat_Adjust:: Compute(...)
+{
+	// Placeholder
+	OutOutput = CreateBaseOutput();
+	OutOutput. DistanceOutput = 0.0f;
+	OutOutput. bHasDistanceOutput = true;
+	OutOutput.bDistanceIsMultiplier = false;
+	return true;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * Compute - Calculate combat distance adjustment
+ * 
+ * This module adjusts camera distance during combat. 
+ * Typically brings camera closer for more intense, focused framing.
+ * 
+ * Steps:
+ * 1. Get combat distance offset from config
+ * 2.  Adjust offset based on target lock status
+ * 3. Apply validation and clamping
+ * 4. Output with Additive policy
+ * 
+ * Offset Behavior:
+ * - Negative offset: Camera moves closer (typical for melee combat)
+ * - Positive offset: Camera moves farther (for ranged combat overview)
+ * - With target locked: Full offset applied
+ * - Without target: Partial offset (50%) for general combat awareness
+ * 
+ * Typical Values:
+ * - Melee combat offset: -50cm to -100cm (closer)
+ * - Ranged combat offset:  +50cm to +100cm (farther)
+ * - Default: -50cm (slightly closer)
+ * 
+ * @param Context The current pipeline execution context
+ * @param StateConfig The current camera state configuration
+ * @param OutOutput Output structure to fill with computed values
+ * @return True if computation succeeded
+ */
+bool UCameraModule_D04_Combat_Adjust::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Step 1: Get combat distance offset from config
+	// Negative value = closer camera (typical for melee)
+	// Positive value = farther camera (for ranged overview)
+	float CombatOffset = StateConfig.Module.Distance.CombatDistanceOffset;
+	
+	// If not configured, use default (closer for melee combat)
+	if (FMath::IsNearlyZero(CombatOffset))
+	{
+		CombatOffset = -50.0f;  // Default:  50cm closer
+	}
+	
+	// Step 2: Adjust offset based on target lock status
+	float FinalOffset = 0.0f;
+	
+	if (Context.InputContext.bHasTarget)
+	{
+		// With locked target: Apply full combat offset
+		// This provides tight framing on the target
+		FinalOffset = CombatOffset;
+	}
+	else
+	{
+		// Without locked target: Apply partial offset (50%)
+		// This provides general combat awareness without being too close
+		// Player is in combat but not focused on specific enemy
+		FinalOffset = CombatOffset * 0.5f;
+	}
+	
+	// Step 3: Clamp offset to reasonable range
+	// Prevent extreme values that could make camera too close or too far
+	const float MinOffset = -150.0f;  // Max 1.5m closer
+	const float MaxOffset = 150.0f;   // Max 1.5m farther
+	FinalOffset = FMath::Clamp(FinalOffset, MinOffset, MaxOffset);
+	
+	// Step 4: Fill output structure
+	OutOutput. DistanceOutput = FinalOffset;
+	OutOutput.bHasDistanceOutput = true;
+	OutOutput.bDistanceIsMultiplier = false;  // Additive policy
+	
+	// Full weight in combat (this is an authoritative adjustment)
+	OutOutput.Weight = 1.0f;
+	
+	return true;
+}
+```
+
+**说明：**
+- 加法偏移（负值=更近，正值=更远）
+- 锁定目标：100%偏移
+- 未锁定目标：50%偏移
+- 默认-50cm（战斗时更近）
+- 偏移范围±150cm
+
+---
+
+4. **完整的D04代码块（用于复制粘贴）：**
+
+```cpp
+//========================================
+// D04: Combat Adjust
+//========================================
+
+/**
+ * ShouldActivate - Activate when in combat state
+ */
+bool UCameraModule_D04_Combat_Adjust::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if player is in combat state
+	if (!Context.InputContext.bIsInCombat)
+	{
+		return false;
+	}
+	
+	return true;
+}
+
+/**
+ * Compute - Calculate combat distance adjustment (additive offset)
+ */
+bool UCameraModule_D04_Combat_Adjust::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output
+	OutOutput = CreateBaseOutput();
+	
+	// Get combat distance offset from config
+	float CombatOffset = StateConfig. Module.Distance.CombatDistanceOffset;
+	
+	// Default: 50cm closer for melee combat
+	if (FMath::IsNearlyZero(CombatOffset))
+	{
+		CombatOffset = -50.0f;
+	}
+	
+	// Adjust based on target lock status
+	float FinalOffset = 0.0f;
+	
+	if (Context.InputContext.bHasTarget)
+	{
+		// With locked target: Full offset
+		FinalOffset = CombatOffset;
+	}
+	else
+	{
+		// Without locked target: Partial offset (50%)
+		FinalOffset = CombatOffset * 0.5f;
+	}
+	
+	// Clamp to reasonable range
+	const float MinOffset = -150.0f;
+	const float MaxOffset = 150.0f;
+	FinalOffset = FMath:: Clamp(FinalOffset, MinOffset, MaxOffset);
+	
+	// Fill output
+	OutOutput.DistanceOutput = FinalOffset;
+	OutOutput. bHasDistanceOutput = true;
+	OutOutput.bDistanceIsMultiplier = false;  // Additive
+	OutOutput.Weight = 1.0f;
+	
+	return true;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 说明偏移的正负含义
+   - 解释锁定/未锁定的差异
+   - 提供典型数值
+   - 所有注释英文
+
+2. **格式：**
+   - Tab缩进
+   - 清晰步骤标注
+   - 方法间空两行
+
+3. **防御性编程：**
+   - 使用IsNearlyZero检测零值配置
+   - Clamp确保有效范围
+   - 处理两种战斗场景
+
+【技术说明】
+
+**D04的核心机制：**
+
+### 1. 战斗距离调整的设计理念
+
+**为什么战斗时拉近相机？**
+
+```
+探索状态：
+- 距离400cm（4米）
+- 广阔视野，便于观察环境
+- 较远距离，轻松氛围
+
+战斗状态：
+- 距离350cm（-50cm）
+- 聚焦于敌人和玩家
+- 紧凑视角，紧张氛围
+- 动作更清晰可见
+
+效果：
+- 增强战斗紧张感
+- 提高动作可读性
+- 沉浸式体验
+```
+
+### 2. 锁定 vs 未锁定的差异
+
+**为什么区分这两种情况？**
+
+```
+有锁定目标：
+- 玩家专注于特定敌人
+- 需要清晰看到敌人动作
+- 完整的战斗偏移（-50cm）
+- 紧凑的1v1视角
+
+无锁定目标（但在战斗中）：
+- 玩家与多个敌人战斗
+- 或者刚进入战斗区域
+- 部分偏移（-25cm）
+- 保持更多环境视野
+
+设计：
+FinalOffset = bHasTarget ? CombatOffset : CombatOffset * 0.5f;
+
+效果：
+- 锁定时更紧凑
+- 未锁定时保持视野
+- 平衡专注和awareness
+```
+
+### 3. 偏移范围设计
+
+**为什么限制在±150cm？**
+
+```
+无限制（假设）：
+CombatOffset = -300cm
+BaseDistance = 400cm
+FinalDistance = 400 - 300 = 100cm（1米！）
+
+问题：
+- 相机太近
+- 可能穿过角色
+- 视野极度受限
+
+限制±150cm（实际）：
+最近 = BaseDistance - 150 = 250cm（2.5米）
+最远 = BaseDistance + 150 = 550cm（5.5米）
+
+效果：
+- 合理的距离范围
+- 防止极端情况
+- 与其他模块协调
+```
+
+### 4. 负值偏移的含义
+
+**偏移符号说明：**
+
+```
+负偏移（更近）：
+CombatOffset = -50cm
+适用于：近战战斗，需要清晰看到动作
+
+正偏移（更远）：
+CombatOffset = +100cm
+适用于：远程战斗，需要更大视野
+
+零偏移：
+CombatOffset = 0cm
+无调整，保持基础距离
+
+默认设计（-50cm）：
+- 类魂游戏以近战为主
+- 默认拉近符合gameplay
+- 可通过配置调整
+```
+
+### 5. 与其他Distance模块的交互
+
+**计算示例：**
+
+```
+场景：锁定大型敌人，玩家在跑动中战斗
+
+D01: BaseDistance = 400cm
+D02: ×1.3（大型敌人）→ 520cm
+D03: +30cm（跑动中）→ 550cm
+D04: -50cm（战斗偏移）→ 500cm
+D05: min(500, 无限) → 500cm
+D07: ×1.0（Phase 1）→ 500cm
+
+最终距离：500cm
+
+对比无战斗：
+D01: 400cm
+D03: +30cm → 430cm
+无D02/D04/D07（未激活）
+最终：430cm
+
+战斗带来的变化：
+- D02拉远（大敌人）
+- D04拉近（战斗专注）
+- 综合效果：500cm vs 430cm
+- 战斗中稍远（因为大敌人）
+```
+
+### 6. 与D03(Speed_Offset)的对比
+
+| 特性 | D03 (Speed) | D04 (Combat) |
+|------|-------------|--------------|
+| **触发条件** | 移动中 | 战斗中 |
+| **典型偏移** | +50cm（拉远） | -50cm（拉近） |
+| **方向** | 正向（更远） | 负向（更近） |
+| **优先级** | 105 | 115 |
+| **目的** | 前方视野 | 战斗聚焦 |
+
+**可能的冲突：**
+```
+场景：战斗中奔跑
+
+D03: +50cm（跑步拉远）
+D04: -50cm（战斗拉近）
+净效果：+50 - 50 = 0cm
+
+这是预期行为：
+- 两个力量抵消
+- 保持平衡的距离
+- 不会过近或过远
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] ShouldActivate()完整
+   - [ ] Compute()完整
+   - [ ] 所有方法签名与. h一致
+
+3. **逻辑正确性：**
+   - [ ] 检查bIsInCombat
+   - [ ] 区分锁定/未锁定
+   - [ ] 默认值-50cm
+   - [ ] Clamp范围±150cm
+   - [ ] bDistanceIsMultiplier = false
+   - [ ] Weight = 1.0
+
+4. **字段访问：**
+   - [ ] Context.InputContext.bIsInCombat
+   - [ ] Context.InputContext.bHasTarget
+   - [ ] StateConfig.Module.Distance.CombatDistanceOffset
+
+【注意事项】
+
+1. **不需要Regenerate**
+
+2. **字段缺失处理：**
+   ```cpp
+   // 如果CombatDistanceOffset不存在
+   float CombatOffset = -50.0f;  // 直接使用默认值
+   ```
+
+3. **bIsInCombat字段：**
+   确认InputContext中有bIsInCombat字段。如果没有，可能需要：
+   ```cpp
+   // 方案1：使用bHasTarget代替
+   if (! Context.InputContext. bHasTarget)
+   
+   // 方案2：在InputContext中添加bIsInCombat
+   ```
+
+4. **默认值说明：**
+   - CombatOffset = -50cm（默认拉近）
+   - 可为正值（远程战斗）
+   - 无锁定时50%效果
+
+5. **测试建议：**
+   - 进入战斗状态 → 相机应拉近
+   - 锁定目标 → 完整偏移
+   - 未锁定 → 部分偏移
+   - 离开战斗 → 恢复正常
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 3.4.5 完成报告
+================================================================================
+
+【修改内容】
+- 文件：CameraModule_Distance.cpp
+- 修改位置：D04模块
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ ShouldActivate：检查战斗状态
+- ✅ Compute：计算战斗距离偏移
+
+【编译结果】
+- 编译状态：[成功/失败]
+
+【最终状态】
+✅ D04完成，战斗时调整相机距离
+
+================================================================================
+```
+
+【后续步骤】
+
+D04完成后：
+- [x] ✅ 3.4.3: D02 - TargetSize_Multiplier
+- [x] ✅ 3.4.4: D03 - Speed_Offset
+- [x] ✅ 3.4.5: D04 - Combat_Adjust
+- [ ] ⏳ 3.4.6: D05 - Environment_Limit（下一步）
+
+**Distance模块完成度：4/7 (57.1%)**
+
+================================================================================

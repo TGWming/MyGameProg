@@ -1,0 +1,234 @@
+📌 CAMERA SYSTEM DESIGN PROMPT（FOR AGENT）
+
+你现在要理解的不是“如何实现某个相机功能”，
+而是我们正在重构“相机决策方式本身”。
+
+请完整阅读并理解以下设计原则与约束，在此基础上再进行思考与拆解。
+
+一、这次讨论明确【不是】在做什么（非常重要）
+
+以下理解方向 全部是错误的，请避免：
+
+❌ 不是在优化 LookAt(Target + Offset)
+
+❌ 不是在微调 SpringArm 或相机参数
+
+❌ 不是为 Boss 写一套特例相机逻辑
+
+❌ 不是直接用 Rotation / FOV / Distance 决定画面构图
+
+正确的方向是：
+
+我们正在设计一套
+“构图驱动（Framing-driven）的相机决策机制”
+
+二、系统分层：职责必须严格分离
+
+整个相机系统，被明确拆成 三层，任何方案不得混层。
+
+Layer 1：构图层（Framing Layer）——「画面想长什么样」
+
+这是一个 2D 屏幕空间的概念
+
+不关心世界坐标、不关心相机旋转
+
+只描述：
+
+玩家、敌人、环境在屏幕中的相对位置意图
+
+关键点：
+
+构图不是“看谁”
+
+构图是“画面中心偏向谁”
+
+例如：
+
+玩家偏下
+
+Boss 偏上
+
+战斗时画面中心整体抬高
+
+Layer 2：Focus 解算层（Focus Solver）——「桥梁层」
+
+将 2D 构图意图 解算成一个
+世界空间（3D）的 Focus Point
+
+Focus Point：
+
+可以不在任何 Actor 上
+
+只是一个数学上的“被看点”
+
+Player / Enemy / Environment
+只参与 Focus Point 的计算
+不直接影响相机参数
+
+这是决策层与执行层的唯一桥梁。
+
+Layer 3：相机执行层（Camera Executor）——「只负责执行」
+
+已有系统大体正确，应保留
+
+职责只有：
+
+平滑 Rotation（四元数）
+
+平滑 FOV / Distance（持续插值）
+
+不参与任何“看谁 / 为什么要这么看”的决策
+
+三、关键术语定义（请严格对齐）
+
+为了避免概念混乱，以下术语含义必须严格一致：
+
+▸ Framing Anchor
+
+屏幕空间（2D）的构图锚点
+
+例如 Normalized (0.5, 0.6)
+
+❗不是世界坐标
+
+▸ Focus Point
+
+世界空间（3D）的一个点
+
+由构图解算得到
+
+相机永远是“看向 Focus Point”
+
+▸ Actor Weight
+
+Player / Enemy / Environment 的权重
+
+只影响 Focus Point 的位置
+
+❗不得直接修改 Rotation / FOV / Distance
+
+▸ Camera Rotation（四元数）
+
+只是执行结果
+
+不包含构图信息
+
+不表示区域或锚点
+
+四、Camera State 的设计裁决（基于现有系统）
+
+目前已有：
+
+EXPLORE
+
+COMBAT
+
+LOCK ON
+
+BOSS COMBAT
+
+以及未来可扩展状态
+
+这些状态 继续存在，但它们的职责需要被重新理解：
+
+Camera State 定义的是：
+一组“构图偏好 + 相机响应方式”
+
+而不是：
+
+直接决定看向某个 Actor
+
+直接控制相机朝向
+
+Camera State 应该能配置的内容包括：
+
+Framing Anchor（2D）
+
+Actor Weights（Player / Enemy / Environment）
+
+Vertical / Height Bias（仰视倾向）
+
+是否允许 Anchor 动态漂移
+
+FOV / Distance 目标值
+
+Transition Speed（可蓝图调节）
+
+重要约束：
+
+所有 Camera State 的切换
+必须是构图意图的平滑过渡
+
+相机参数只是被动响应
+
+五、关于“从 Target + Offset 到 Framing”的核心变化
+
+我们现在要替换的 不是相机执行方式，而是：
+
+“相机看向哪里”这件事的来源
+
+旧逻辑：
+
+LookAt(Enemy + Offset)
+
+新逻辑：
+
+解算 Focus Point
+
+相机永远只看 Focus Point
+
+六、我们期望的最终视觉效果（不是实现）
+
+以大型 Boss 为例：
+
+Boss 起跳前：
+
+构图 Anchor 上移
+
+Focus Point 在世界中平滑抬高
+
+相机自然仰视
+
+Boss 落地后：
+
+构图 Anchor 回落
+
+Focus Point 平滑下移
+
+相机自然回正
+
+整个过程：
+
+没有“突然抬头”
+
+没有参数突变
+
+相机只是响应构图变化
+
+七、设计层检查标准（请自检）
+
+在你给出任何方案前，请确认：
+
+是否清晰区分了
+
+“画面想长什么样”
+
+和“相机如何运动”
+
+如果两者混在一起，则方案不成立。
+
+八、你的任务
+
+你的任务不是直接给实现代码，而是：
+
+完整消化上述设计意图
+
+拆解出清晰的逻辑结构
+
+给出一份 严格、可执行、职责清晰 的方案说明
+
+供后续执行型 AGENT 实现
+
+📌 这是一套构图驱动的相机决策系统，而不是参数系统。
+
+请基于这个前提进行你的分析与思考。

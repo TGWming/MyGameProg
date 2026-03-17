@@ -1,0 +1,151 @@
+Sub-Step 3.1.1 Prompt
+
+================================================================================
+任务：创建CameraModuleBase. h - 模块抽象基类声明
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+CameraModuleBase是所有39个相机计算模块的抽象基类。
+模块负责计算Position/Rotation/Distance/FOV/Offset等相机参数。
+
+【当前进度】
+Phase 3 Step 3.1 Sub-Step 3.1.1 (共190个Sub-Step中的第56个)
+前置完成：Phase 1-2 全部完成
+
+【任务目标】
+创建文件：Source/[ProjectName]/Public/Camera/Modules/CameraModuleBase.h
+定义模块抽象基类。
+
+【⚠️ 编码格式要求 - CRITICAL】
+
+1. **文件编码：UTF-8 Without BOM（强制）**
+   - 创建文件后立即检查VS Code右下角编码
+   - 如果显示 "UTF-8 with BOM"，点击转换为 "UTF-8"
+   - 保存前再次确认
+
+2. **注释规范：所有注释必须使用英文（强制）**
+   - 禁止使用中文注释（会导致编码乱码）
+   - 参考标准：Core/SoulsCameraManager.h, Pipeline/ICameraStage.h
+   - 所有文档注释使用 /** ... */ 格式
+
+3. **命名替换：**
+   - 将 `[ProjectName]` 替换为你的实际项目名称
+   - 将 `YOURPROJECT_API` 替换为你的实际API宏（如 MYPROJECT_API）
+   - 查找方法：打开现有头文件（如SoulsCameraManager.h），找到类似 `MYPROJECT_API` 的宏
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Public/Camera/Modules/CameraModuleBase.h
+   - 注意：如果 `Modules/` 文件夹不存在，需要先创建
+
+2. **文件结构要求：**
+
+**A. 头部声明：**
+- 版权声明：`// Copyright Epic Games, Inc. All Rights Reserved. `
+- `#pragma once`
+- 包含头文件（按顺序）：
+  * `#include "CoreMinimal.h"`
+  * `#include "UObject/NoExportTypes.h"`
+  * `#include "Camera/Core/SoulsCameraTypes.h"`
+  * `#include "Camera/Core/SoulsCameraRuntimeTypes.h"`
+  * `#include "Camera/Core/SoulsCameraConfig.h"`
+  * `#include "Camera/Pipeline/ICameraStage.h"`
+  * `#include "CameraModuleBase.generated.h"` （必须最后）
+
+**B. EModuleCategory枚举（UENUM BlueprintType）：**
+- 6个枚举值：Position, Rotation, Distance, FOV, Offset, Constraint
+- 每个值添加行内注释说明对应的模块范围和功能
+  * Position:  P01-P08, Focus point calculation
+  * Rotation:  R01-R09, Camera rotation
+  * Distance: D01-D07, Arm length
+  * FOV: F01-F06, Field of view
+  * Offset: O01-O05, Socket/target offsets
+  * Constraint: C01-C04, Limits and constraints
+
+**C. UCameraModuleBase类（UCLASS Abstract, BlueprintType, Blueprintable）：**
+
+继承：`public UObject`
+
+使用YOURPROJECT_API宏（记得替换为实际项目宏）
+
+**C.1 公共接口（public）：**
+
+构造函数：
+- `UCameraModuleBase();`
+
+模块身份接口组（注释：Module Identity）：
+- `virtual ECameraModuleType GetModuleType() const` - 纯虚函数，使用 PURE_VIRTUAL 宏，返回 ECameraModuleType::None
+- `virtual EModuleCategory GetModuleCategory() const` - 纯虚函数，使用 PURE_VIRTUAL 宏，返回 EModuleCategory::Position
+- `virtual FName GetModuleName() const` - 虚函数，可重写
+- `virtual FString GetModuleDescription() const` - 虚函数，可重写
+- 所有方法使用 UFUNCTION(BlueprintPure, Category = "Camera|Module")
+
+优先级和混合接口组（注释：Module Priority & Blending）：
+- `virtual int32 GetDefaultPriority() const { return 100; }` - 内联实现，返回默认优先级100
+- `virtual EBlendPolicy GetDefaultBlendPolicy() const { return EBlendPolicy:: Blend; }` - 内联实现
+- 添加注释说明可被state config覆盖
+- 使用 UFUNCTION(BlueprintPure, Category = "Camera|Module")
+
+激活接口组（注释：Activation）：
+- `virtual bool ShouldActivate(const FStageExecutionContext& Context, const FCameraStateConfig& StateConfig) const` - 虚函数，可重写激活逻辑
+- `bool IsActive() const { return bIsActive; }` - 内联实现，非虚函数
+- `void SetEnabled(bool bEnabled) { bIsEnabled = bEnabled; }` - 内联实现
+- `bool IsEnabled() const { return bIsEnabled; }` - 内联实现
+- ShouldActivate使用BlueprintPure，其他使用BlueprintCallable或BlueprintPure
+
+计算接口（注释：Computation）：
+- `virtual bool Compute(const FStageExecutionContext& Context, const FCameraStateConfig& StateConfig, FModuleOutput& OutOutput)` - 纯虚函数
+- 使用 PURE_VIRTUAL 宏，返回 false
+- 添加详细的多行文档注释说明参数和用法
+- 使用 UFUNCTION(BlueprintCallable, Category = "Camera|Module")
+
+生命周期钩子（注释：Lifecycle）：
+- `virtual void OnActivate(const FStageExecutionContext& Context)` - 虚函数，空实现
+- `virtual void OnDeactivate(const FStageExecutionContext& Context)` - 虚函数，空实现
+- `virtual void OnUpdate(float DeltaTime, const FStageExecutionContext& Context)` - 虚函数，空实现
+- 所有使用 UFUNCTION(BlueprintCallable, Category = "Camera|Module")
+
+**C.2 受保护接口（protected）：**
+
+辅助方法组（注释：Helper Methods for Derived Classes）：
+- `FModuleOutput CreateBaseOutput() const` - 创建预填充的输出结构
+- `float GetInterpAlpha(float DeltaTime, float LagSpeed) const` - 计算插值alpha
+- `AActor* GetOwnerActor(const FStageExecutionContext& Context) const` - 获取拥有者Actor
+- `AActor* GetTargetActor(const FStageExecutionContext& Context) const` - 获取目标Actor
+- 这些方法不使用UFUNCTION，是纯C++辅助方法
+
+状态成员变量组（注释：State）：
+- `bool bIsActive` - UPROPERTY(BlueprintReadOnly, Category = "State")
+- `bool bIsEnabled` - UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "State")  
+- `float TimeSinceActivation` - UPROPERTY(BlueprintReadOnly, Category = "State")
+
+**D. 文档注释要求：**
+- 类头部添加详细的多行注释，说明：
+  * 模块系统的作用和职责
+  * 6种模块类型及其功能
+  * 与Pipeline的关系（Stage 2确定状态 → Stage 3执行模块 → Stage 5混合输出）
+- 所有公共方法添加单行或多行文档注释
+- 纯虚函数注释说明"Must be overridden by derived classes"
+- 虚函数注释说明"Override to implement custom logic"
+- Compute方法添加详细的参数说明和使用示例
+
+【验证标准】
+1. 编译通过（0 errors, 0 warnings）
+2. 文件编码为 UTF-8 Without BOM
+3. 所有注释为英文
+4. 抽象类标记为 Abstract，不可直接实例化
+5. YOURPROJECT_API宏已正确替换
+6. [ProjectName]已正确替换
+
+【注意事项】
+1. 这是Modules文件夹的第一个文件，需要先创建文件夹
+2. 添加新文件后，右键. uproject → Generate Visual Studio project files
+3. 重新打开. sln或Reload All Projects
+4. 确保Phase 2的头文件都存在（SoulsCameraTypes.h, SoulsCameraRuntimeTypes. h, SoulsCameraConfig. h, ICameraStage.h）
+5. 如果Phase 2文件缺失，先完成Phase 2再继续
+
+【输出要求】
+输出完整的CameraModuleBase.h文件代码，包含所有要求的结构和注释。
+
+================================================================================

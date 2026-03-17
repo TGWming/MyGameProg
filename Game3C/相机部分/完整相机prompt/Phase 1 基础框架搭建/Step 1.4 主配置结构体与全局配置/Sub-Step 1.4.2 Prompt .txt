@@ -1,0 +1,295 @@
+================================================================================
+任务：创建SoulsCameraConfig. h - FCameraStateConfig主结构体
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.  27 C++项目。
+创建DataTable的行结构体，整合A/B/C/D四组参数。
+这是最重要的配置结构体，用于定义725个相机状态。
+
+【当前进度】
+Phase 1 Step 1.4 Sub-Step 1.4.2 (共190个Sub-Step中的第26个)
+前置完成：
+- Step 1.1 SoulsCameraTypes.  h
+- Step 1.2 SoulsCameraParams_StateBase.  h (A组)
+- Step 1.3.1 SoulsCameraParams_Module. h (B组)
+- Step 1.3.  2-1. 3.6 SoulsCameraParams_Modifier.  h (C组)
+- Step 1.3.7 SoulsCameraParams_Collision. h (D组)
+- Step 1.4.1 SoulsCameraParams_Global. h (E组)
+
+【任务目标】
+创建文件：Source/[ProjectName]/Camera/Core/SoulsCameraConfig.h
+定义FCameraStateConfig主结构体，继承FTableRowBase以支持DataTable。
+
+【具体要求】
+
+1. 文件路径：Source/[ProjectName]/Camera/Core/SoulsCameraConfig.  h
+
+2. 完整文件内容：
+
+```cpp
+// Copyright Your Company.   All Rights Reserved. 
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Engine/DataTable.h"
+#include "SoulsCameraTypes.h"
+#include "SoulsCameraParams_StateBase.h"
+#include "SoulsCameraParams_Module.h"
+#include "SoulsCameraParams_Modifier.h"
+#include "SoulsCameraParams_Collision.h"
+#include "SoulsCameraConfig.generated.h"
+
+/**
+ * FCameraStateConfig - Main configuration structure for camera states
+ * 
+ * This structure defines a single camera state with all its parameters.  
+ * It inherits from FTableRowBase to be used in UE4 DataTables.
+ * 
+ * Parameter Groups:
+ * - A:  StateBase (34 params) - Basic state settings
+ * - B: Module (32 params) - Module behavior settings
+ * - C:   Modifier (58 params) - Modifier behavior settings
+ * - D:  Collision (30 params) - Collision handling settings
+ * 
+ * Total: 154 parameters per state
+ * Expected rows: 725 states
+ */
+USTRUCT(BlueprintType)
+struct FCameraStateConfig : public FTableRowBase
+{
+    GENERATED_BODY()
+
+    //========================================
+    // A-Group: State Base Parameters (34 params)
+    //========================================
+    /**
+     * Basic state parameters including identity, distance, FOV,
+     * rotation limits, offsets, lag, transitions, collision, and flags
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "A_StateBase")
+    FStateBaseParams StateBase;
+
+    //========================================
+    // B-Group:  Module Parameters (32 params)
+    //========================================
+    /**
+     * Parameters controlling the behavior of the 39 camera modules
+     * including position, rotation, distance, FOV, offset, and constraints
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "B_Module")
+    FModuleParams Module;
+
+    //========================================
+    // C-Group:  Modifier Parameters (58 params)
+    //========================================
+    /**
+     * Parameters controlling the behavior of the 26 camera modifiers
+     * including shake, reaction, cinematic, zoom, effect, and special
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "C_Modifier")
+    FModifierParams Modifier;
+
+    //========================================
+    // D-Group:  Collision Parameters (30 params)
+    //========================================
+    /**
+     * Parameters controlling the 20 collision strategies
+     * including detection, response, occlusion, recovery, and special cases
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "D_Collision")
+    FCollisionParams Collision;
+
+    /** Default constructor */
+    FCameraStateConfig()
+    {
+        // All sub-structs use their own default constructors
+    }
+
+    /**
+     * Get the state name from StateBase. Identity
+     * @return The unique name of this state
+     */
+    FORCEINLINE FName GetStateName() const
+    {
+        return StateBase.Identity.StateName;
+    }
+
+    /**
+     * Get the state priority
+     * @return Priority value (higher = more important)
+     */
+    FORCEINLINE int32 GetPriority() const
+    {
+        return StateBase. Identity.Priority;
+    }
+
+    /**
+     * Get the state category
+     * @return The category this state belongs to
+     */
+    FORCEINLINE ECameraStateCategory GetCategory() const
+    {
+        return StateBase.Identity.Category;
+    }
+
+    /**
+     * Check if this state requires a locked target
+     * @return True if target is required
+     */
+    FORCEINLINE bool RequiresTarget() const
+    {
+        return StateBase. Flags.bRequiresTarget;
+    }
+
+    /**
+     * Check if this is a cinematic state
+     * @return True if cinematic
+     */
+    FORCEINLINE bool IsCinematic() const
+    {
+        return StateBase. Flags.bIsCinematic;
+    }
+};
+```
+
+3. 参数统计：
+   - A组 StateBase:    34个
+   - B组 Module:       32个
+   - C组 Modifier:    58个
+   - D组 Collision:   30个
+   - 总计:              154个参数/状态
+   
+   注：E组(22个)是全局配置，不属于单个状态
+
+4. 代码风格：
+   - 继承FTableRowBase以支持DataTable
+   - 提供便捷的内联访问函数
+   - 详细的注释说明结构用途
+
+【验证标准】
+- 编译通过
+- 可创建FCameraStateConfig实例
+- 可在编辑器中创建基于此结构体的DataTable
+- 在DataTable编辑器中可展开查看所有4个参数组
+
+【注意事项】
+- 必须包含Engine/DataTable.h
+- 继承FTableRowBase而非直接USTRUCT
+- 所有4个Params头文件都需要include
+
+【输出要求】
+输出完整的SoulsCameraConfig. h文件代码。
+
+================================================================================
+                        上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+```
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：Sub-Step 1.4.2 SoulsCameraConfig. h (FCameraStateConfig主结构体)
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断，例如：完成到C_Modifier成员，未完成D_Collision和辅助函数]
+
+【已完成内容】
+- 文件头部（#pragma once, includes）
+- FCameraStateConfig结构体开始
+- [列出已完成的UPROPERTY成员]
+
+【未完成内容】
+- [列出剩余UPROPERTY成员]
+- 默认构造函数
+- 辅助内联函数（GetStateName, GetPriority, GetCategory, RequiresTarget, IsCinematic）
+
+【已生成代码保存提示】
+请将上方已生成的代码保存到新文件SoulsCameraConfig. h，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Phase 1 Step 1.4 Sub-Step 1.4.2 续接任务。
+创建FCameraStateConfig主结构体（DataTable行结构）。
+
+【前置完成】
+- Step 1.1 SoulsCameraTypes.  h ✅
+- Step 1.2 SoulsCameraParams_StateBase. h (A组34参数) ✅
+- Step 1.3.1 SoulsCameraParams_Module.h (B组32参数) ✅
+- Step 1.3.2-1.3.6 SoulsCameraParams_Modifier. h (C组58参数) ✅
+- Step 1.3.7 SoulsCameraParams_Collision. h (D组30参数) ✅
+- Step 1.4.1 SoulsCameraParams_Global.h (E组22参数) ✅
+- Sub-Step 1.4.2 部分完成：
+  - 文件头部 ✅
+  - [列出已完成的成员] ✅
+
+【续接任务】
+继续完成SoulsCameraConfig. h文件：
+- [列出剩余UPROPERTY成员]
+- 默认构造函数
+- 辅助内联函数
+
+【已有代码上下文】
+文件：SoulsCameraConfig. h（已创建，需要继续添加）
+FCameraStateConfig结构体已开始定义，继承自FTableRowBase。
+
+【FCameraStateConfig结构要求】
+- 继承FTableRowBase（支持DataTable）
+- 包含4个参数组成员：
+  - FStateBaseParams StateBase (A组, 34参数)
+  - FModuleParams Module (B组, 32参数)
+  - FModifierParams Modifier (C组, 58参数)
+  - FCollisionParams Collision (D组, 30参数)
+- 5个辅助内联函数：
+  - GetStateName()
+  - GetPriority()
+  - GetCategory()
+  - RequiresTarget()
+  - IsCinematic()
+
+【输出要求】
+继续生成剩余代码，完成SoulsCameraConfig. h文件。
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。如再次达到限制，请再次生成交接信息。
+
+---结束复制---
+
+================================================================================
+```
+
+【交接信息要求】
+1. 交接PROMPT必须是**完全自包含**的，新对话无需任何额外信息即可继续
+2. 包含所有必要的**代码上下文**（关键结构体定义、依赖关系等）
+3. 明确标注**中断位置**和**剩余任务**
+4. 标明目标文件：SoulsCameraConfig.h
+5. 这是核心配置结构体，需要完整列出所有成员和函数
+6. 标明继承关系：FTableRowBase
+7. 包含完整的参数组统计（A/B/C/D共154参数）
+
+================================================================================

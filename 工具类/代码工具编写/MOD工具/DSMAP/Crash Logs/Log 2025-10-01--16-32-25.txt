@@ -1,0 +1,17 @@
+DSMapStudio Version 1.11.1
+
+Read Int32: 0x1B1FC | Expected: 0x0 | Ending position: 0x36B44
+
+   at SoulsFormats.BinaryReaderEx.AssertValue[T](T value, String typeName, String valueFormat, T option) in ./src/Andre/SoulsFormats/SoulsFormats/Util/BinaryReaderEx.cs:line 125
+   at SoulsFormats.BinaryReaderEx.AssertInt32(Int32 option) in ./src/Andre/SoulsFormats/SoulsFormats/Util/BinaryReaderEx.cs:line 528
+   at SoulsFormats.MSBE.Part.Collision.ReadTypeData(BinaryReaderEx br) in ./src/Andre/SoulsFormats/SoulsFormats/Formats/MSB/MSBE/PartsParam.cs:line 2160
+   at SoulsFormats.MSBE.Part..ctor(BinaryReaderEx br) in ./src/Andre/SoulsFormats/SoulsFormats/Formats/MSB/MSBE/PartsParam.cs:line 463
+   at SoulsFormats.MSBE.Part.Collision..ctor(BinaryReaderEx br) in ./src/Andre/SoulsFormats/SoulsFormats/Formats/MSB/MSBE/PartsParam.cs:line 2151
+   at SoulsFormats.MSBE.PartsParam.ReadEntry(BinaryReaderEx br) in ./src/Andre/SoulsFormats/SoulsFormats/Formats/MSB/MSBE/PartsParam.cs:line 131
+   at SoulsFormats.MSBE.Param`1.Read(BinaryReaderEx br) in ./src/Andre/SoulsFormats/SoulsFormats/Formats/MSB/MSBE/MSBE.cs:line 190
+   at SoulsFormats.MSBE.Read(BinaryReaderEx br) in ./src/Andre/SoulsFormats/SoulsFormats/Formats/MSB/MSBE/MSBE.cs:line 91
+   at SoulsFormats.SoulsFile`1.Read(String path) in ./src/Andre/SoulsFormats/SoulsFormats/Util/SoulsFile.cs:line 87
+   at StudioCore.MsbEditor.Universe.LoadMapAsync(String mapid, Boolean selectOnLoad) in ./src/StudioCore/MsbEditor/Universe.cs:line 753
+   at StudioCore.MapStudioNew.Update(Single deltaseconds) in ./src/StudioCore/MapStudioNew.cs:line 1346
+   at StudioCore.MapStudioNew.Run() in ./src/StudioCore/MapStudioNew.cs:line 368
+   at DSMapStudio.Program.Main(String[]) in ./src/Studio.App/DSMapStudio/Program.cs:line 36

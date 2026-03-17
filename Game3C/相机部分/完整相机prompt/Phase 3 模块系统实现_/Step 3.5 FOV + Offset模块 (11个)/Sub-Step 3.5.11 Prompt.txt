@@ -1,0 +1,666 @@
+Sub-Step 3.6.4 Prompt
+
+================================================================================
+任务：在CameraModule_Offset.cpp中添加O03 Shoulder_Switch实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4. 27 C++项目。
+O03提供动态肩部切换功能，可根据目标位置自动切换或手动切换。
+这在战斗中非常有用，确保目标始终在视野中可见。
+
+【Pipeline中的位置】
+```
+Offset模块计算流程：
+1. O01: SocketOffset = (0, 0, 20) (Override，基础值)
+2. O02: Shoulder = (0, 50, 0) (Override，固定肩部)
+3. O03: Switch = (0, ±50, 0) (Override，动态切换) ← 当前
+   → 根据目标位置或玩家输入，动态切换左右肩
+4. O04-O05: 后续调整
+```
+
+【当前进度】
+Phase 3 Step 3.6 Sub-Step 3.6.4 (共190个Sub-Step中的第97个)
+前置完成：3.6.3 O02实现 ✅
+
+【任务目标】
+在CameraModule_Offset.cpp中完整实现O03模块，替换现有的占位符。
+
+【⚠️ 重要提醒】
+
+1. **编译前必做步骤：**
+   本Sub-Step只修改现有.   cpp文件，不添加新文件。
+   因此**不需要Regenerate**，可以直接编译。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   确认StateConfig的字段路径与项目实际结构一致。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_Offset.cpp
+
+2. **定位修改位置：**
+
+在文件中找到O03的占位符实现部分：
+
+```cpp
+//========================================
+// O03: Shoulder Switch
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.6.4
+// Dynamic shoulder side switching
+...   占位符代码（包括构造函数、ShouldActivate、Compute、SwitchShoulder、SetShoulderSide）
+```
+
+**将上述占位符代码完整替换为下方的完整实现。**
+
+---
+
+3. **O03完整实现代码：**
+
+**A. 构造函数：**
+
+```cpp
+/**
+ * Constructor - Initialize shoulder state
+ * 
+ * Default to right shoulder (positive blend)
+ * Blend value: -1.0 = full left, +1.0 = full right
+ */
+UCameraModule_O03_Shoulder_Switch::UCameraModule_O03_Shoulder_Switch()
+	: bCurrentRightShoulder(true)
+	, bTargetRightShoulder(true)
+	, CurrentShoulderBlend(1.0f)  // Start at right shoulder
+{
+}
+```
+
+---
+
+**B. ShouldActivate() 实现：**
+
+```cpp
+/**
+ * ShouldActivate - Determine if shoulder switching should be active
+ * 
+ * O03 activates when:  
+ * - Module is enabled
+ * - Shoulder offset is configured (has a value to switch)
+ * 
+ * This module provides dynamic shoulder switching that overrides O02.
+ * It allows the camera to automatically or manually switch between
+ * left and right shoulder views. 
+ * 
+ * Priority 110 (higher than O02), uses Override policy.  
+ * 
+ * Use Cases:
+ * - Auto-switch based on target position (target on left = right shoulder)
+ * - Manual switch via player input (toggle button)
+ * - Cover system (switch to see around corners)
+ */
+bool UCameraModule_O03_Shoulder_Switch::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Get shoulder offset from config (need a base value to switch)
+	float ShoulderOffset = StateConfig.Module.Offset.ShoulderOffset;
+	
+	// Activate if shoulder offset is configured (non-zero)
+	if (FMath::  Abs(ShoulderOffset) <= KINDA_SMALL_NUMBER)
+	{
+		return false;  // No shoulder offset to switch
+	}
+	
+	// All conditions met - activate shoulder switch
+	return true;
+}
+```
+
+---
+
+**C.   Compute() 实现：**
+
+```cpp
+/**
+ * Compute - Calculate dynamic shoulder offset with auto-switch and blending
+ * 
+ * This module dynamically switches the camera between left and right
+ * shoulder views.   It can auto-switch based on target position or
+ * respond to manual switch commands.
+ * 
+ * Steps:
+ * 1. Check for auto-switch based on target position
+ * 2.  Calculate target blend value
+ * 3.  Smoothly interpolate current blend towards target
+ * 4.  Update current shoulder state
+ * 5.   Calculate final offset based on blend
+ * 6.  Output with Override policy
+ * 
+ * Auto-Switch Logic:
+ * - Target on player's left side → Use right shoulder (better view)
+ * - Target on player's right side → Use left shoulder (better view)
+ * - Target directly ahead → Maintain current shoulder
+ * 
+ * Blend System:
+ * - CurrentShoulderBlend: -1.0 (left) to +1.0 (right)
+ * - Smooth interpolation prevents jarring camera jumps
+ * 
+ * @param Context The current pipeline execution context
+ * @param StateConfig The current camera state configuration
+ * @param OutOutput Output structure to fill with computed values
+ * @return True if computation succeeded
+ */
+bool UCameraModule_O03_Shoulder_Switch::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Step 1: Check for auto-switch based on target position
+	bool bAutoSwitch = StateConfig.Module. Offset.bAutoShoulderSwitch;
+	
+	if (bAutoSwitch && Context.InputContext. bHasTarget)
+	{
+		// Get player and target positions
+		FVector PlayerLocation = Context.InputContext.CharacterLocation;
+		FVector TargetLocation = Context.InputContext. TargetLocation;
+		
+		// Get player's right direction
+		FRotator CharacterRotation = Context.InputContext.CharacterRotation;
+		FVector PlayerRight = FRotationMatrix(CharacterRotation).GetUnitAxis(EAxis::Y);
+		
+		// Calculate direction to target
+		FVector ToTarget = TargetLocation - PlayerLocation;
+		ToTarget.Z = 0.0f;  // Ignore vertical difference
+		ToTarget.Normalize();
+		
+		// Determine which side the target is on
+		// Positive dot = target on right, Negative = target on left
+		float RightDot = FVector::DotProduct(ToTarget, PlayerRight);
+		
+		// Only switch if target is significantly to one side
+		// Threshold of 0.3 prevents constant switching when target is ahead
+		const float SwitchThreshold = 0.3f;
+		
+		if (RightDot > SwitchThreshold)
+		{
+			// Target on right side → Use left shoulder for better view
+			bTargetRightShoulder = false;
+		}
+		else if (RightDot < -SwitchThreshold)
+		{
+			// Target on left side → Use right shoulder for better view
+			bTargetRightShoulder = true;
+		}
+		// If within threshold, maintain current shoulder (no switch)
+	}
+	
+	// Step 2: Calculate target blend value
+	// Right shoulder = +1.0, Left shoulder = -1.0
+	float TargetBlend = bTargetRightShoulder ? 1.0f :  -1.0f;
+	
+	// Step 3: Smoothly interpolate current blend towards target
+	float InterpSpeed = StateConfig. Module.Offset. ShoulderSwitchSpeed;
+	
+	// Default interp speed if not configured
+	if (InterpSpeed <= 0.0f)
+	{
+		InterpSpeed = 5.0f;  // Default:  5.0 (about 0.5 seconds to switch)
+	}
+	
+	CurrentShoulderBlend = FMath:: FInterpTo(
+		CurrentShoulderBlend, 
+		TargetBlend, 
+		Context.DeltaTime, 
+		InterpSpeed
+	);
+	
+	// Step 4: Update current shoulder state
+	// Used for IsRightShoulder() query
+	bCurrentRightShoulder = (CurrentShoulderBlend > 0.0f);
+	
+	// Step 5: Calculate final offset based on blend
+	float BaseShoulderOffset = StateConfig.Module.Offset.ShoulderOffset;
+	
+	// Default if not configured
+	if (FMath::  Abs(BaseShoulderOffset) <= KINDA_SMALL_NUMBER)
+	{
+		BaseShoulderOffset = 50.0f;  // Default: 50cm
+	}
+	
+	// Apply blend to base offset
+	// Blend of +1.0 → full positive offset (right shoulder)
+	// Blend of -1.0 → full negative offset (left shoulder)
+	// Blend of 0.0 → centered (mid-switch)
+	float FinalOffset = BaseShoulderOffset * CurrentShoulderBlend;
+	
+	// Clamp to reasonable range
+	const float MaxOffset = 100.0f;
+	FinalOffset = FMath::  Clamp(FinalOffset, -MaxOffset, MaxOffset);
+	
+	// Create offset vector (Y-axis horizontal)
+	FVector OffsetVector(0.0f, FinalOffset, 0.0f);
+	
+	// Step 6: Fill output structure
+	OutOutput.  OffsetOutput = OffsetVector;
+	OutOutput.bHasOffsetOutput = true;
+	
+	return true;
+}
+```
+
+---
+
+**D.   SwitchShoulder() 实现：**
+
+```cpp
+/**
+ * SwitchShoulder - Toggle shoulder side (left <-> right)
+ * 
+ * Call this when the player presses the shoulder switch button.
+ * The actual switch is smoothly interpolated in Compute().
+ * 
+ * Example binding:
+ * - Controller:  Click right stick
+ * - Keyboard: Press 'V' or middle mouse
+ */
+void UCameraModule_O03_Shoulder_Switch::SwitchShoulder()
+{
+	// Toggle target shoulder
+	bTargetRightShoulder = !bTargetRightShoulder;
+}
+```
+
+---
+
+**E.   SetShoulderSide() 实现：**
+
+```cpp
+/**
+ * SetShoulderSide - Set shoulder side directly
+ * 
+ * Use this for programmatic control of shoulder side.
+ * The actual switch is smoothly interpolated in Compute().
+ * 
+ * @param bRightShoulder True for right shoulder, false for left
+ * 
+ * Example uses:
+ * - Reset to default side at start of combat
+ * - Force specific side for cinematic moments
+ * - Cover system dictating camera side
+ */
+void UCameraModule_O03_Shoulder_Switch::SetShoulderSide(bool bRightShoulder)
+{
+	bTargetRightShoulder = bRightShoulder;
+}
+```
+
+---
+
+4. **完整的O03代码块（用于复制粘贴）：**
+
+```cpp
+//========================================
+// O03: Shoulder Switch
+//========================================
+
+/**
+ * Constructor - Initialize shoulder state
+ */
+UCameraModule_O03_Shoulder_Switch::UCameraModule_O03_Shoulder_Switch()
+	: bCurrentRightShoulder(true)
+	, bTargetRightShoulder(true)
+	, CurrentShoulderBlend(1.0f)
+{
+}
+
+/**
+ * ShouldActivate - Activate when shoulder offset is configured
+ */
+bool UCameraModule_O03_Shoulder_Switch::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Get shoulder offset from config
+	float ShoulderOffset = StateConfig. Module.Offset. ShoulderOffset;
+	
+	// Activate if shoulder offset is non-zero
+	if (FMath::  Abs(ShoulderOffset) <= KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
+	
+	return true;
+}
+
+/**
+ * Compute - Calculate dynamic shoulder offset with auto-switch and blending
+ */
+bool UCameraModule_O03_Shoulder_Switch:: Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output
+	OutOutput = CreateBaseOutput();
+	
+	// Check for auto-switch based on target position
+	bool bAutoSwitch = StateConfig.Module. Offset.bAutoShoulderSwitch;
+	
+	if (bAutoSwitch && Context.InputContext.bHasTarget)
+	{
+		// Get positions
+		FVector PlayerLocation = Context.InputContext.CharacterLocation;
+		FVector TargetLocation = Context.InputContext. TargetLocation;
+		
+		// Get player's right direction
+		FRotator CharacterRotation = Context.InputContext. CharacterRotation;
+		FVector PlayerRight = FRotationMatrix(CharacterRotation).GetUnitAxis(EAxis:: Y);
+		
+		// Direction to target (horizontal only)
+		FVector ToTarget = TargetLocation - PlayerLocation;
+		ToTarget.Z = 0.0f;
+		ToTarget. Normalize();
+		
+		// Dot product to determine side
+		float RightDot = FVector::DotProduct(ToTarget, PlayerRight);
+		
+		// Switch threshold
+		const float SwitchThreshold = 0.3f;
+		
+		if (RightDot > SwitchThreshold)
+		{
+			// Target on right → use left shoulder
+			bTargetRightShoulder = false;
+		}
+		else if (RightDot < -SwitchThreshold)
+		{
+			// Target on left → use right shoulder
+			bTargetRightShoulder = true;
+		}
+	}
+	
+	// Calculate target blend
+	float TargetBlend = bTargetRightShoulder ? 1.0f : -1.0f;
+	
+	// Get interp speed
+	float InterpSpeed = StateConfig.Module. Offset.ShoulderSwitchSpeed;
+	if (InterpSpeed <= 0.0f)
+	{
+		InterpSpeed = 5.0f;
+	}
+	
+	// Smooth interpolation
+	CurrentShoulderBlend = FMath::FInterpTo(
+		CurrentShoulderBlend, 
+		TargetBlend, 
+		Context. DeltaTime, 
+		InterpSpeed
+	);
+	
+	// Update current state
+	bCurrentRightShoulder = (CurrentShoulderBlend > 0.0f);
+	
+	// Calculate final offset
+	float BaseShoulderOffset = StateConfig.Module.Offset.ShoulderOffset;
+	if (FMath::  Abs(BaseShoulderOffset) <= KINDA_SMALL_NUMBER)
+	{
+		BaseShoulderOffset = 50.0f;
+	}
+	
+	float FinalOffset = BaseShoulderOffset * CurrentShoulderBlend;
+	FinalOffset = FMath:: Clamp(FinalOffset, -100.0f, 100.0f);
+	
+	// Create offset vector
+	FVector OffsetVector(0.0f, FinalOffset, 0.0f);
+	
+	// Fill output
+	OutOutput.OffsetOutput = OffsetVector;
+	OutOutput.bHasOffsetOutput = true;
+	
+	return true;
+}
+
+/**
+ * SwitchShoulder - Toggle shoulder side
+ */
+void UCameraModule_O03_Shoulder_Switch::SwitchShoulder()
+{
+	bTargetRightShoulder = !bTargetRightShoulder;
+}
+
+/**
+ * SetShoulderSide - Set shoulder side directly
+ */
+void UCameraModule_O03_Shoulder_Switch::SetShoulderSide(bool bRightShoulder)
+{
+	bTargetRightShoulder = bRightShoulder;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 说明自动切换逻辑
+   - 解释混合值的含义
+   - 描述外部调用函数的用途
+   - 所有注释英文
+
+2. **格式：**
+   - Tab缩进
+   - 清晰步骤标注
+   - 方法间空两行
+
+3. **防御性编程：**
+   - 使用KINDA_SMALL_NUMBER比较
+   - 默认值处理
+   - 阈值防止频繁切换
+
+【技术说明】
+
+**O03的核心机制：**
+
+### 1. 自动切换逻辑
+
+```
+俯视图 - 目标在玩家左侧：
+
+    Target
+       ↙
+      ●
+       
+   ←──Player──→
+       
+       Camera (右肩)
+           ●
+
+原因：目标在左侧时，使用右肩视角
+     可以让玩家看到目标，而不被角色遮挡
+
+判断方法：
+- 计算玩家到目标的方向向量
+- 与玩家的右方向做点积
+- 点积 > 0.3 → 目标在右，用左肩
+- 点积 < -0.3 → 目标在左，用右肩
+```
+
+### 2. 混合值系统
+
+```cpp
+// CurrentShoulderBlend的范围
+-1.0 ←──────── 0.0 ────────→ +1.0
+左肩          中间           右肩
+
+// 计算最终偏移
+FinalOffset = BaseShoulderOffset * CurrentShoulderBlend;
+
+// 示例（BaseShoulderOffset = 50cm）：
+// Blend = +1.0 → Offset = +50cm (右肩)
+// Blend = -1.0 → Offset = -50cm (左肩)
+// Blend = 0.0  → Offset = 0cm (切换中间)
+```
+
+### 3. 平滑过渡
+
+```
+切换过程（InterpSpeed = 5.0）：
+
+Frame 0:   Blend = +1.0 (右肩)
+Frame 10: Blend = +0.7 
+Frame 20: Blend = +0.3
+Frame 30: Blend = 0.0  (中间)
+Frame 40: Blend = -0.4
+Frame 50: Blend = -0.7
+Frame 60: Blend = -1.0 (左肩)
+
+约0.5秒完成切换，平滑无跳变
+```
+
+### 4. 与O02的关系
+
+```
+O02 (Priority 105):
+- 固定肩部偏移
+- 不支持切换
+- 适合无切换需求
+
+O03 (Priority 110, 更高):
+- 动态肩部切换
+- 覆盖O02
+- 适合战斗/需要切换
+
+使用建议：
+- 只需固定肩部 → 用O02
+- 需要切换功能 → 用O03
+- 两者不应同时启用
+```
+
+### 5. 外部调用
+
+```cpp
+// 玩家按下切换按钮时
+ShoulderSwitchModule->SwitchShoulder();
+
+// 程序控制时（如进入特定区域）
+ShoulderSwitchModule->SetShoulderSide(true);  // 强制右肩
+
+// 查询当前状态
+if (ShoulderSwitchModule->IsRightShoulder())
+{
+    // 当前是右肩视角
+}
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] 构造函数完整（初始化3个成员变量）
+   - [ ] ShouldActivate()完整
+   - [ ] Compute()完整
+   - [ ] SwitchShoulder()完整
+   - [ ] SetShoulderSide()完整
+
+3. **逻辑正确性：**
+   - [ ] 自动切换使用点积判断
+   - [ ] 阈值0.3防止频繁切换
+   - [ ] FInterpTo平滑过渡
+   - [ ] 混合值范围-1到+1
+
+4. **字段访问：**
+   - [ ] StateConfig.Module. Offset.ShoulderOffset
+   - [ ] StateConfig.Module. Offset.bAutoShoulderSwitch
+   - [ ] StateConfig.Module.Offset.ShoulderSwitchSpeed
+   - [ ] Context.InputContext.bHasTarget
+   - [ ] Context.InputContext.CharacterLocation
+   - [ ] Context.InputContext.TargetLocation
+   - [ ] Context.InputContext.CharacterRotation
+
+【注意事项】
+
+1. **不需要Regenerate**
+
+2. **字段缺失处理：**
+   ```cpp
+   // 如果bAutoShoulderSwitch不存在
+   bool bAutoSwitch = false;  // 禁用自动切换
+   
+   // 如果ShoulderSwitchSpeed不存在
+   float InterpSpeed = 5.0f;  // 默认速度
+   ```
+
+3. **UE_LOG已移除：**
+   原始PROMPT中的UE_LOG已移除，减少日志噪音。如需调试，可自行添加。
+
+4. **测试建议：**
+   - 手动调用SwitchShoulder() → 肩部应平滑切换
+   - 锁定目标在左侧 → 应自动切换到右肩
+   - 锁定目标在右侧 → 应自动切换到左肩
+   - 目标正前方 → 应保持当前肩部
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 3.6.4 完成报告
+================================================================================
+
+【修改内容】
+- 文件：CameraModule_Offset.cpp
+- 修改位置：O03模块
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ 构造函数：初始化3个成员变量
+- ✅ ShouldActivate：检查肩部偏移配置
+- ✅ Compute：自动切换+平滑过渡
+- ✅ SwitchShoulder：手动切换
+- ✅ SetShoulderSide：直接设置
+
+【编译结果】
+- 编译状态：[成功/失败]
+
+【最终状态】
+✅ O03完成，动态肩部切换
+
+================================================================================
+```
+
+【后续步骤】
+
+O03完成后，Offset模块进度：
+- [x] ✅ 3.6.1:   CameraModule_Offset.h
+- [x] ✅ 3.6.2: O01 - SocketOffset Base
+- [x] ✅ 3.6.3: O02 - Shoulder Offset
+- [x] ✅ 3.6.4: O03 - Shoulder Switch
+- [ ] ⏳ 3.6.5: O04 - Crouch Offset（下一步）
+- [ ] ⏳ 3.6.6: O05 - Mount Offset
+
+**Offset模块完成度：3/5 (60%)**
+
+================================================================================

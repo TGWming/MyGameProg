@@ -1,0 +1,466 @@
+================================================================================
+优化项3：Cinematic修改器曲线预设扩展
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4. 27 C++项目。
+该系统包含完整的Pipeline架构（8个Stage）、39个模块、26个修改器、20个碰撞策略。
+本优化针对Cinematic类修改器的动画曲线进行扩展。
+
+================================================================================
+一、当前代码现状
+================================================================================
+
+【涉及文件】
+1. CameraModifier_Cinematic.h
+   路径:  Source/MyProject/Public/Camera/Modifiers/CameraModifier_Cinematic.h
+   
+2. CameraModifier_Cinematic.cpp
+   路径: Source/MyProject/Private/Camera/Modifiers/CameraModifier_Cinematic.cpp
+
+【当前Cinematic修改器列表】
+- C01_Cinematic_Execution：处决动画相机
+- C02_Cinematic_Backstab：背刺动画相机
+- C03_Cinematic_BossIntro：Boss登场相机
+- C04_Cinematic_BossPhaseChange：Boss阶段转换相机
+- C05_Cinematic_Death：死亡动画相机
+
+【当前曲线实现方式】
+所有Cinematic修改器目前使用固定的EaseInOut曲线：
+
+```cpp
+// 当前实现（CameraModifier_Cinematic.cpp）
+void UCameraModifier_CinematicBase:: ComputeEffect(...)
+{
+    // 使用固定的EaseInOut曲线
+    float Alpha = FMath:: InterpEaseInOut(0.0f, 1.0f, NormalizedTime, 2.0f);
+    
+    // 应用到相机位置/旋转
+    CurrentPosition = FMath::Lerp(StartPosition, EndPosition, Alpha);
+    CurrentRotation = FMath::Lerp(StartRotation, EndRotation, Alpha);
+}
+```
+
+【当前基类结构】
+```cpp
+// CameraModifier_Cinematic. h
+UCLASS(Abstract, BlueprintType)
+class UCameraModifier_CinematicBase :  public UCameraModifierBase
+{
+    // ...  现有成员 ...
+    
+protected:
+    // 当前没有曲线类型选择
+    // 使用硬编码的EaseInOut
+};
+```
+
+================================================================================
+二、优化目标与原理
+================================================================================
+
+【优化目标】
+为Cinematic修改器添加可选择的动画曲线类型，使过场相机动画更加丰富多样。
+
+【应用场景】
+| 曲线类型 | 适用场景 | 视觉效果 |
+|----------|----------|----------|
+| Linear | 匀速移动 | 机械感，适合工业/科技场景 |
+| EaseIn | 慢启动快结束 | 冲击感，适合攻击动作 |
+| EaseOut | 快启动慢结束 | 缓冲感，适合落地/停止 |
+| EaseInOut | 慢-快-慢 | 自然感，当前默认 |
+| Bezier | 自定义控制点 | 完全自定义曲线 |
+| Bounce | 弹跳效果 | 落地弹跳，卡通风格 |
+| Elastic | 弹性效果 | 橡皮筋感，夸张风格 |
+| Anticipation | 预备动作 | 先后退再前进，动画原理 |
+
+【原理说明】
+动画曲线控制"时间到进度"的映射关系：
+- 输入：NormalizedTime（0.0 到 1.0，表示动画进度时间）
+- 输出：Alpha（0.0 到 1.0，表示实际动画进度）
+- 不同曲线产生不同的Alpha变化速率
+
+```
+时间 →  0.0 -------- 0.5 -------- 1.0
+
+Linear:       ╱
+EaseIn:           ╱
+EaseOut:     ╱
+EaseInOut:     ╱
+Bounce:         ╱╲╱
+```
+
+================================================================================
+三、开发细节
+================================================================================
+
+【步骤1：添加曲线类型枚举】
+
+在CameraModifier_Cinematic.h中添加：
+
+```cpp
+/**
+ * 过场动画曲线类型
+ * 控制相机在过场动画中的移动/旋转曲线
+ */
+UENUM(BlueprintType)
+enum class ECinematicCurveType : uint8
+{
+    /** 线性插值 - 匀速移动 */
+    Linear          UMETA(DisplayName = "Linear"),
+    
+    /** 缓入 - 慢启动快结束 */
+    EaseIn          UMETA(DisplayName = "Ease In"),
+    
+    /** 缓出 - 快启动慢结束 */
+    EaseOut         UMETA(DisplayName = "Ease Out"),
+    
+    /** 缓入缓出 - 慢-快-慢（默认） */
+    EaseInOut       UMETA(DisplayName = "Ease In Out"),
+    
+    /** 贝塞尔曲线 - 自定义控制点 */
+    Bezier          UMETA(DisplayName = "Bezier"),
+    
+    /** 弹跳 - 到达后弹跳效果 */
+    Bounce          UMETA(DisplayName = "Bounce"),
+    
+    /** 弹性 - 橡皮筋效果 */
+    Elastic         UMETA(DisplayName = "Elastic"),
+    
+    /** 预备动作 - 先反向再正向 */
+    Anticipation    UMETA(DisplayName = "Anticipation")
+};
+```
+
+【步骤2：修改CinematicBase基类】
+
+在UCameraModifier_CinematicBase中添加：
+
+```cpp
+// CameraModifier_Cinematic.h
+
+UCLASS(Abstract, BlueprintType)
+class UCameraModifier_CinematicBase : public UCameraModifierBase
+{
+    GENERATED_BODY()
+    
+public:
+    // ...  现有代码保持不变 ... 
+
+protected:
+    //========================================
+    // 曲线配置（新增）
+    //========================================
+    
+    /** 动画曲线类型 */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cinematic|Curve")
+    ECinematicCurveType CurveType = ECinematicCurveType:: EaseInOut;
+    
+    /** 曲线指数（用于Ease曲线，值越大曲线越陡） */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cinematic|Curve",
+              meta = (ClampMin = "1.0", ClampMax = "5.0", 
+                      EditCondition = "CurveType == ECinematicCurveType::EaseIn || CurveType == ECinematicCurveType::EaseOut || CurveType == ECinematicCurveType::EaseInOut"))
+    float CurveExponent = 2.0f;
+    
+    /** 贝塞尔控制点1（用于Bezier曲线） */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cinematic|Curve",
+              meta = (EditCondition = "CurveType == ECinematicCurveType::Bezier"))
+    FVector2D BezierControlPoint1 = FVector2D(0.25f, 0.1f);
+    
+    /** 贝塞尔控制点2（用于Bezier曲线） */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cinematic|Curve",
+              meta = (EditCondition = "CurveType == ECinematicCurveType:: Bezier"))
+    FVector2D BezierControlPoint2 = FVector2D(0.75f, 0.9f);
+    
+    /** 弹跳次数（用于Bounce曲线） */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cinematic|Curve",
+              meta = (ClampMin = "1", ClampMax = "5",
+                      EditCondition = "CurveType == ECinematicCurveType::Bounce"))
+    int32 BounceCount = 3;
+    
+    /** 弹性强度（用于Elastic曲线） */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cinematic|Curve",
+              meta = (ClampMin = "0.1", ClampMax = "2.0",
+                      EditCondition = "CurveType == ECinematicCurveType:: Elastic"))
+    float ElasticStrength = 1.0f;
+    
+    /** 预备动作幅度（用于Anticipation曲线） */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cinematic|Curve",
+              meta = (ClampMin = "0.05", ClampMax = "0.3",
+                      EditCondition = "CurveType == ECinematicCurveType:: Anticipation"))
+    float AnticipationAmount = 0.1f;
+    
+    //========================================
+    // 曲线计算方法（新增）
+    //========================================
+    
+    /**
+     * 根据当前曲线类型计算Alpha值
+     * @param NormalizedTime 归一化时间（0-1）
+     * @return Alpha值（0-1，可能超出用于Elastic/Anticipation）
+     */
+    float CalculateCurveAlpha(float NormalizedTime) const;
+    
+private:
+    // 各曲线类型的计算辅助方法
+    float CalculateBezier(float T) const;
+    float CalculateBounce(float T) const;
+    float CalculateElastic(float T) const;
+    float CalculateAnticipation(float T) const;
+};
+```
+
+【步骤3：实现曲线计算方法】
+
+在CameraModifier_Cinematic.cpp中添加：
+
+```cpp
+float UCameraModifier_CinematicBase::CalculateCurveAlpha(float NormalizedTime) const
+{
+    // 确保输入在有效范围
+    float T = FMath:: Clamp(NormalizedTime, 0.0f, 1.0f);
+    
+    switch (CurveType)
+    {
+        case ECinematicCurveType::Linear: 
+            return T;
+            
+        case ECinematicCurveType:: EaseIn: 
+            return FMath:: Pow(T, CurveExponent);
+            
+        case ECinematicCurveType::EaseOut:
+            return 1.0f - FMath:: Pow(1.0f - T, CurveExponent);
+            
+        case ECinematicCurveType:: EaseInOut: 
+            return FMath::InterpEaseInOut(0.0f, 1.0f, T, CurveExponent);
+            
+        case ECinematicCurveType:: Bezier:
+            return CalculateBezier(T);
+            
+        case ECinematicCurveType:: Bounce:
+            return CalculateBounce(T);
+            
+        case ECinematicCurveType::Elastic:
+            return CalculateElastic(T);
+            
+        case ECinematicCurveType::Anticipation: 
+            return CalculateAnticipation(T);
+            
+        default: 
+            return T;
+    }
+}
+
+float UCameraModifier_CinematicBase::CalculateBezier(float T) const
+{
+    // 三次贝塞尔曲线
+    // P(t) = (1-t)³P₀ + 3(1-t)²tP₁ + 3(1-t)t²P₂ + t³P₃
+    // 其中P₀=(0,0), P₃=(1,1)
+    
+    float OneMinusT = 1.0f - T;
+    float OneMinusT2 = OneMinusT * OneMinusT;
+    float OneMinusT3 = OneMinusT2 * OneMinusT;
+    float T2 = T * T;
+    float T3 = T2 * T;
+    
+    // 计算Y值（Alpha）
+    float Alpha = OneMinusT3 * 0.0f  // P₀. Y = 0
+                + 3.0f * OneMinusT2 * T * BezierControlPoint1.Y
+                + 3.0f * OneMinusT * T2 * BezierControlPoint2.Y
+                + T3 * 1.0f;  // P₃. Y = 1
+    
+    return FMath::Clamp(Alpha, 0.0f, 1.0f);
+}
+
+float UCameraModifier_CinematicBase::CalculateBounce(float T) const
+{
+    // 弹跳效果 - 使用衰减的正弦波
+    if (T >= 1.0f)
+    {
+        return 1.0f;
+    }
+    
+    // 基础进度
+    float BaseProgress = T;
+    
+    // 弹跳叠加
+    float BouncePhase = T * BounceCount * PI;
+    float BounceDecay = FMath:: Pow(1.0f - T, 2.0f);  // 衰减
+    float BounceOffset = FMath:: Abs(FMath::Sin(BouncePhase)) * BounceDecay * 0.3f;
+    
+    // 如果在下降阶段，翻转弹跳方向
+    if (FMath:: Fmod(BouncePhase / PI, 2.0f) > 1.0f)
+    {
+        BounceOffset = -BounceOffset;
+    }
+    
+    return FMath:: Clamp(BaseProgress + BounceOffset, 0.0f, 1.0f);
+}
+
+float UCameraModifier_CinematicBase:: CalculateElastic(float T) const
+{
+    // 弹性效果 - 到达后有过冲和回弹
+    if (T <= 0.0f) return 0.0f;
+    if (T >= 1.0f) return 1.0f;
+    
+    float P = 0.3f / ElasticStrength;  // 周期
+    float S = P / 4.0f;  // 偏移
+    
+    return FMath:: Pow(2.0f, -10.0f * T) * 
+           FMath::Sin((T - S) * (2.0f * PI) / P) + 1.0f;
+}
+
+float UCameraModifier_CinematicBase::CalculateAnticipation(float T) const
+{
+    // 预备动作 - 先后退再前进
+    // 分为三个阶段：后退(0-0.2), 前进(0.2-0.9), 缓冲(0.9-1.0)
+    
+    const float BackPhaseEnd = 0.2f;
+    const float MainPhaseEnd = 0.9f;
+    
+    if (T < BackPhaseEnd)
+    {
+        // 后退阶段：从0到-AnticipationAmount
+        float PhaseT = T / BackPhaseEnd;
+        return -AnticipationAmount * FMath::Sin(PhaseT * PI * 0.5f);
+    }
+    else if (T < MainPhaseEnd)
+    {
+        // 主前进阶段：从-AnticipationAmount到1+少量过冲
+        float PhaseT = (T - BackPhaseEnd) / (MainPhaseEnd - BackPhaseEnd);
+        float EasedT = FMath::InterpEaseOut(0.0f, 1.0f, PhaseT, 2.0f);
+        return FMath::Lerp(-AnticipationAmount, 1.0f + AnticipationAmount * 0.3f, EasedT);
+    }
+    else
+    {
+        // 缓冲阶段：从1+过冲回到1
+        float PhaseT = (T - MainPhaseEnd) / (1.0f - MainPhaseEnd);
+        float Overshoot = AnticipationAmount * 0.3f;
+        return FMath::Lerp(1.0f + Overshoot, 1.0f, PhaseT);
+    }
+}
+```
+
+【步骤4：修改ComputeEffect使用新曲线】
+
+在各Cinematic修改器的ComputeEffect中：
+
+```cpp
+// 修改前（所有C01-C05）
+float Alpha = FMath:: InterpEaseInOut(0.0f, 1.0f, NormalizedTime, 2.0f);
+
+// 修改后
+float Alpha = CalculateCurveAlpha(NormalizedTime);
+```
+
+【步骤5：为每个Cinematic修改器设置默认曲线】
+
+```cpp
+// C01_Execution构造函数
+UCameraModifier_C01_Cinematic_Execution::UCameraModifier_C01_Cinematic_Execution()
+{
+    CurveType = ECinematicCurveType::EaseInOut;  // 默认
+}
+
+// C02_Backstab构造函数
+UCameraModifier_C02_Cinematic_Backstab::UCameraModifier_C02_Cinematic_Backstab()
+{
+    CurveType = ECinematicCurveType:: Anticipation;  // 背刺有预备动作更自然
+    AnticipationAmount = 0.08f;
+}
+
+// C03_BossIntro构造函数
+UCameraModifier_C03_Cinematic_BossIntro::UCameraModifier_C03_Cinematic_BossIntro()
+{
+    CurveType = ECinematicCurveType::EaseOut;  // Boss登场强调结尾
+}
+
+// C04_BossPhaseChange构造函数
+UCameraModifier_C04_Cinematic_BossPhaseChange::UCameraModifier_C04_Cinematic_BossPhaseChange()
+{
+    CurveType = ECinematicCurveType:: Elastic;  // 阶段转换有冲击感
+    ElasticStrength = 0.8f;
+}
+
+// C05_Death构造函数
+UCameraModifier_C05_Cinematic_Death::UCameraModifier_C05_Cinematic_Death()
+{
+    CurveType = ECinematicCurveType::EaseIn;  // 死亡慢启动有沉重感
+}
+```
+
+================================================================================
+四、不破坏现有系统的措施
+================================================================================
+
+【向后兼容策略】
+
+1. 默认曲线类型 = EaseInOut
+   - 与当前行为完全一致
+   - 不修改默认值则行为不变
+
+2. 新增代码不删除现有代码
+   - 只添加新枚举、新属性、新方法
+   - 原有ComputeEffect逻辑结构不变
+
+3. 曲线参数有合理默认值
+   - CurveExponent = 2.0f（与现有InterpEaseInOut一致）
+   - 所有新参数都有安全默认值
+
+4. 所有新属性有EditCondition
+   - 只在选择对应曲线类型时显示
+   - 不影响现有编辑体验
+
+【测试验证点】
+- [ ] 默认设置下，C01-C05行为与优化前完全一致
+- [ ] 切换曲线类型后，效果正确变化
+- [ ] 蓝图中可以看到并修改曲线类型
+- [ ] 编译无错误无警告
+
+================================================================================
+五、在相机系统中的位置
+================================================================================
+
+【Pipeline位置】
+Stage 7: ModifierApply
+  └── ModifierManager
+       └── CinematicBase（修改器基类）
+            └── C01-C05（具体Cinematic修改器）
+
+【文件结构】
+Source/MyProject/
+├── Public/Camera/Modifiers/
+│   └── CameraModifier_Cinematic.h     ← 修改此文件
+│
+└── Private/Camera/Modifiers/
+    └── CameraModifier_Cinematic. cpp   ← 修改此文件
+
+【依赖关系】
+- 无新增依赖
+- 只使用UE4标准数学函数
+- 与其他系统无耦合
+
+================================================================================
+六、风险评估
+================================================================================
+
+| 风险项 | 等级 | 说明 | 缓解措施 |
+|--------|------|------|----------|
+| 代码复杂度 | 低 | 新增约200行代码 | 逻辑清晰，易于维护 |
+| 性能影响 | 极低 | 只是数学计算 | 无额外开销 |
+| 测试范围 | 中 | 需测试5个修改器 | 每个修改器测试各曲线类型 |
+| 回滚难度 | 低 | 删除新增代码即可 | 10分钟内可回滚 |
+
+================================================================================
+七、预计工作量
+================================================================================
+
+| 任务 | 时间 |
+|------|------|
+| 添加枚举和属性 | 30分钟 |
+| 实现曲线计算方法 | 1小时 |
+| 修改C01-C05 | 30分钟 |
+| 测试验证 | 1小时 |
+| **总计** | **3小时** |
+
+================================================================================

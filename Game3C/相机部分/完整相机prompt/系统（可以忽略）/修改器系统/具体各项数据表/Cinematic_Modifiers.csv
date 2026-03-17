@@ -1,0 +1,6 @@
+ModifierID,ModifierName,ChineseName,Category,TriggerEvent,Duration,BlendInTime,BlendOutTime,Priority,AffectsPosition,AffectsRotation,AffectsFOV,Description
+C01,Cinematic_Execution,处决相机,Cinematic,触发处决动画,动画长度,0.15,0.3,200,true,true,true,处决时的电影化相机接管
+C02,Cinematic_Backstab,背刺相机,Cinematic,触发背刺动画,动画长度,0.12,0.25,200,true,true,true,背刺时的特殊视角
+C03,Cinematic_Riposte,致命一击相机,Cinematic,触发致命一击,动画长度,0.1,0.25,200,true,true,true,弹反后致命一击的相机
+C04,Cinematic_BossIntro,Boss登场,Cinematic,进入Boss区域,3.0-5.0,0.3,0.5,250,true,true,true,Boss首次登场的过场相机
+C05,Cinematic_BossPhase,Boss阶段转换,Cinematic,Boss进入新阶段,2.0-3.0,0.2,0.4,240,true,true,true,Boss阶段转换的戏剧化相机

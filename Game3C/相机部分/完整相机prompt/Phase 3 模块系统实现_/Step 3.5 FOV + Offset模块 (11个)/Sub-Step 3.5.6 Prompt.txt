@@ -1,0 +1,550 @@
+Sub-Step 3.5.6 Prompt
+
+================================================================================
+任务：在CameraModule_FOV.cpp中添加F05 Boss_FOV实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+F05为Boss战提供FOV调整，通常增加FOV以容纳大型Boss敌人。
+结合Boss尺寸和玩家距离，动态计算最佳视野角度。
+
+【Pipeline中的位置】
+```
+FOV模块计算流程：
+1. F01:   BaseFOV = 90° (Override，基础值)
+2. F02: +5° (Additive，跑动中)
+3. F03: -7.  5° (Additive，锁定Boss)
+4. F04: +5° (Additive，战斗)
+5. F05: +12° (Additive，Boss战) ← 当前
+   → 90 + 5 - 7.5 + 5 + 12 = 104. 5°（大型Boss战宽视野）
+6. F06: 冲击效果
+```
+
+【当前进度】
+Phase 3 Step 3.5 Sub-Step 3.5.6 (共190个Sub-Step中的第92个)
+前置完成：3.5.5 F04实现 ✅
+
+【任务目标】
+在CameraModule_FOV.cpp中完整实现F05模块，替换现有的占位符。
+
+【⚠️ 重要提醒】
+
+1. **编译前必做步骤：**
+   本Sub-Step只修改现有.  cpp文件，不添加新文件。
+   因此**不需要Regenerate**，可以直接编译。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   确认StateConfig和InputContext的字段路径与项目实际结构一致。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_FOV.cpp
+
+2. **定位修改位置：**
+
+在文件中找到F05的占位符实现部分：
+
+```cpp
+//========================================
+// F05: Boss FOV
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.5.6
+// Boss fight FOV adjustment
+...   占位符代码
+```
+
+**将上述占位符代码完整替换为下方的完整实现。**
+
+---
+
+3. **F05完整实现代码：**
+
+**A.   ShouldActivate() 实现：**
+
+```cpp
+/**
+ * ShouldActivate - Determine if boss FOV adjustment should be active
+ * 
+ * F05 activates when:
+ * - Module is enabled
+ * - Player has a locked target
+ * - Target IS a boss (bTargetIsBoss)
+ * 
+ * Boss FOV provides wider view to accommodate large boss enemies
+ * and give players better awareness of boss attacks and arena.
+ * 
+ * Priority 120 (high), uses Additive policy. 
+ * 
+ * Use Cases:
+ * - Large boss fights (dragons, giants)
+ * - Multi-phase boss battles
+ * - Arena-style boss encounters
+ * - Any fight where boss size requires wider view
+ */
+bool UCameraModule_F05_Boss_FOV::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if player has a locked target
+	if (!Context.InputContext.bHasTarget)
+	{
+		return false;
+	}
+	
+	// Check if target IS a boss
+	// This is the key condition that distinguishes F05 from F04
+	if (!Context.InputContext.bTargetIsBoss)
+	{
+		return false;
+	}
+	
+	// All conditions met - activate boss FOV
+	return true;
+}
+```
+
+---
+
+**B.  Compute() 实现：**
+
+```cpp
+/**
+ * Compute - Calculate boss fight FOV adjustment
+ * 
+ * This module calculates an FOV increase specifically for boss fights. 
+ * It considers both the boss size and player-boss distance to
+ * determine the optimal FOV for the encounter.
+ * 
+ * Steps:
+ * 1. Validate boss target
+ * 2. Get base boss FOV offset from config
+ * 3. Calculate size-based modifier (larger boss = more FOV)
+ * 4. Calculate distance-based modifier (closer = more FOV)
+ * 5. Combine modifiers with base offset
+ * 6.  Clamp to valid range
+ * 7. Output with Additive policy
+ * 
+ * Size Modifier:
+ * - Boss < 300cm: modifier = 1.0 (no additional)
+ * - Boss 300-800cm: modifier = 1.0 to 1.5 (gradual increase)
+ * - Boss > 800cm: modifier = 1.5 (capped)
+ * 
+ * Distance Modifier (for large bosses):
+ * - Far from boss: modifier = 1.0
+ * - Close to large boss: modifier = up to 1.3 (need more FOV)
+ * 
+ * Final Offset = BaseOffset × SizeModifier × DistanceModifier
+ * Clamped to -10° to +25° range
+ * 
+ * @param Context The current pipeline execution context
+ * @param StateConfig The current camera state configuration
+ * @param OutOutput Output structure to fill with computed values
+ * @return True if computation succeeded
+ */
+bool UCameraModule_F05_Boss_FOV::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Step 1: Validate boss target
+	if (!Context.InputContext.bTargetIsBoss)
+	{
+		// Not a boss - return offset of 0 (no change)
+		OutOutput.FOVOutput = 0.0f;
+		OutOutput.bHasFOVOutput = true;
+		return false;
+	}
+	
+	// Step 2: Get base boss FOV offset from config
+	float BossFOVOffset = StateConfig.Module. FOV.BossFOVOffset;
+	
+	// If not configured, use default
+	if (BossFOVOffset <= 0.0f)
+	{
+		BossFOVOffset = 10.0f;  // Default:  10 degrees wider
+	}
+	
+	// Step 3: Calculate size-based modifier
+	// Larger bosses need more FOV to fit in view
+	float TargetSize = Context. InputContext.TargetSize;
+	float SizeModifier = 1.0f;
+	
+	// Size thresholds for FOV scaling
+	const float LargeBossThreshold = 300.0f;  // 3 meters
+	const float MaxSizeForScaling = 800.0f;   // 8 meters (cap)
+	const float MaxSizeModifier = 1.5f;       // Max 50% additional
+	
+	if (TargetSize > LargeBossThreshold)
+	{
+		// Calculate how much larger than threshold
+		float SizeAboveThreshold = TargetSize - LargeBossThreshold;
+		float ScalingRange = MaxSizeForScaling - LargeBossThreshold;  // 500cm
+		
+		// Calculate modifier (1.0 to 1.5)
+		// At 300cm: modifier = 1.0
+		// At 550cm: modifier = 1.25
+		// At 800cm+: modifier = 1.5 (capped)
+		float ModifierAdd = (SizeAboveThreshold / ScalingRange) * (MaxSizeModifier - 1.0f);
+		SizeModifier = 1.0f + FMath:: Clamp(ModifierAdd, 0.0f, MaxSizeModifier - 1.0f);
+	}
+	
+	// Step 4: Calculate distance-based modifier
+	// When close to a large boss, need even more FOV
+	float TargetDistance = Context. InputContext.TargetDistance;
+	float DistanceModifier = 1.0f;
+	
+	// Only apply distance modifier for large bosses
+	const float CloseDistanceThreshold = 500.0f;  // 5 meters
+	const float MaxDistanceModifier = 1.3f;       // Max 30% additional
+	
+	if (TargetDistance < CloseDistanceThreshold && TargetSize > LargeBossThreshold)
+	{
+		// Calculate closeness factor (0 = at threshold, 1 = very close)
+		float ClosenessFactor = 1.0f - (TargetDistance / CloseDistanceThreshold);
+		
+		// Apply closeness to distance modifier
+		// Very close to large boss = need more FOV
+		DistanceModifier = 1.0f + ClosenessFactor * (MaxDistanceModifier - 1.0f);
+	}
+	
+	// Step 5: Combine modifiers with base offset
+	float FinalFOVOffset = BossFOVOffset * SizeModifier * DistanceModifier;
+	
+	// Step 6: Clamp to reasonable range
+	// Minimum -10: Allow slight FOV reduction for special boss phases
+	// Maximum +25: Prevent excessive FOV that distorts view
+	FinalFOVOffset = FMath::Clamp(FinalFOVOffset, -10.0f, 25.0f);
+	
+	// Step 7: Fill output structure
+	OutOutput. FOVOutput = FinalFOVOffset;
+	OutOutput.bHasFOVOutput = true;
+	
+	// Full weight for boss fights
+	OutOutput. Weight = 1.0f;
+	
+	return true;
+}
+```
+
+---
+
+4. **完整的F05代码块（用于复制粘贴）：**
+
+```cpp
+//========================================
+// F05: Boss FOV
+//========================================
+
+/**
+ * ShouldActivate - Activate only for boss targets
+ */
+bool UCameraModule_F05_Boss_FOV::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if player has a locked target
+	if (!Context.  InputContext.bHasTarget)
+	{
+		return false;
+	}
+	
+	// Check if target IS a boss
+	if (!Context.InputContext.bTargetIsBoss)
+	{
+		return false;
+	}
+	
+	return true;
+}
+
+/**
+ * Compute - Calculate boss fight FOV adjustment
+ */
+bool UCameraModule_F05_Boss_FOV:: Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output
+	OutOutput = CreateBaseOutput();
+	
+	// Validate boss target
+	if (!Context.InputContext.bTargetIsBoss)
+	{
+		OutOutput.FOVOutput = 0.0f;
+		OutOutput.bHasFOVOutput = true;
+		return false;
+	}
+	
+	// Get base boss FOV offset from config
+	float BossFOVOffset = StateConfig. Module.FOV. BossFOVOffset;
+	if (BossFOVOffset <= 0.0f)
+	{
+		BossFOVOffset = 10.0f;  // Default: 10 degrees
+	}
+	
+	// Calculate size-based modifier
+	float TargetSize = Context.InputContext. TargetSize;
+	float SizeModifier = 1.0f;
+	
+	const float LargeBossThreshold = 300.0f;
+	const float MaxSizeForScaling = 800.0f;
+	const float MaxSizeModifier = 1.5f;
+	
+	if (TargetSize > LargeBossThreshold)
+	{
+		float SizeAboveThreshold = TargetSize - LargeBossThreshold;
+		float ScalingRange = MaxSizeForScaling - LargeBossThreshold;
+		float ModifierAdd = (SizeAboveThreshold / ScalingRange) * (MaxSizeModifier - 1.0f);
+		SizeModifier = 1.0f + FMath::Clamp(ModifierAdd, 0.0f, MaxSizeModifier - 1.0f);
+	}
+	
+	// Calculate distance-based modifier
+	float TargetDistance = Context. InputContext.TargetDistance;
+	float DistanceModifier = 1.0f;
+	
+	const float CloseDistanceThreshold = 500.0f;
+	const float MaxDistanceModifier = 1.3f;
+	
+	if (TargetDistance < CloseDistanceThreshold && TargetSize > LargeBossThreshold)
+	{
+		float ClosenessFactor = 1.0f - (TargetDistance / CloseDistanceThreshold);
+		DistanceModifier = 1.0f + ClosenessFactor * (MaxDistanceModifier - 1.0f);
+	}
+	
+	// Combine modifiers
+	float FinalFOVOffset = BossFOVOffset * SizeModifier * DistanceModifier;
+	
+	// Clamp to valid range
+	FinalFOVOffset = FMath:: Clamp(FinalFOVOffset, -10.0f, 25.0f);
+	
+	// Fill output
+	OutOutput.FOVOutput = FinalFOVOffset;
+	OutOutput. bHasFOVOutput = true;
+	OutOutput.Weight = 1.0f;
+	
+	return true;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 说明尺寸和距离修正器的作用
+   - 解释两个修正器如何组合
+   - 提供计算示例
+   - 所有注释英文
+
+2. **格式：**
+   - Tab缩进
+   - 清晰步骤标注
+   - 方法间空两行
+
+3. **防御性编程：**
+   - 验证Boss目标
+   - 配置值默认值处理
+   - Clamp确保有效范围
+
+【技术说明】
+
+**F05的核心机制：**
+
+### 1. 双重修正器设计
+
+**为什么需要两个修正器？**
+
+```
+只有尺寸修正（假设）：
+- 巨型Boss(600cm) + 玩家远(800cm) → FOV +15°
+- 巨型Boss(600cm) + 玩家近(200cm) → FOV +15°（相同）
+问题：近距离时Boss占据更多画面，需要更宽FOV
+
+尺寸 + 距离修正（实际）：
+- 巨型Boss(600cm) + 玩家远(800cm)
+  → SizeModifier=1.3, DistanceModifier=1.0
+  → FOV = 10 × 1.3 × 1.0 = +13°
+
+- 巨型Boss(600cm) + 玩家近(200cm)
+  → SizeModifier=1.3, DistanceModifier=1.18
+  → FOV = 10 × 1.3 × 1.18 = +15.3°
+
+效果：近距离时额外增加FOV，确保Boss始终可见
+```
+
+### 2. 计算示例
+
+**不同Boss场景的FOV偏移：**
+
+| Boss类型 | 尺寸 | 距离 | 尺寸修正 | 距离修正 | FOV偏移 | 最终FOV |
+|---------|------|------|---------|---------|---------|--------|
+| 人形Boss | 200cm | 400cm | 1.0 | 1.0 | +10° | 100° |
+| 大型Boss | 400cm | 600cm | 1.2 | 1.0 | +12° | 102° |
+| 巨型Boss | 600cm | 300cm | 1.3 | 1.12 | +14. 6° | 104.6° |
+| 超大Boss | 800cm | 200cm | 1.5 | 1.18 | +17.7° | 107.7° |
+
+### 3. 与D07(Boss Distance)的对比
+
+| 特性 | D07 (Distance) | F05 (FOV) |
+|------|----------------|-----------|
+| **触发条件** | Boss目标 | Boss目标 |
+| **效果** | 相机拉远 | 视野变宽 |
+| **尺寸修正** | ✅ 有 | ✅ 有 |
+| **距离修正** | ❌ 无 | ✅ 有 |
+| **配合效果** | 拉远+变宽=完整Boss可见 |
+
+### 4. 距离修正的逻辑
+
+**为什么只对大型Boss应用距离修正？**
+
+```cpp
+if (TargetDistance < CloseDistanceThreshold && TargetSize > LargeBossThreshold)
+{
+    // 只有同时满足：近距离 AND 大型Boss
+    // 才应用距离修正
+}
+
+原因：
+- 小型Boss近距离时不需要额外FOV
+- 大型Boss远距离时不需要额外FOV
+- 只有"近距离+大型"组合需要更宽视野
+
+示例：
+- 人形Boss(200cm)近距离(200cm) → 不触发距离修正
+- 巨型Boss(600cm)远距离(800cm) → 不触发距离修正
+- 巨型Boss(600cm)近距离(200cm) → 触发距离修正
+```
+
+### 5. 与F03(Aim FOV)的交互
+
+**Boss战中的FOV组合：**
+
+```
+场景：锁定巨型Boss(600cm)，距离400cm
+
+F03 (Aim): -7.5°（锁定聚焦，50%强度）
+F04 (Combat): +5°（战斗awareness）
+F05 (Boss): +14°（Boss FOV，尺寸+距离）
+
+净效果:  -7.5 + 5 + 14 = +11. 5°
+最终FOV: 90 + 11.5 = 101.5°
+
+分析：
+- F03轻微聚焦
+- F04提供awareness
+- F05为大型Boss提供足够视野
+- 最终结果：宽视野但仍聚焦
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] ShouldActivate()完整
+   - [ ] Compute()完整
+   - [ ] 所有方法签名与. h一致
+
+3. **逻辑正确性：**
+   - [ ] 检查bTargetIsBoss
+   - [ ] 尺寸修正计算正确
+   - [ ] 距离修正计算正确
+   - [ ] 两个修正器相乘
+   - [ ] Clamp范围-10°到+25°
+
+4. **字段访问：**
+   - [ ] Context.InputContext.bHasTarget
+   - [ ] Context.InputContext.bTargetIsBoss
+   - [ ] Context. InputContext. TargetSize
+   - [ ] Context.InputContext. TargetDistance
+   - [ ] StateConfig.Module.FOV.BossFOVOffset
+
+【注意事项】
+
+1. **不需要Regenerate**
+
+2. **字段缺失处理：**
+   ```cpp
+   // 如果BossFOVOffset不存在
+   float BossFOVOffset = 10.0f;  // 直接使用默认值
+   ```
+
+3. **默认值说明：**
+   - BossFOVOffset = +10°（基础增加）
+   - LargeBossThreshold = 300cm（大型Boss阈值）
+   - MaxSizeModifier = 1.5（最大50%额外）
+   - CloseDistanceThreshold = 500cm（近距离阈值）
+   - MaxDistanceModifier = 1.3（最大30%额外）
+
+4. **测试建议：**
+   - 锁定人形Boss → FOV偏移约+10°
+   - 锁定大型Boss → FOV偏移约+12-15°
+   - 靠近巨型Boss → FOV偏移应增加
+   - 远离Boss → 距离修正应减少
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 3.5.6 完成报告
+================================================================================
+
+【修改内容】
+- 文件：CameraModule_FOV.cpp
+- 修改位置：F05模块
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ ShouldActivate：检查Boss目标
+- ✅ Compute：尺寸修正+距离修正
+
+【编译结果】
+- 编译状态：[成功/失败]
+
+【最终状态】
+✅ F05完成，Boss战FOV调整
+
+================================================================================
+```
+
+【后续步骤】
+
+F05完成后，FOV模块进度：
+- [x] ✅ 3.5.1:   CameraModule_FOV.h
+- [x] ✅ 3.5.2:  F01 - Base FOV
+- [x] ✅ 3.5.3: F02 - Speed FOV
+- [x] ✅ 3.5.4: F03 - Aim FOV
+- [x] ✅ 3.5.5: F04 - Combat FOV
+- [x] ✅ 3.5.6: F05 - Boss FOV
+- [ ] ⏳ 3.5.7: F06 - Impact FOV（最后一个！）
+
+**FOV模块完成度：5/6 (83.3%)**
+
+**下一步：** F06 Impact FOV（FOV模块最后一个）
+
+================================================================================

@@ -1,0 +1,278 @@
+Sub-Step 3.2.2 Prompt
+
+================================================================================
+任务：创建CameraModule_Position.cpp - P01 FollowTarget实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+实现Position模块，从最基础的P01 FollowTarget开始。
+P01是最简单的Position模块，直接跟随角色位置。
+
+【当前进度】
+Phase 3 Step 3.2 Sub-Step 3.2.2 (共190个Sub-Step中的第61个)
+前置完成：3.2.1 CameraModule_Position.h ✅
+
+【任务目标】
+创建文件：Source/[ProjectName]/Private/Camera/Modules/CameraModule_Position.cpp
+本Sub-Step创建文件框架并实现P01 FollowTarget模块。
+
+【⚠️ 编码格式要求 - CRITICAL】
+
+1. **文件编码：UTF-8 Without BOM（强制）**
+   - 创建文件后立即检查VS Code右下角编码
+   - 如果显示 "UTF-8 with BOM"，点击转换为 "UTF-8"
+   - 保存前再次确认
+
+2. **注释规范：所有注释必须使用英文（强制）**
+   - 禁止使用中文注释
+   - 参考标准：已完成的CameraModuleBase.cpp
+
+3. **命名替换：**
+   - 将 [ProjectName] 替换为实际项目名称
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_Position.cpp
+
+2. **文件结构要求：**
+
+**A. 头部Include：**
+- 版权声明：// Copyright Epic Games, Inc. All Rights Reserved.  
+- 包含头文件（按顺序）：
+  * #include "Camera/Modules/CameraModule_Position. h"
+  * #include "Camera/Core/SoulsCameraManager.h"
+  * 其他必需的头文件（如果需要）
+
+**B. 文件整体说明注释：**
+添加多行注释说明：
+- 此文件包含8个Position模块的实现
+- Position模块计算相机焦点位置（FocusPoint）
+- 输出通过FModuleOutput.  PositionOffset传递
+- 当前Sub-Step实现P01，其他模块将在后续Sub-Step实现
+
+**C. P01 FollowTarget完整实现：**
+
+---
+
+### P01: UCameraModule_P01_FollowTarget
+
+**分隔注释：**
+```cpp
+//========================================
+// P01: Follow Target - Basic character following
+//========================================
+```
+
+**方法1:  ShouldActivate() 实现：**
+
+功能说明：
+- P01是基础跟随模块，作为fallback始终激活
+- 只要模块启用（bIsEnabled），就应该激活
+
+实现要求：
+```cpp
+bool UCameraModule_P01_FollowTarget::ShouldActivate(
+    const FStageExecutionContext& Context, 
+    const FCameraStateConfig& StateConfig) const
+{
+    // Basic follow is always active as fallback
+    // Only check if module is enabled
+    return bIsEnabled;
+}
+```
+
+添加注释说明：
+- 这是最基础的Position模块
+- 作为fallback始终可用
+- 不检查特殊条件
+
+---
+
+**方法2: Compute() 实现：**
+
+功能说明：
+- 计算相机焦点位置
+- 使用角色位置 + 配置的偏移量
+- 输出到FModuleOutput. PositionOffset
+
+实现步骤：
+
+1. 创建基础输出结构：
+```cpp
+OutOutput = CreateBaseOutput();
+```
+
+2. 获取角色位置：
+```cpp
+FVector CharacterLocation = Context.InputContext.CharacterLocation;
+```
+
+3. 获取焦点偏移配置：
+从StateConfig中读取焦点偏移量：
+- FocusOffset（XYZ偏移）
+- VerticalOffset（额外的垂直偏移）
+
+参考路径（根据实际StateConfig结构调整）：
+```cpp
+FVector FocusOffset = StateConfig.  FocusOffset;  // 或其他实际路径
+float VerticalOffset = StateConfig. VerticalOffset;  // 或其他实际路径
+```
+
+**⚠️ 重要：** 
+StateConfig的具体结构需要根据Phase 1定义的FCameraStateConfig确定。
+如果不确定字段名称，先使用占位符，编译时根据错误调整。
+
+4. 计算最终焦点：
+```cpp
+FVector FocusPoint = CharacterLocation + FocusOffset;
+FocusPoint.Z += VerticalOffset;  // 额外的垂直偏移
+```
+
+5. 填充输出：
+```cpp
+OutOutput.PositionOffset = FocusPoint;
+OutOutput.  bHasPositionOutput = true;
+```
+
+6. 返回成功：
+```cpp
+return true;
+```
+
+完整方法添加注释说明：
+- 计算步骤
+- 偏移量的作用
+- 输出字段的含义
+
+---
+
+**D. 其他7个模块的占位符：**
+
+为P02-P08添加分隔注释，标记为待实现：
+
+```cpp
+//========================================
+// P02: Follow Target Lagged - Smooth interpolated following
+//========================================
+
+// TODO: Will be implemented in Sub-Step 3.2.3
+// This module provides smooth, lagged following using interpolation
+
+//========================================
+// P03: Follow Target Predictive - Anticipates movement
+//========================================
+
+// TODO: Will be implemented in Sub-Step 3.2.4
+// This module looks ahead based on character velocity
+
+//========================================
+// P04: Orbit Lock-On - Orbits around player during lock-on
+//========================================
+
+// TODO: Will be implemented in Sub-Step 3.2.5
+// This module positions camera to keep player and target visible
+
+//========================================
+// P05: Orbit Boss - Special boss fight orbit
+//========================================
+
+// TODO: Will be implemented in Sub-Step 3.2.6
+// This module uses wider orbit for large boss enemies
+
+//========================================
+// P06: Fixed Point - Focus on fixed world location
+//========================================
+
+// TODO: Will be implemented in Sub-Step 3.2.7
+// This module uses fixed position from state config
+
+//========================================
+// P07: Spline Follow - Follow predefined spline path
+//========================================
+
+// TODO: Will be implemented in Sub-Step 3.2.8
+// This module follows spline path for cinematic shots
+
+//========================================
+// P08: MidPoint Two Target - Focus between player and target
+//========================================
+
+// TODO: Will be implemented in Sub-Step 3.2.9
+// This module calculates weighted midpoint between two actors
+```
+
+---
+
+**E. 代码风格要求：**
+- 使用分隔注释组织代码（//====... ====）
+- 每个模块之间空两行
+- 每个方法实现前添加简短注释说明功能
+- 复杂计算添加行内注释
+- 日志使用LogTemp或专用LogCategory（可选）
+
+【⚠️ StateConfig字段访问注意】
+
+FCameraStateConfig的具体结构需要根据Phase 1的定义确定。
+
+可能的结构（示例）：
+```cpp
+// 选项1：扁平结构
+StateConfig.FocusOffset
+StateConfig.VerticalOffset
+
+// 选项2：嵌套结构
+StateConfig.  StateBase.Offset.FocusOffset
+StateConfig. StateBase.Offset.  VerticalOffset
+
+// 选项3：分组结构
+StateConfig. PositionSettings.FocusOffset
+StateConfig.PositionSettings.VerticalOffset
+```
+
+**处理方法：**
+1. 先尝试最可能的路径
+2. 编译时如果报错，根据错误信息调整
+3. 或者先使用零向量作为占位符：`FVector FocusOffset = FVector::ZeroVector;`
+
+【注意事项】
+
+1. **P01的简单性：**
+   P01是最简单的Position模块，仅做基础计算
+   不需要插值、预测或复杂逻辑
+
+2. **CreateBaseOutput()的作用：**
+   这个辅助方法（来自基类）会预填充：
+   - Priority
+   - BlendPolicy
+   - Weight
+   - ModuleCategory
+
+3. **PositionOffset vs FocusPoint：**
+   - FocusPoint是世界空间的绝对位置
+   - PositionOffset在这里等同于FocusPoint
+   - Stage 5会使用这个值计算最终相机位置
+
+4. **bHasPositionOutput标志：**
+   必须设置为true，告诉Stage 5这个模块提供了位置输出
+
+5. **TODO标记的智慧使用：**
+   其他7个模块使用TODO标记，符合Phase 3占位符原则
+
+【验证标准】
+1. 编译通过（0 errors, 0 warnings）
+2. 文件编码为 UTF-8 Without BOM
+3. 所有注释为英文
+4. P01完整实现
+5. P02-P08使用TODO标记
+6. CreateBaseOutput()正确调用
+7. PositionOffset正确赋值
+8. bHasPositionOutput设置为true
+
+【输出要求】
+输出完整的CameraModule_Position. cpp文件代码，包含：
+1. P01完整实现
+2. P02-P08的TODO占位符
+3. 所有必需的注释
+
+================================================================================

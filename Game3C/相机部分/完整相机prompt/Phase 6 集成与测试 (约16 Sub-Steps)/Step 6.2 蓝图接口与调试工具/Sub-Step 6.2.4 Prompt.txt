@@ -1,0 +1,320 @@
+Sub-Step 6.2.4 Prompt
+
+================================================================================
+任务：创建SoulsCameraDebugComponent. cpp - 调试组件实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4. 27 C++项目。
+实现调试组件的可视化功能。
+
+【当前进度】
+Phase 6 Step 6.2 Sub-Step 6.2.4 (共190个Sub-Step中的第182个)
+前置完成：6.2.3 调试组件头文件
+
+【任务目标】
+创建文件：Source/MyProject/Camera/Utility/SoulsCameraDebugComponent.cpp
+实现调试组件。
+
+【SoulsCameraManager已有接口】
+以下是可以调用的Manager方法：
+
+状态查询：
+- GetCurrentStateName() -> FName
+- GetCurrentCategory() -> ECameraStateCategory
+- IsInTransition() -> bool
+
+目标查询：
+- HasLockOnTarget() -> bool
+- GetLockOnTarget() -> AActor*
+
+输出查询：
+- GetCurrentOutput() -> FSoulsCameraOutput
+
+碰撞查询：
+- IsCollisionActive() -> bool
+- IsInCollisionRecovery() -> bool
+- IsCharacterOccluded() -> bool
+- IsTargetOccluded() -> bool
+- GetCollisionAdjustedDistance() -> float
+
+子系统访问：
+- GetModuleRegistry() -> UCameraModuleRegistry*
+- GetModifierManager() -> UCameraModifierManager*
+
+【FSoulsCameraOutput结构体字段】
+- FocusPoint (FVector) - 焦点位置
+- Rotation (FRotator) - 相机旋转
+- Distance (float) - 相机距离
+- FOV (float) - 视场角
+- GetCameraLocation() -> FVector - 计算相机世界位置
+
+【UCameraModuleRegistry可用方法】
+- GetModuleCount() -> int32
+- GetActiveModuleCount() -> int32
+- GetAllModules() -> TArray<UCameraModuleBase*>
+
+【UCameraModuleBase可用方法】
+- IsActive() -> bool
+- GetModuleName() -> FName
+
+【UCameraModifierManager可用方法】
+- GetActiveModifiers(TArray<UCameraModifierBase*>& OutModifiers)
+
+【UCameraModifierBase可用方法】
+- GetModifierName() -> FName
+- GetCurrentWeight() -> float
+- GetState() -> EModifierState
+
+【具体要求】
+
+1. 文件路径：Source/MyProject/Camera/Utility/SoulsCameraDebugComponent. cpp
+
+2. 必须包含的头文件：
+```cpp
+#include "Camera/Utility/SoulsCameraDebugComponent.h"
+#include "Camera/Core/SoulsCameraManager. h"
+#include "Camera/Modules/CameraModuleRegistry.h"
+#include "Camera/Modules/CameraModuleBase.h"
+#include "Camera/Core/CameraModifierManager.h"
+#include "Camera/Modifiers/CameraModifierBase.h"
+#include "DrawDebugHelpers.h"
+#include "Engine/Engine.h"
+```
+
+3. 构造函数实现：
+```cpp
+USoulsCameraDebugComponent::USoulsCameraDebugComponent()
+{
+    // Tick设置
+    PrimaryComponentTick.bCanEverTick = true;
+    PrimaryComponentTick. TickGroup = TG_PostUpdateWork;
+    PrimaryComponentTick. bStartWithTickEnabled = true;
+
+    // 默认禁用
+    bDebugEnabled = false;
+
+    // 默认颜色
+    FocusPointColor = FColor::Yellow;
+    CameraPathColor = FColor::Cyan;
+    CollisionColor = FColor::Red;
+    TargetColor = FColor::Orange;
+    SafeColor = FColor::Green;
+    WarningColor = FColor::Yellow;
+    ErrorColor = FColor::Red;
+
+    // 默认尺寸
+    FocusPointSize = 10.0f;
+    LineThickness = 2.0f;
+    TargetIndicatorSize = 50.0f;
+
+    // 屏幕文字设置
+    ScreenTextPositionX = 0.02f;
+    ScreenTextPositionY = 0.1f;
+    ScreenTextScale = 1.0f;
+
+    // 性能追踪
+    LastDeltaTime = 0.0f;
+    AverageFrameTime = 0.0f;
+    PeakFrameTime = 0.0f;
+    FrameCount = 0;
+    TimeSincePerformanceReset = 0.0f;
+    PerformanceSampleInterval = 1.0f;
+
+    // 历史记录
+    MaxHistorySize = 100;
+    HistorySampleInterval = 0.05f;
+    TimeSinceLastHistorySample = 0.0f;
+
+    CameraManager = nullptr;
+}
+```
+
+4. BeginPlay实现：
+```cpp
+void USoulsCameraDebugComponent::BeginPlay()
+{
+    Super::BeginPlay();
+    FindCameraManager();
+}
+
+void USoulsCameraDebugComponent::FindCameraManager()
+{
+    AActor* Owner = GetOwner();
+    if (Owner)
+    {
+        CameraManager = Owner->FindComponentByClass<USoulsCameraManager>();
+        
+        if (!CameraManager)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("USoulsCameraDebugComponent:  Could not find USoulsCameraManager on owner %s"), *Owner->GetName());
+        }
+    }
+}
+```
+
+5. TickComponent实现：
+```cpp
+void USoulsCameraDebugComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+    Super:: TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+    if (!bDebugEnabled || !CameraManager)
+    {
+        return;
+    }
+
+    UpdatePerformanceMetrics(DeltaTime);
+    UpdateHistory(DeltaTime);
+    DrawDebugVisualization(DeltaTime);
+}
+```
+
+6. 调试信息获取（通过GetCurrentOutput()）：
+```cpp
+FString USoulsCameraDebugComponent::GetStateDebugString() const
+{
+    if (!CameraManager)
+    {
+        return TEXT("[Camera State] - No Camera Manager");
+    }
+
+    FSoulsCameraOutput Output = CameraManager->GetCurrentOutput();
+
+    FString Result = TEXT("=== Camera State ===\n");
+    Result += FString:: Printf(TEXT("State: %s\n"), *CameraManager->GetCurrentStateName().ToString());
+    Result += FString:: Printf(TEXT("Category: %s\n"), *UEnum::GetValueAsString(CameraManager->GetCurrentCategory()));
+    Result += FString::Printf(TEXT("In Transition: %s\n"), CameraManager->IsInTransition() ? TEXT("Yes") : TEXT("No"));
+    Result += TEXT("\n");
+
+    Result += TEXT("--- Output ---\n");
+    Result += FString::Printf(TEXT("Focus Point: (%.1f, %.1f, %.1f)\n"), 
+        Output.FocusPoint.X, Output. FocusPoint. Y, Output.FocusPoint.Z);
+    Result += FString::Printf(TEXT("Rotation: (P=%.1f, Y=%.1f, R=%.1f)\n"), 
+        Output.Rotation. Pitch, Output. Rotation. Yaw, Output. Rotation.Roll);
+    Result += FString::Printf(TEXT("Distance: %.2f\n"), Output.Distance);
+    Result += FString:: Printf(TEXT("FOV: %.2f\n"), Output.FOV);
+
+    if (CameraManager->HasLockOnTarget())
+    {
+        AActor* Target = CameraManager->GetLockOnTarget();
+        Result += FString::Printf(TEXT("Lock Target: %s\n"), Target ?  *Target->GetName() : TEXT("None"));
+    }
+
+    return Result;
+}
+```
+
+7. 可视化绘制（使用GetCurrentOutput()）：
+```cpp
+void USoulsCameraDebugComponent::DrawFocusPoint()
+{
+    UWorld* World = GetWorld();
+    if (!World || !CameraManager)
+    {
+        return;
+    }
+
+    FSoulsCameraOutput Output = CameraManager->GetCurrentOutput();
+    FVector FocusPoint = Output.FocusPoint;
+
+    // 绘制焦点球体
+    DrawDebugSphere(World, FocusPoint, FocusPointSize, 8, FocusPointColor, false, -1.0f, 0, LineThickness * 0.5f);
+
+    // 绘制坐标轴
+    const float AxisLength = 30.0f;
+    DrawDebugLine(World, FocusPoint, FocusPoint + FVector::ForwardVector * AxisLength, FColor:: Red, false, -1.0f, 0, LineThickness * 0.5f);
+    DrawDebugLine(World, FocusPoint, FocusPoint + FVector::RightVector * AxisLength, FColor:: Green, false, -1.0f, 0, LineThickness * 0.5f);
+    DrawDebugLine(World, FocusPoint, FocusPoint + FVector:: UpVector * AxisLength, FColor::Blue, false, -1.0f, 0, LineThickness * 0.5f);
+
+    // 绘制文字标签
+    DrawDebugString(World, FocusPoint + FVector(0, 0, 20), TEXT("Focus"), nullptr, FocusPointColor, 0.0f, true);
+}
+
+void USoulsCameraDebugComponent::DrawCameraPath()
+{
+    UWorld* World = GetWorld();
+    if (!World || !CameraManager)
+    {
+        return;
+    }
+
+    FSoulsCameraOutput Output = CameraManager->GetCurrentOutput();
+    FVector FocusPoint = Output.FocusPoint;
+    FVector CameraLocation = Output.GetCameraLocation();
+    FRotator CameraRotation = Output. Rotation;
+
+    // 绘制焦点到相机的连线
+    DrawDebugLine(World, FocusPoint, CameraLocation, CameraPathColor, false, -1.0f, 0, LineThickness);
+
+    // 绘制相机位置球体
+    DrawDebugSphere(World, CameraLocation, 8.0f, 8, CameraPathColor, false, -1.0f, 0, LineThickness * 0.5f);
+
+    // 绘制相机前向方向
+    FVector CameraForward = CameraRotation.Vector();
+    DrawDebugLine(World, CameraLocation, CameraLocation + CameraForward * 50.0f, FColor:: Magenta, false, -1.0f, 0, LineThickness);
+
+    // 绘制相机上和右向量
+    FVector CameraRight = FRotationMatrix(CameraRotation).GetUnitAxis(EAxis::Y);
+    FVector CameraUp = FRotationMatrix(CameraRotation).GetUnitAxis(EAxis::Z);
+    DrawDebugLine(World, CameraLocation, CameraLocation + CameraRight * 30.0f, FColor::Green, false, -1.0f, 0, LineThickness * 0.5f);
+    DrawDebugLine(World, CameraLocation, CameraLocation + CameraUp * 30.0f, FColor::Blue, false, -1.0f, 0, LineThickness * 0.5f);
+
+    // 绘制距离文字
+    float Distance = FVector:: Dist(FocusPoint, CameraLocation);
+    FVector MidPoint = (FocusPoint + CameraLocation) * 0.5f;
+    DrawDebugString(World, MidPoint, FString::Printf(TEXT("%. 1f"), Distance), nullptr, CameraPathColor, 0.0f, true);
+}
+```
+
+8. 需要实现的完整函数列表：
+
+生命周期：
+- USoulsCameraDebugComponent() - 构造函数
+- BeginPlay()
+- TickComponent()
+
+调试控制：
+- SetDebugEnabled()
+- IsDebugEnabled()
+- SetDebugFlags()
+- GetDebugFlags()
+
+调试信息：
+- GetDebugString()
+- GetStateDebugString()
+- GetModulesDebugString()
+- GetModifiersDebugString()
+- GetCollisionDebugString()
+- GetPerformanceString()
+
+可视化：
+- DrawDebugVisualization()
+- DrawFocusPoint()
+- DrawCameraPath()
+- DrawCollisionProbes()
+- DrawTargetInfo()
+- DrawOnScreenDebug()
+
+内部方法：
+- FindCameraManager()
+- UpdatePerformanceMetrics()
+- UpdateHistory()
+- ResetPerformanceData()
+
+FCameraDebugFlags静态方法：
+- EnableAll()
+- HasAnyEnabled()
+- HasWorldVisualization()
+- HasScreenText()
+
+【验证标准】
+- 编译通过
+- 调试可视化正确显示
+- 只调用已确认存在的Manager/Registry/ModifierManager方法
+- 所有相机数据通过GetCurrentOutput()获取
+- 使用配置的颜色和尺寸变量
+
+【输出要求】
+输出完整的SoulsCameraDebugComponent.cpp文件代码。
+================================================================================

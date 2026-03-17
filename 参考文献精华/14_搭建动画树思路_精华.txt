@@ -1,0 +1,60 @@
+================================================================================
+  参考文献精华提取 第14篇
+  原文：UE4搭建动画树思路
+  作者：Janisa（知乎）/ 落寞根号七（CSDN原文）
+  价值评级：4星 验证我们的 AnimGraph 结构设计
+  提取日期：2026-03-13
+================================================================================
+
+一、精华提取
+
+文章以大逃杀射击游戏为例，提出 5 層动画树搭建思路：
+
+第1层：基础状态机（按物理状态分类）
+  Walking（站蹲）用 BlendSpace 组合方向加速度
+  Prone（趴）需修改碰撞盒
+  Swimming（游泳）
+  Driving（开车）
+  通过 BlendPosesBool 或枚举 BlendPoses 切换
+  输出到 CachedBase
+
+第2层：上半身 Slot 覆盖
+  CachedBase 进入 Slot(Upper) 输出 CachedUpper
+  上半身动画全部做成 Montage
+  Slot 分组：FullBody（全身动画）和 Upper（上半身）
+
+第3层：AimOffset 叠加
+  CachedUpper 进入 AimOffset(9方向瞄准) 输出 CachedUpperAim
+
+第4层：LayeredBlendPerBone 上下半身融合
+  BasePose = CachedBase（下半身）
+  BlendPose = CachedUpperAim（上半身）
+  过滤下半身骨骼 输出 CachedBlend
+
+第5层：FullBody Slot 到 FinalAnimationPose
+  CachedBlend 进入 Slot(FullBody) 输出 Output
+  不需要上半身融合的状态（如游泳）用 BlendPosesBool 跳过第4层
+
+多武器方案：
+  用武器枚举 BlendPoses 选择不同武器的动画集，再走上述流程。
+
+二、对我们类魂项目的关联性分析
+
+射击游戏5层 vs 我们类魂3层对比：
+
+  射击游戏第1层：4个基础状态机 对应 我们SM 7-8个State 差异：类魂无趴游泳开车
+  射击游戏第2层：Upper Slot 上半身覆盖 对应 我们不需要 差异：类魂不需要上下半身分离
+  射击游戏第3层：AimOffset 9方向瞄准 对应 我们不需要P0阶段 差异：类魂没有枪械瞄准
+  射击游戏第4层：LayeredBlendPerBone 对应 我们不需要 差异：类魂攻击是全身动作
+  射击游戏第5层：FullBody Slot 对应 我们FullBody Slot 完全一致
+
+核心结论：
+
+  1. 射击游戏需要上下半身分离（边跑边开枪），所以有5层
+  2. 我们类魂项目攻击翻滚受击都是全身动作，不需要分离上下半身
+  3. 我们的结构是：SM 到 Additive Slot 到 FullBody Slot 到 Output 只有3层
+  4. 文章验证了关键设计思路：CachedPose 缓存节点是管理复杂动画树的核心工具
+  5. 后期如果加弓箭法杖等需要上半身独立的武器，可参考第2到4层扩展
+  6. 武器枚举切换思路可直接参考：锁定非锁定用 BlendPosesBool 多武器用代码枚举
+
+================================================================================

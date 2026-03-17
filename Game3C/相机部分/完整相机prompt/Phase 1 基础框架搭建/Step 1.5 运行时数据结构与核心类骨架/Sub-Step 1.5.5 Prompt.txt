@@ -1,0 +1,505 @@
+================================================================================
+任务：创建SoulsCameraStateMachine. cpp - 状态机类实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.         27 C++项目。
+实现状态机的所有功能。
+
+【当前进度】
+Phase 1 Step 1.5 Sub-Step 1.5.5 (共190个Sub-Step中的第33个)
+前置完成：1.   5.  4 SoulsCameraStateMachine.    h
+
+【任务目标】
+创建文件：Source/[ProjectName]/Camera/Core/SoulsCameraStateMachine.    cpp
+实现USoulsCameraStateMachine类的所有函数。
+
+【具体要求】
+
+1. 文件路径：Source/[ProjectName]/Camera/Core/SoulsCameraStateMachine.     cpp
+
+2. 完整文件内容：
+
+```cpp
+// Copyright Your Company.             All Rights Reserved.     
+
+#include "SoulsCameraStateMachine.h"
+
+USoulsCameraStateMachine::USoulsCameraStateMachine()
+    : StatesDataTable(nullptr)
+    , CurrentStateName(NAME_None)
+    , PreviousStateName(NAME_None)
+    , BlendAlpha(1.0f)
+    , TransitionTimeRemaining(0.0f)
+    , TransitionTotalTime(0.0f)
+    , CurrentBlendType(ECameraBlendType::SmoothStep)
+    , bIsInitialized(false)
+{
+}
+
+void USoulsCameraStateMachine::Initialize(UDataTable* InStatesDataTable)
+{
+    StatesDataTable = InStatesDataTable;
+    
+    if (StatesDataTable)
+    {
+        CacheStateConfigs();
+        
+        // Set default state
+        if (CachedConfigs.Num() > 0)
+        {
+            // Try to find "Explore_Default" or use first state
+            if (CachedConfigs. Contains(FName("Explore_Default")))
+            {
+                CurrentStateName = FName("Explore_Default");
+            }
+            else
+            {
+                // Use first available state
+                for (const auto& Pair : CachedConfigs)
+                {
+                    CurrentStateName = Pair.Key;
+                    break;
+                }
+            }
+        }
+        
+        bIsInitialized = true;
+        UE_LOG(LogTemp, Log, TEXT("SoulsCameraStateMachine:    Initialized with %d states"), CachedConfigs. Num());
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("SoulsCameraStateMachine:  Initialize called with null DataTable"));
+        bIsInitialized = false;
+    }
+}
+
+bool USoulsCameraStateMachine::IsInitialized() const
+{
+    return bIsInitialized;
+}
+
+bool USoulsCameraStateMachine::RequestStateChange(FName NewStateName, bool bForce)
+{
+    if (!bIsInitialized)
+    {
+        return false;
+    }
+
+    // Check if state exists
+    if (!CachedConfigs. Contains(NewStateName))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("SoulsCameraStateMachine:  State '%s' does not exist"), *NewStateName. ToString());
+        return false;
+    }
+
+    // Already in this state
+    if (CurrentStateName == NewStateName && !bForce)
+    {
+        return true;
+    }
+
+    // Get new state config for transition settings
+    const FCameraStateConfig& NewConfig = CachedConfigs[NewStateName];
+
+    // Store previous state
+    PreviousStateName = CurrentStateName;
+    CurrentStateName = NewStateName;
+
+    // Setup transition
+    TransitionTotalTime = NewConfig.StateBase. Transition.BlendInTime;
+    TransitionTimeRemaining = TransitionTotalTime;
+    CurrentBlendType = NewConfig.StateBase. Transition.BlendType;
+    BlendAlpha = (TransitionTotalTime > 0.0f) ? 0.0f : 1.0f;
+
+    // Broadcast state change
+    OnStateChanged.Broadcast(PreviousStateName, CurrentStateName);
+
+    UE_LOG(LogTemp, Log, TEXT("SoulsCameraStateMachine:  State changed from '%s' to '%s'"), 
+        *PreviousStateName.ToString(), *CurrentStateName.ToString());
+
+    return true;
+}
+
+FName USoulsCameraStateMachine::GetCurrentStateName() const
+{
+    return CurrentStateName;
+}
+
+FName USoulsCameraStateMachine::GetPreviousStateName() const
+{
+    return PreviousStateName;
+}
+
+bool USoulsCameraStateMachine::GetCurrentStateConfig(FCameraStateConfig& OutConfig) const
+{
+    return GetStateConfig(CurrentStateName, OutConfig);
+}
+
+bool USoulsCameraStateMachine::GetStateConfig(FName StateName, FCameraStateConfig& OutConfig) const
+{
+    if (const FCameraStateConfig* Config = CachedConfigs. Find(StateName))
+    {
+        OutConfig = *Config;
+        return true;
+    }
+    return false;
+}
+
+bool USoulsCameraStateMachine::DoesStateExist(FName StateName) const
+{
+    return CachedConfigs.Contains(StateName);
+}
+
+TArray<FName> USoulsCameraStateMachine::GetStatesInCategory(ECameraStateCategory Category) const
+{
+    TArray<FName> Result;
+    
+    for (const auto& Pair : CachedConfigs)
+    {
+        if (Pair.Value.StateBase.Identity.Category == Category)
+        {
+            Result.Add(Pair.Key);
+        }
+    }
+    
+    return Result;
+}
+
+ECameraStateCategory USoulsCameraStateMachine::GetCurrentCategory() const
+{
+    if (const FCameraStateConfig* Config = CachedConfigs.Find(CurrentStateName))
+    {
+        return Config->StateBase. Identity.Category;
+    }
+    return ECameraStateCategory:: None;
+}
+
+bool USoulsCameraStateMachine::IsInCategory(ECameraStateCategory Category) const
+{
+    return GetCurrentCategory() == Category;
+}
+
+void USoulsCameraStateMachine::UpdateTransition(float DeltaTime)
+{
+    if (TransitionTimeRemaining > 0.0f)
+    {
+        TransitionTimeRemaining -= DeltaTime;
+        
+        if (TransitionTimeRemaining <= 0.0f)
+        {
+            TransitionTimeRemaining = 0.0f;
+            BlendAlpha = 1.0f;
+            OnTransitionComplete.Broadcast(CurrentStateName);
+        }
+        else if (TransitionTotalTime > 0.0f)
+        {
+            float LinearAlpha = 1.0f - (TransitionTimeRemaining / TransitionTotalTime);
+            BlendAlpha = CalculateBlendAlpha(LinearAlpha, CurrentBlendType);
+        }
+    }
+}
+
+float USoulsCameraStateMachine::GetBlendAlpha() const
+{
+    return BlendAlpha;
+}
+
+bool USoulsCameraStateMachine::IsInTransition() const
+{
+    return TransitionTimeRemaining > 0.0f;
+}
+
+bool USoulsCameraStateMachine::GetBlendedConfig(FCameraStateConfig& OutConfig) const
+{
+    if (! bIsInitialized)
+    {
+        return false;
+    }
+
+    // If not in transition, just return current config
+    if (!IsInTransition() || PreviousStateName == NAME_None)
+    {
+        return GetCurrentStateConfig(OutConfig);
+    }
+
+    // Get both configs
+    FCameraStateConfig PreviousConfig, CurrentConfig;
+    if (! GetStateConfig(PreviousStateName, PreviousConfig) || 
+        !GetStateConfig(CurrentStateName, CurrentConfig))
+    {
+        return GetCurrentStateConfig(OutConfig);
+    }
+
+    // For now, return current config (full blending will be implemented in Stage 5)
+    // This is a simplified version - actual parameter blending is complex
+    OutConfig = CurrentConfig;
+    return true;
+}
+
+void USoulsCameraStateMachine::EvaluateState(const FCameraInputContext& Context)
+{
+    if (!bIsInitialized)
+    {
+        return;
+    }
+
+    // Basic state evaluation logic
+    // This can be extended with more sophisticated rules
+    
+    FName DesiredState = CurrentStateName;
+
+    // Priority-based evaluation
+    if (Context.bHasTarget && Context.bTargetIsBoss)
+    {
+        DesiredState = FName("Boss_Default");
+    }
+    else if (Context.bHasTarget)
+    {
+        DesiredState = FName("LockOn_Default");
+    }
+    else if (Context.bIsInCombat)
+    {
+        DesiredState = FName("Combat_Default");
+    }
+    else if (Context.bIsSprinting)
+    {
+        DesiredState = FName("Sprint_Default");
+    }
+    else
+    {
+        DesiredState = FName("Explore_Default");
+    }
+
+    // Request state change if different
+    if (DesiredState != CurrentStateName && DoesStateExist(DesiredState))
+    {
+        RequestStateChange(DesiredState);
+    }
+}
+
+void USoulsCameraStateMachine:: CacheStateConfigs()
+{
+    CachedConfigs. Empty();
+
+    if (! StatesDataTable)
+    {
+        return;
+    }
+
+    // Get all row names
+    TArray<FName> RowNames = StatesDataTable->GetRowNames();
+
+    for (const FName& RowName : RowNames)
+    {
+        FCameraStateConfig* Config = StatesDataTable->FindRow<FCameraStateConfig>(RowName, TEXT(""));
+        if (Config)
+        {
+            // Use row name as state name if Identity.StateName is not set
+            if (Config->StateBase.Identity.StateName == NAME_None)
+            {
+                Config->StateBase.Identity.StateName = RowName;
+            }
+            CachedConfigs. Add(RowName, *Config);
+        }
+    }
+}
+
+float USoulsCameraStateMachine::CalculateBlendAlpha(float LinearAlpha, ECameraBlendType BlendType) const
+{
+    return ApplyBlendCurve(LinearAlpha, BlendType);
+}
+
+float USoulsCameraStateMachine:: ApplyBlendCurve(float Alpha, ECameraBlendType BlendType)
+{
+    Alpha = FMath:: Clamp(Alpha, 0.0f, 1.0f);
+
+    switch (BlendType)
+    {
+        case ECameraBlendType::Cut: 
+            return (Alpha >= 1.0f) ? 1.0f : 0.0f;
+
+        case ECameraBlendType::Linear:
+            return Alpha;
+
+        case ECameraBlendType:: SmoothStep: 
+            return FMath::SmoothStep(0.0f, 1.0f, Alpha);
+
+        case ECameraBlendType::EaseIn:
+            return Alpha * Alpha;
+
+        case ECameraBlendType::EaseOut: 
+            return 1.0f - FMath::Pow(1.0f - Alpha, 2.0f);
+
+        case ECameraBlendType::EaseInOut:
+            return (Alpha < 0.5f) 
+                ?  2.0f * Alpha * Alpha 
+                : 1.0f - FMath::Pow(-2.0f * Alpha + 2.0f, 2.0f) / 2.0f;
+
+        case ECameraBlendType:: Cubic:
+            return Alpha * Alpha * Alpha;
+
+        case ECameraBlendType::Spring:
+            // Simple spring approximation
+            return 1.0f - FMath::Cos(Alpha * PI * 0.5f);
+
+        case ECameraBlendType:: Custom:
+            // Custom curve would need additional handling
+            return Alpha;
+
+        default: 
+            return Alpha;
+    }
+}
+```
+
+3. 代码风格：
+   - 详细的日志输出便于调试
+   - 防御性编程检查初始化状态
+   - 完整的混合曲线实现
+   - 缓存机制提高性能
+
+【验证标准】
+- 编译通过
+- 可创建USoulsCameraStateMachine实例
+- Initialize()可正确加载DataTable
+
+【注意事项】
+- 确保头文件路径正确
+- EvaluateState()的逻辑可以后续扩展
+- **添加新.  cpp文件后需要重新Generate Visual Studio project files**
+
+【输出要求】
+输出完整的SoulsCameraStateMachine.    cpp文件代码。
+
+================================================================================
+                        上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+```
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：Sub-Step 1.5.5 SoulsCameraStateMachine. cpp (状态机类实现)
+- 完成进度：[X/14] 函数 或 [百分比]
+- 中断位置：[具体说明在哪里中断，例如：完成到GetBlendedConfig()，未完成EvaluateState()和Internal Methods]
+
+【已完成内容】
+- 文件头部（#include）
+- 构造函数
+- [列出已完成的函数]
+
+【未完成内容】
+- [列出剩余函数]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存到新文件SoulsCameraStateMachine.cpp，然后开启新对话。
+注意：添加新. cpp文件后需要重新Generate Visual Studio project files。
+
+================================================================================
+                    继续任务 - 新对话PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Phase 1 Step 1.5 Sub-Step 1.5.5 续接任务。
+实现USoulsCameraStateMachine类的函数。
+
+【前置完成】
+- Step 1.1-1.4 所有参数结构体和配置 ✅
+- Sub-Step 1.5.1 FCameraInputContext ✅
+- Sub-Step 1.5.2 FSoulsCameraOutput ✅
+- Sub-Step 1.5.3 FModuleOutput/FModifierOutput ✅
+- Sub-Step 1.5.4 SoulsCameraStateMachine. h ✅
+- Sub-Step 1.5.5 部分完成：
+  - 文件头部 ✅
+  - 构造函数 ✅
+  - [列出已完成的函数] ✅
+
+【续接任务】
+继续完成SoulsCameraStateMachine.cpp文件：
+- [列出剩余函数]
+
+【已有代码上下文】
+文件：SoulsCameraStateMachine.cpp（已创建，需要继续添加）
+
+【需要实现的函数清单（共14个）】
+Initialization (2个)：
+1. 构造函数
+2. Initialize()
+
+State Management (5个)：
+3. IsInitialized()
+4. RequestStateChange()
+5. GetCurrentStateName()
+6. GetPreviousStateName()
+7. GetCurrentStateConfig()
+8. GetStateConfig()
+9. DoesStateExist()
+
+State Query (3个)：
+10. GetStatesInCategory()
+11. GetCurrentCategory()
+12. IsInCategory()
+
+Transition (4个)：
+13. UpdateTransition()
+14. GetBlendAlpha()
+15. IsInTransition()
+16. GetBlendedConfig()
+
+Evaluation (1个)：
+17. EvaluateState()
+
+Internal Methods (3个)：
+18. CacheStateConfigs()
+19. CalculateBlendAlpha()
+20. ApplyBlendCurve() (static)
+
+【输出要求】
+继续生成剩余代码，完成SoulsCameraStateMachine.cpp文件。
+
+【编译注意】
+添加新.cpp文件后需要：
+1. 右键.  uproject → Generate Visual Studio project files
+2. 重新打开.  sln或Reload All
+3. 编译
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。如再次达到限制，请再次生成交接信息。
+
+---结束复制---
+
+================================================================================
+```
+
+【交接信息要求】
+1. 交接PROMPT必须是**完全自包含**的，新对话无需任何额外信息即可继续
+2. 包含所有必要的**代码上下文**（关键结构体定义、依赖关系等）
+3. 明确标注**中断位置**和**剩余任务**
+4. 标明目标文件：SoulsCameraStateMachine.    cpp
+5. 列出所有需要实现的函数（共20个，按分组）
+6. 包含编译注意事项（Generate Visual Studio project files）
+
+================================================================================

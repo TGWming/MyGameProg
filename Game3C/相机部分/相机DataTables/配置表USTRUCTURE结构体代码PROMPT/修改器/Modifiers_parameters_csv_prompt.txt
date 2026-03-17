@@ -1,0 +1,356 @@
+在我的UE4.27工程中创建相机修改器参数数据表的C++结构体代码。
+
+## 任务要求
+
+### 任务1：创建 CameraModifierParameterEnums.h
+路径：Source/[YourProject]/Public/Camera/Data/CameraModifierParameterEnums. h
+
+创建必要的枚举类型：
+- EModifierParamCategory - 参数分类枚举（Shake, Reaction, Cinematic, Zoom, Effect, Special）
+- EModifierParamDataType - 数据类型枚举（Float, LinearColor）
+
+### 任务2：创建 CameraModifierParameterData. h
+路径：Source/[YourProject]/Public/Camera/Data/CameraModifierParameterData.h
+
+创建一个继承自 FTableRowBase 的 USTRUCT，用于从CSV导入相机修改器参数配置数据
+
+CSV文件结构如下（共62行数据）：
+- ParamID:  FString - 参数唯一标识符，格式如 "MS01", "MR01", "MC01", "MZ01", "ME01", "MX01"（注意：此字段会自动成为RowName，结构体中可保留但导入后为空）
+- ParamName: FName - 参数名称，作为程序引用标识符（如 ShakeFrequency_Light, ParryDistancePull）
+- ChineseName: FString - 中文显示名称
+- Category: FString - 参数分类（Shake, Reaction, Cinematic, Zoom, Effect, Special）
+- DataType: FString - 数据类型（float, FLinearColor）
+- DefaultValue: FString - 默认值（数值如"25.0"，或颜色格式如"(1.0,0.2,0.2,1.0)"）
+- MinValue: FString - 最小值（"-"表示无限制）
+- MaxValue: FString - 最大值（"-"表示无限制）
+- Unit: FString - 单位（如 "Hz", "cm", "degree", "s", "-"）
+- Description: FString - 参数描述
+- RelatedModifiers: FString - 关联修改器ID列表，用斜杠分隔（如 "S01", "R01", "C01/C02/C03"）
+
+结构体命名为 `FCameraModifierParameterRow`
+
+添加必要的UPROPERTY宏，确保：
+- 所有属性可在编辑器中编辑（EditAnywhere）
+- 所有属性可在蓝图中读取（BlueprintReadWrite）
+- 添加Category分组便于编辑器查看
+
+**重要：结构体中不要包含任何UFUNCTION函数，只保留UPROPERTY属性和构造函数**
+
+### 任务3：创建 CameraModifierParameterHelpers.h
+路径：Source/[YourProject]/Public/Camera/Data/CameraModifierParameterHelpers.h
+
+创建 UCameraModifierParameterHelpers 类，继承自 UBlueprintFunctionLibrary
+
+所有函数标记为 UFUNCTION(BlueprintPure, Category = "Camera|ModifierParameter")
+所有函数为静态函数
+
+需要实现的函数：
+```cpp
+// 类型检查函数
+static bool IsFloatType(const FCameraModifierParameterRow& Row);
+static bool IsColorType(const FCameraModifierParameterRow& Row);
+
+// 值解析函数
+static float GetDefaultValueAsFloat(const FCameraModifierParameterRow& Row);
+static FLinearColor GetDefaultValueAsLinearColor(const FCameraModifierParameterRow& Row);
+
+// 限制检查函数
+static bool HasMinLimit(const FCameraModifierParameterRow& Row);
+static bool HasMaxLimit(const FCameraModifierParameterRow& Row);
+static float GetMinValueAsFloat(const FCameraModifierParameterRow& Row);
+static float GetMaxValueAsFloat(const FCameraModifierParameterRow& Row);
+
+// 数组解析函数
+static TArray<FString> GetRelatedModifiersArray(const FCameraModifierParameterRow& Row);
+
+// 分类检查函数
+static bool IsShakeParam(const FCameraModifierParameterRow& Row);
+static bool IsReactionParam(const FCameraModifierParameterRow& Row);
+static bool IsCinematicParam(const FCameraModifierParameterRow& Row);
+static bool IsZoomParam(const FCameraModifierParameterRow& Row);
+static bool IsEffectParam(const FCameraModifierParameterRow& Row);
+static bool IsSpecialParam(const FCameraModifierParameterRow& Row);
+
+// 枚举转换函数
+static EModifierParamCategory StringToCategory(const FString& CategoryString);
+static FString CategoryToString(EModifierParamCategory Category);
+static EModifierParamDataType StringToDataType(const FString& DataTypeString);
+static FString DataTypeToString(EModifierParamDataType DataType);
+
+// 中文显示名称
+static FString GetCategoryDisplayName(EModifierParamCategory Category);
+static FString GetDataTypeDisplayName(EModifierParamDataType DataType);
+```
+
+### 任务4：创建 CameraModifierParameterHelpers.cpp
+路径：Source/[YourProject]/Private/Camera/Data/CameraModifierParameterHelpers.cpp
+
+实现头文件中声明的所有静态函数
+
+## 函数实现逻辑参考
+
+### IsFloatType
+```cpp
+return Row.DataType. Equals(TEXT("float"), ESearchCase::IgnoreCase);
+```
+
+### IsColorType
+```cpp
+return Row.DataType. Equals(TEXT("FLinearColor"), ESearchCase::IgnoreCase) ||
+       Row. DataType.Contains(TEXT("LinearColor"), ESearchCase::IgnoreCase) ||
+       Row. DataType.Contains(TEXT("Color"), ESearchCase::IgnoreCase);
+```
+
+### GetDefaultValueAsFloat
+```cpp
+if (Row.DefaultValue.IsEmpty() || Row.DefaultValue == TEXT("-"))
+{
+    return 0.0f;
+}
+return FCString::Atof(*Row.DefaultValue);
+```
+
+### GetDefaultValueAsLinearColor
+```cpp
+FLinearColor Result = FLinearColor:: White;
+
+if (Row.DefaultValue.IsEmpty() || Row.DefaultValue == TEXT("-"))
+{
+    return Result;
+}
+
+// 移除括号和引号
+FString CleanedValue = Row.DefaultValue;
+CleanedValue.RemoveFromStart(TEXT("\""));
+CleanedValue.RemoveFromEnd(TEXT("\""));
+CleanedValue.RemoveFromStart(TEXT("("));
+CleanedValue.RemoveFromEnd(TEXT(")"));
+
+// 按逗号分割
+TArray<FString> Components;
+CleanedValue.ParseIntoArray(Components, TEXT(","), true);
+
+if (Components.Num() >= 4)
+{
+    Result. R = FCString:: Atof(*Components[0]. TrimStartAndEnd());
+    Result.G = FCString:: Atof(*Components[1].TrimStartAndEnd());
+    Result.B = FCString::Atof(*Components[2]. TrimStartAndEnd());
+    Result.A = FCString:: Atof(*Components[3].TrimStartAndEnd());
+}
+else if (Components.Num() >= 3)
+{
+    Result.R = FCString:: Atof(*Components[0].TrimStartAndEnd());
+    Result.G = FCString::Atof(*Components[1]. TrimStartAndEnd());
+    Result.B = FCString:: Atof(*Components[2].TrimStartAndEnd());
+    Result.A = 1.0f;
+}
+
+return Result;
+```
+
+### HasMinLimit
+```cpp
+return ! Row.MinValue. IsEmpty() && Row.MinValue != TEXT("-");
+```
+
+### HasMaxLimit
+```cpp
+return !Row.MaxValue. IsEmpty() && Row.MaxValue != TEXT("-");
+```
+
+### GetMinValueAsFloat
+```cpp
+if (! HasMinLimit(Row))
+{
+    return TNumericLimits<float>::Lowest();
+}
+return FCString::Atof(*Row.MinValue);
+```
+
+### GetMaxValueAsFloat
+```cpp
+if (!HasMaxLimit(Row))
+{
+    return TNumericLimits<float>::Max();
+}
+return FCString::Atof(*Row.MaxValue);
+```
+
+### GetRelatedModifiersArray
+```cpp
+TArray<FString> Result;
+
+if (Row.RelatedModifiers.IsEmpty() || Row.RelatedModifiers == TEXT("-"))
+{
+    return Result;
+}
+
+Row.RelatedModifiers.ParseIntoArray(Result, TEXT("/"), true);
+
+for (FString& Str : Result)
+{
+    Str = Str.TrimStartAndEnd();
+}
+
+return Result;
+```
+
+### IsShakeParam
+```cpp
+return Row.Category. Equals(TEXT("Shake"), ESearchCase::IgnoreCase);
+```
+
+### IsReactionParam
+```cpp
+return Row.Category. Equals(TEXT("Reaction"), ESearchCase::IgnoreCase);
+```
+
+### IsCinematicParam
+```cpp
+return Row.Category. Equals(TEXT("Cinematic"), ESearchCase::IgnoreCase);
+```
+
+### IsZoomParam
+```cpp
+return Row.Category. Equals(TEXT("Zoom"), ESearchCase::IgnoreCase);
+```
+
+### IsEffectParam
+```cpp
+return Row.Category. Equals(TEXT("Effect"), ESearchCase::IgnoreCase);
+```
+
+### IsSpecialParam
+```cpp
+return Row. Category.Equals(TEXT("Special"), ESearchCase::IgnoreCase);
+```
+
+### StringToCategory
+```cpp
+FString TrimmedString = CategoryString.TrimStartAndEnd();
+if (TrimmedString.Equals(TEXT("Shake"), ESearchCase::IgnoreCase))
+    return EModifierParamCategory::Shake;
+else if (TrimmedString. Equals(TEXT("Reaction"), ESearchCase::IgnoreCase))
+    return EModifierParamCategory::Reaction;
+else if (TrimmedString. Equals(TEXT("Cinematic"), ESearchCase::IgnoreCase))
+    return EModifierParamCategory::Cinematic;
+else if (TrimmedString. Equals(TEXT("Zoom"), ESearchCase::IgnoreCase))
+    return EModifierParamCategory::Zoom;
+else if (TrimmedString. Equals(TEXT("Effect"), ESearchCase::IgnoreCase))
+    return EModifierParamCategory:: Effect;
+else if (TrimmedString.Equals(TEXT("Special"), ESearchCase::IgnoreCase))
+    return EModifierParamCategory::Special;
+return EModifierParamCategory:: Shake;
+```
+
+### CategoryToString
+```cpp
+switch (Category)
+{
+case EModifierParamCategory::Shake:      return TEXT("Shake");
+case EModifierParamCategory:: Reaction:  return TEXT("Reaction");
+case EModifierParamCategory:: Cinematic: return TEXT("Cinematic");
+case EModifierParamCategory:: Zoom:      return TEXT("Zoom");
+case EModifierParamCategory::Effect:     return TEXT("Effect");
+case EModifierParamCategory:: Special:   return TEXT("Special");
+default:  return TEXT("Shake");
+}
+```
+
+### StringToDataType
+```cpp
+FString TrimmedString = DataTypeString. TrimStartAndEnd();
+if (TrimmedString. Equals(TEXT("float"), ESearchCase::IgnoreCase))
+    return EModifierParamDataType::Float;
+else if (TrimmedString.Equals(TEXT("FLinearColor"), ESearchCase::IgnoreCase) ||
+         TrimmedString.Contains(TEXT("LinearColor"), ESearchCase::IgnoreCase) ||
+         TrimmedString.Contains(TEXT("Color"), ESearchCase::IgnoreCase))
+    return EModifierParamDataType::LinearColor;
+return EModifierParamDataType::Float;
+```
+
+### DataTypeToString
+```cpp
+switch (DataType)
+{
+case EModifierParamDataType::Float:       return TEXT("float");
+case EModifierParamDataType:: LinearColor: return TEXT("FLinearColor");
+default: return TEXT("float");
+}
+```
+
+### GetCategoryDisplayName
+```cpp
+switch (Category)
+{
+case EModifierParamCategory:: Shake:     return TEXT("震动");
+case EModifierParamCategory::Reaction:  return TEXT("反应");
+case EModifierParamCategory:: Cinematic: return TEXT("过场");
+case EModifierParamCategory:: Zoom:      return TEXT("缩放");
+case EModifierParamCategory:: Effect:    return TEXT("效果");
+case EModifierParamCategory::Special:    return TEXT("特殊");
+default: return TEXT("未知");
+}
+```
+
+### GetDataTypeDisplayName
+```cpp
+switch (DataType)
+{
+case EModifierParamDataType::Float:       return TEXT("浮点数");
+case EModifierParamDataType:: LinearColor: return TEXT("线性颜色");
+default: return TEXT("未知");
+}
+```
+
+## 特殊处理说明
+- FLinearColor类型的DefaultValue格式为 "(r,g,b,a)"，如 "(1.0,0.2,0.2,1.0)"
+- MinValue/MaxValue为"-"时表示无限制（FLinearColor类型始终为"-"）
+- Unit字段仅供显示参考，不影响数值计算
+- RelatedModifiers使用斜杠"/"分隔多个修改器ID（如 "C01/C02/C03"）
+- ParamID格式说明：
+  - MS开头：Shake类参数
+  - MR开头：Reaction类参数
+  - MC开头：Cinematic类参数
+  - MZ开头：Zoom类参数
+  - ME开头：Effect类参数
+  - MX开头：Special类参数
+
+## 示例数据参考
+```csv
+MS01,ShakeFrequency_Light,轻击震动频率,Shake,float,25.0,10.0,50.0,Hz,轻击震动的频率,S01
+MR01,ParryDistancePull,弹反拉近距离,Reaction,float,15.0,5.0,30.0,cm,弹反时相机先拉近的距离,R01
+MC03,ExecutionFOV,处决FOV,Cinematic,float,55.0,45.0,70.0,degree,处决时的FOV,C01/C02/C03
+MZ01,AttackImpactFOVPunch,攻击冲击FOV,Zoom,float,5.0,2.0,12.0,degree,攻击命中时FOV收缩幅度,Z01
+ME05,LowHealthTintColor,低血量着色颜色,Effect,FLinearColor,"(1.0,0.2,0.2,1.0)",-,-,-,低血量时的屏幕着色,E01
+MX07,DeathCamDuration,死亡相机持续时间,Special,float,2.0,1.0,4.0,s,死亡相机效果持续时间,X03
+```
+
+## 文件结构
+```
+Source/[YourProject]/
+├── Public/
+│   └── Camera/
+│       └── Data/
+│           ├── CameraModifierParameterData.h         (新建-结构体)
+│           ├── CameraModifierParameterEnums.h        (新建-枚举)
+│           └── CameraModifierParameterHelpers.h      (新建-辅助类)
+└── Private/
+    └── Camera/
+        └── Data/
+            └── CameraModifierParameterHelpers.cpp    (新建-辅助类实现)
+```
+
+## UE4.27 兼容性要求
+1. 使用 GENERATED_BODY() 宏
+2. #include "XXX.generated.h" 必须是最后一个include
+3. 辅助类继承 UBlueprintFunctionLibrary
+4. 所有蓝图可调用函数使用 UFUNCTION(BlueprintPure, Category = "...")
+5. **USTRUCT结构体中不能包含UFUNCTION，只能有UPROPERTY和普通构造函数**
+6. 需要 #include "Math/Color.h" 以支持 FLinearColor
+
+## 完成后验证
+1. 编译项目确认无错误
+2. 确认FCameraModifierParameterRow结构体中不包含任何UFUNCTION（只有UPROPERTY属性和构造函数）
+3. 确认UCameraModifierParameterHelpers类包含所有20个静态辅助函数
+4. 确认枚举类型正确定义并可在蓝图中使用

@@ -1,0 +1,151 @@
+================================================================================
+任务：在SoulsCameraParams_StateBase.h中添加Distance子组
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+继续添加A组参数结构体的子组。
+
+【当前进度】
+Phase 1 Step 1.2 Sub-Step 1.2.2 (共190个Sub-Step中的第9个)
+前置完成：1.2.1 文件框架与Identity子组
+
+【任务目标】
+在SoulsCameraParams_StateBase.h中添加FStateDistanceParams结构体。
+定义相机距离相关的参数（3个参数）。
+
+【具体要求】
+
+1. 在FStateIdentityParams之后，Distance占位符位置添加：
+
+```cpp
+/**
+ * State distance parameters
+ * Controls camera arm length for this state
+ */
+USTRUCT(BlueprintType)
+struct FStateDistanceParams
+{
+    GENERATED_BODY()
+
+    /** Base camera distance in centimeters */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Distance", meta = (ClampMin = "50.0", ClampMax = "2000.0"))
+    float BaseDistance;
+
+    /** Minimum allowed distance */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Distance", meta = (ClampMin = "50.0", ClampMax = "2000.0"))
+    float MinDistance;
+
+    /** Maximum allowed distance */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Distance", meta = (ClampMin = "50.0", ClampMax = "2000.0"))
+    float MaxDistance;
+
+    FStateDistanceParams()
+        : BaseDistance(400.0f)
+        , MinDistance(150.0f)
+        , MaxDistance(800.0f)
+    {}
+};
+```
+
+2. 代码风格：
+   - 使用meta = (ClampMin, ClampMax)限制编辑器中的值范围
+   - 距离单位为厘米（UE4标准）
+   - 默认值参考类魂游戏：BaseDistance 400cm
+
+【验证标准】
+- 编译通过
+- 可创建FStateDistanceParams实例
+- 编辑器中数值有范围限制
+
+【注意事项】
+- 添加在FStateIdentityParams之后
+- 替换Distance占位符注释
+
+【输出要求】
+输出FStateDistanceParams结构体代码块。
+
+================================================================================
+                        上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+```
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：Sub-Step 1.2.2 Distance子组
+- 完成进度：[X/Y] 或 [百分比]
+- 中断位置：[具体说明在哪里中断]
+
+【已完成内容】
+- [列出已生成的代码/结构体]
+- [列出已完成的具体项目]
+
+【未完成内容】
+- [列出剩余需要生成的代码/结构体]
+- [列出剩余的具体项目]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存到SoulsCameraParams_StateBase. h对应位置，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Phase 1 Step 1.2 Sub-Step 1.2.2 续接任务。
+
+【前置完成】
+- Step 1.1 SoulsCameraTypes.h（所有枚举定义）✅
+- Sub-Step 1.2.1 文件框架与Identity子组 ✅
+- [列出本次对话已完成的内容] ✅
+
+【续接任务】
+从 [具体中断位置] 继续，完成以下内容：
+- [列出剩余任务1]
+- [列出剩余任务2]
+
+【已有代码上下文】
+文件：SoulsCameraParams_StateBase.h
+已有结构体：FStateIdentityParams
+
+【输出要求】
+继续生成剩余代码，完成Sub-Step 1.2.2 FStateDistanceParams结构体。
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。如再次达到限制，请再次生成交接信息。
+
+---结束复制---
+
+================================================================================
+```
+
+【交接信息要求】
+1. 交接PROMPT必须是**完全自包含**的，新对话无需任何额外信息即可继续
+2. 包含所有必要的**代码上下文**（关键结构体定义、依赖关系等）
+3. 明确标注**中断位置**和**剩余任务**
+4. 标明目标文件：SoulsCameraParams_StateBase. h
+
+================================================================================

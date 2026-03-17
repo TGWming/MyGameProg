@@ -1,0 +1,7 @@
+ModuleID,ModuleName,ChineseName,Category,Description,BlendPolicy,Priority,ActiveStates,InputParams,OutputParams
+F01,BaseFOV,基础FOV,FOV,根据当前状态返回基础FOV值,Override,100,All,CurrentState/StateFOVConfig,FOVOverride
+F02,Speed_FOV,速度FOV,FOV,根据移动速度增加FOV强调速度感,Additive,80,Sprint/Mount,CharacterSpeed/SpeedThreshold/FOVPerSpeed/MaxFOVOffset,FOVOffset
+F03,Aim_FOV,瞄准FOV,FOV,瞄准时缩小FOV增强精确感,Override,110,Aim,AimFOV,FOVOverride
+F04,Combat_FOV,战斗FOV,FOV,战斗状态的FOV调整,Additive,85,Combat/LockOn,CombatFOVOffset,FOVOffset
+F05,Boss_FOV,Boss战FOV,FOV,Boss战时的广角处理,Additive,90,Boss_Medium/Boss_Large/Boss_Huge,BossSize/BossFOVOffset,FOVOffset
+F06,Impact_FOV,冲击FOV,FOV,攻击命中或受击时的FOV脉冲,Additive,120,Combat/LockOn/Boss_All,ImpactIntensity/FOVPunchScale,FOVOffset

@@ -1,0 +1,698 @@
+Sub-Step 3.2.9 Prompt
+
+================================================================================
+任务：在CameraModule_Position. cpp中添加P08 MidPoint_TwoTarget实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+P08计算玩家和目标之间的加权中点作为焦点，是最通用的双目标定位模块。
+这是Position模块系列的最后一个模块，完成后Step 3.2全部完成。
+
+【当前进度】
+Phase 3 Step 3.2 Sub-Step 3.2.9 (共190个Sub-Step中的第68个)
+前置完成：3.2.8 P07实现 ✅
+**这是Step 3.2的最后一个Sub-Step**
+
+【任务目标】
+在CameraModule_Position.cpp中完整实现P08模块，替换现有的stub占位符。
+完成后，所有8个Position模块（P01-P08）全部实现完毕。
+
+【⚠️ 重要说明】
+
+**P08的定位：**
+P08是通用的双目标中点模块，与P04的区别：
+- **P04**：专用于锁定战斗，包含轨道偏移逻辑
+- **P08**：通用双目标场景，纯粹的中点计算
+
+P08的特点：
+- 更简单的中点计算
+- 使用Blend策略（可与其他模块混合）
+- 动态权重（基于距离）
+- 不限定锁定状态
+
+【⚠️ 编译前必做步骤】
+
+1. **编译前必做：**
+   本Sub-Step只修改现有. cpp文件，不添加新文件。
+   因此**不需要Regenerate**，可以直接编译。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   确认StateConfig和InputContext的字段路径与项目实际结构一致。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_Position. cpp
+
+2. **定位修改位置：**
+
+在文件中找到P08的stub实现部分：
+
+```cpp
+//========================================
+// P08: MidPoint Two Target - Focus between player and target
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.2.9
+// ... stub代码
+```
+
+**将上述stub代码完整替换为下方的完整实现。**
+
+---
+
+3. **P08完整实现代码：**
+
+**A. ShouldActivate()方法（需要完整实现）：**
+
+**当前stub代码：**
+```cpp
+bool UCameraModule_P08_MidPoint_TwoTarget::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Stub - requires a valid target to activate
+	return false;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * ShouldActivate - Determine if midpoint focus should be active
+ * 
+ * P08 activates when: 
+ * - Module is enabled
+ * - Player has a valid target
+ * 
+ * Differences from P04 (Orbit Lock-On):
+ * - P04: Only activates during lock-on combat (bHasTarget && !bTargetIsBoss)
+ * - P08: Activates for ANY target scenario (more general purpose)
+ * 
+ * P08 is more flexible and can be used in:
+ * - Non-combat scenarios with targets
+ * - Cinematic sequences showing two characters
+ * - Any situation needing focus between two points
+ * - Blended with other position modules (uses Blend policy)
+ * 
+ * The dynamic weight system allows P08 to gracefully reduce influence
+ * when targets are far apart, preventing awkward framing.
+ */
+bool UCameraModule_P08_MidPoint_TwoTarget::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if player has a valid target
+	// This is the only condition - P08 is very general purpose
+	if (!Context.InputContext.bHasTarget)
+	{
+		return false;
+	}
+	
+	// Activate for any target scenario
+	// Unlike P04, we don't care about lock-on state or boss flags
+	return true;
+}
+```
+
+**说明：**
+- 仅需要有目标即可激活
+- 不检查锁定状态（比P04更通用）
+- 不检查Boss标志（比P05更通用）
+- 注释清楚说明与P04的区别
+
+---
+
+**B. Compute()方法（需要完整实现）：**
+
+**当前stub代码：**
+```cpp
+bool UCameraModule_P08_MidPoint_TwoTarget::Compute(...)
+{
+	OutOutput = CreateBaseOutput();
+	OutOutput.bHasPositionOutput = false;
+	return false;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * Compute - Calculate weighted midpoint between player and target
+ * 
+ * This module provides a clean, general-purpose midpoint calculation
+ * between two actors. Unlike P04 (combat-oriented), P08 focuses on
+ * simplicity and flexibility.
+ * 
+ * Steps:
+ * 1. Validate target exists
+ * 2. Get player and target locations
+ * 3. Calculate weighted midpoint based on MidPointBias
+ * 4. Apply standard focus offset
+ * 5. Add dynamic height adjustment based on target distance
+ * 6. Calculate dynamic weight (decreases with distance)
+ * 7. Output the calculated midpoint
+ * 
+ * Key Features:
+ * - Configurable bias (favor player or target)
+ * - Dynamic height adjustment (raises focus for distant targets)
+ * - Distance-based weight (reduces influence at extreme distances)
+ * - Blend policy (works well with other modules)
+ * 
+ * Use Cases:
+ * - Cinematic two-character scenes
+ * - Non-combat target tracking
+ * - Flexible focus between any two points
+ * - Situations where both actors should be visible
+ * 
+ * @param Context The current pipeline execution context
+ * @param StateConfig The current camera state configuration
+ * @param OutOutput Output structure to fill with computed values
+ * @return True if computation succeeded
+ */
+bool UCameraModule_P08_MidPoint_TwoTarget::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Use Blend policy (not Override)
+	// P08 is designed to work cooperatively with other position modules
+	// This allows it to contribute to the final focus without dominating
+	OutOutput.BlendPolicy = EBlendPolicy:: Blend;
+	
+	// Step 1: Validate target exists
+	// Safety check - ShouldActivate should prevent this, but double-check
+	if (!Context. InputContext.bHasTarget)
+	{
+		// No target - cannot compute midpoint
+		OutOutput.bHasPositionOutput = false;
+		return false;
+	}
+	
+	// Step 2: Get player and target world locations
+	FVector PlayerLocation = Context.InputContext.CharacterLocation;
+	FVector TargetLocation = Context. InputContext.TargetLocation;
+	
+	// Step 3: Calculate weighted midpoint
+	// MidPointBias controls the weighting: 
+	// - 0.0 = focus on player
+	// - 0.5 = exact midpoint
+	// - 1.0 = focus on target
+	float MidPointBias = StateConfig.Module.Position.MidPointBias;
+	
+	// Validate bias is in valid range, use default if not configured
+	if (MidPointBias < 0.0f || MidPointBias > 1.0f)
+	{
+		MidPointBias = 0.5f;  // Default:  exact midpoint (equal weighting)
+	}
+	
+	// Calculate weighted midpoint using linear interpolation
+	FVector MidPoint = FMath::Lerp(PlayerLocation, TargetLocation, MidPointBias);
+	
+	// Step 4: Apply standard focus offset
+	// This provides basic height and positional adjustment
+	FVector FocusOffset = StateConfig.StateBase. Offset.FocusOffset;
+	float VerticalOffset = StateConfig.StateBase.Offset. VerticalOffset;
+	FocusOffset.Z += VerticalOffset;
+	
+	MidPoint += FocusOffset;
+	
+	// Step 5: Dynamic height adjustment based on target distance
+	// When targets are far apart, raise the focus slightly to keep both visible
+	// This helps prevent either actor from being cut off at screen edges
+	
+	float TargetDistance = Context.InputContext.TargetDistance;
+	
+	// If TargetDistance not available, calculate from positions
+	if (TargetDistance <= 0.0f)
+	{
+		TargetDistance = (TargetLocation - PlayerLocation).Size();
+	}
+	
+	// Height adjustment: 5% of distance, clamped to max 50cm
+	// This provides subtle lift for distant targets without being excessive
+	// Example: 1000cm distance → 50cm height boost
+	float HeightAdjust = FMath::Clamp(TargetDistance * 0.05f, 0.0f, 50.0f);
+	MidPoint.Z += HeightAdjust;
+	
+	// Step 6: Fill output
+	OutOutput.PositionOffset = MidPoint;
+	OutOutput.bHasPositionOutput = true;
+	
+	// Step 7: Calculate dynamic weight based on target distance
+	// Weight decreases as targets get farther apart
+	// This prevents awkward framing when targets are at extreme distances
+	//
+	// Weight curve:
+	// - Distance 0-500cm:   Weight ~1.0 (full influence)
+	// - Distance 1000cm:    Weight ~0.6 (moderate influence)
+	// - Distance 1500cm+:  Weight ~0.2 (minimal influence)
+	//
+	// This allows other position modules (like P01) to take over
+	// when P08's midpoint focus becomes less useful
+	
+	const float MaxEffectiveDistance = 1500.0f;  // 15 meters
+	float DistanceRatio = TargetDistance / MaxEffectiveDistance;
+	
+	// Calculate weight:  starts at 1.0, decreases to 0.2 at max distance
+	// Using (1.0 - ratio * 0.8) keeps minimum weight at 0.2
+	float DistanceWeight = 1.0f - FMath::Clamp(DistanceRatio, 0.0f, 1.0f) * 0.8f;
+	
+	OutOutput.Weight = DistanceWeight;
+	
+	return true;
+}
+```
+
+**说明：**
+- **Blend策略**：与其他模块协作
+- **加权中点**：可配置的MidPointBias
+- **动态高度**：基于距离的智能抬升
+- **动态权重**：距离越远权重越低
+- **安全检查**：完整的参数验证
+
+---
+
+4. **完整的P08代码块（用于复制粘贴）：**
+
+如果AGENT需要完整的代码块，提供以下版本：
+
+```cpp
+//========================================
+// P08: MidPoint Two Target - Focus between player and target
+//========================================
+
+/**
+ * ShouldActivate - Activate when player has a valid target
+ */
+bool UCameraModule_P08_MidPoint_TwoTarget::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (! bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if player has a valid target
+	if (!Context.InputContext.bHasTarget)
+	{
+		return false;
+	}
+	
+	// Activate for any target scenario (more general than P04)
+	return true;
+}
+
+/**
+ * Compute - Calculate weighted midpoint with dynamic height and weight
+ */
+bool UCameraModule_P08_MidPoint_TwoTarget::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output
+	OutOutput = CreateBaseOutput();
+	
+	// Use Blend policy (cooperative with other modules)
+	OutOutput.BlendPolicy = EBlendPolicy::Blend;
+	
+	// Validate target exists
+	if (!Context.InputContext.bHasTarget)
+	{
+		OutOutput.bHasPositionOutput = false;
+		return false;
+	}
+	
+	// Get player and target locations
+	FVector PlayerLocation = Context.InputContext.CharacterLocation;
+	FVector TargetLocation = Context. InputContext.TargetLocation;
+	
+	// Calculate weighted midpoint (default 0.5 = exact midpoint)
+	float MidPointBias = StateConfig.Module.Position.MidPointBias;
+	if (MidPointBias < 0.0f || MidPointBias > 1.0f)
+	{
+		MidPointBias = 0.5f;
+	}
+	
+	FVector MidPoint = FMath::Lerp(PlayerLocation, TargetLocation, MidPointBias);
+	
+	// Apply standard focus offset
+	FVector FocusOffset = StateConfig. StateBase.Offset.FocusOffset;
+	float VerticalOffset = StateConfig.StateBase.Offset.VerticalOffset;
+	FocusOffset. Z += VerticalOffset;
+	MidPoint += FocusOffset;
+	
+	// Dynamic height adjustment based on distance
+	float TargetDistance = Context.InputContext.TargetDistance;
+	if (TargetDistance <= 0.0f)
+	{
+		TargetDistance = (TargetLocation - PlayerLocation).Size();
+	}
+	
+	// Height adjustment: 5% of distance, max 50cm
+	float HeightAdjust = FMath:: Clamp(TargetDistance * 0.05f, 0.0f, 50.0f);
+	MidPoint.Z += HeightAdjust;
+	
+	// Fill output
+	OutOutput.PositionOffset = MidPoint;
+	OutOutput.bHasPositionOutput = true;
+	
+	// Dynamic weight:  decreases with distance
+	const float MaxEffectiveDistance = 1500.0f;  // 15 meters
+	float DistanceRatio = TargetDistance / MaxEffectiveDistance;
+	float DistanceWeight = 1.0f - FMath:: Clamp(DistanceRatio, 0.0f, 1.0f) * 0.8f;
+	OutOutput.Weight = DistanceWeight;
+	
+	return true;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 每个方法前添加多行文档注释
+   - 说明与P04的区别
+   - 解释动态权重系统
+   - 所有注释使用英文
+
+2. **格式：**
+   - 使用Tab缩进（与现有代码一致）
+   - 方法之间空两行
+   - 常量命名清晰
+
+3. **设计理念：**
+   - 强调"通用性"和"灵活性"
+   - 说明Blend策略的原因
+   - 解释动态权重的价值
+
+【技术说明】
+
+**P08的核心设计：**
+
+### 1. 与P04的对比
+
+| 特性 | P04 (Orbit Lock-On) | P08 (MidPoint Two Target) |
+|------|---------------------|--------------------------|
+| **激活条件** | 锁定 + 非Boss | 任何目标 |
+| **混合策略** | Override | Blend |
+| **轨道偏移** | 有（ToPlayer * 50cm） | 无 |
+| **动态权重** | 固定1.0 | 基于距离（1. 0→0.2） |
+| **用途** | 战斗专用 | 通用双目标 |
+| **优先级** | 150 | 140 |
+
+**为什么需要P08？**
+
+```
+场景1：过场动画（两角色对话）
+- 不是战斗，但需要两者都可见
+- P04不会激活（无锁定）
+- P08激活，提供中点焦点
+
+场景2：远距离目标
+- 目标在1500cm外
+- P04会提供中点焦点（权重1.0）
+- P08提供中点但权重降低（0.2），让P01主导
+
+场景3：与其他模块混合
+- P01提供基础跟随（权重1.0）
+- P08提供中点偏移（权重0.6）
+- Stage 5混合：60%偏向目标，保持玩家为主
+```
+
+### 2. 动态高度调整
+
+**为什么需要HeightAdjust？**
+
+```
+问题：
+Player在(0, 0, 100)
+Target在(1000, 0, 100)
+MidPoint在(500, 0, 100)
+
+相机看向MidPoint(500, 0, 100)
+→ 如果相机在后方较低位置
+→ Player和Target都在画面边缘，容易被裁切
+
+解决：
+HeightAdjust = 1000 * 0.05 = 50cm
+MidPoint变为(500, 0, 150)
+→ 焦点抬高
+→ 相机视锥更容易包含两者
+```
+
+**计算公式：**
+```cpp
+HeightAdjust = Clamp(Distance * 0.05, 0, 50)
+
+距离100cm  → 高度+5cm   （微小调整）
+距离500cm  → 高度+25cm  （适度调整）
+距离1000cm → 高度+50cm  （最大调整）
+距离2000cm → 高度+50cm  （限制在50cm）
+```
+
+### 3. 动态权重系统
+
+**权重曲线：**
+
+```
+Weight = 1.0 - Clamp(Distance / 1500, 0, 1) * 0.8
+
+距离(cm)  | DistanceRatio | 权重计算             | 最终权重
+----------|---------------|---------------------|----------
+0         | 0.0           | 1.0 - 0.0 * 0.8     | 1.0
+500       | 0.33          | 1.0 - 0.33 * 0.8    | 0.74
+1000      | 0.67          | 1.0 - 0.67 * 0.8    | 0.46
+1500      | 1.0           | 1.0 - 1.0 * 0.8     | 0.2
+2000      | 1.33 → 1.0    | 1.0 - 1.0 * 0.8     | 0.2
+
+→ 权重在0.2-1.0之间，距离越远权重越低
+```
+
+**为什么保持最小权重0.2？**
+- 完全归零会导致突然消失（不平滑）
+- 0.2保留轻微影响，过渡更自然
+- 允许在极端情况下仍有贡献
+
+### 4. Blend策略的价值
+
+**与Override的对比：**
+
+```
+场景：探索中遇到远处敌人
+
+Override策略（P04风格）：
+- P04激活，完全控制焦点
+- 焦点突然跳到玩家-敌人中点
+- 玩家可能偏离屏幕中心
+- 感觉突兀
+
+Blend策略（P08风格）：
+- P01提供基础跟随（玩家位置）
+- P08提供中点偏移（权重0.5）
+- Stage 5混合：焦点在玩家和中点之间
+- 玩家仍在屏幕中心附近
+- 敌人也可见
+- 过渡平滑
+```
+
+### 5. 使用场景
+
+**场景1：过场对话**
+```
+设置：
+- bHasTarget = true（对话NPC）
+- MidPointBias = 0.5（平等对待）
+- 距离 = 300cm
+
+效果：
+- P08激活，权重~0.92
+- 焦点在两角色中间
+- 两者都在屏幕内
+- 对话场景完美
+```
+
+**场景2：跟踪逃跑的敌人**
+```
+设置：
+- bHasTarget = true（逃跑敌人）
+- MidPointBias = 0.3（偏向玩家）
+- 距离 = 1200cm
+
+效果：
+- P08激活，权重~0.36
+- P01也激活，权重1.0
+- 混合后：主要跟随玩家，轻微偏向敌人
+- 敌人在屏幕边缘可见
+```
+
+**场景3：极远距离目标**
+```
+设置：
+- bHasTarget = true
+- 距离 = 2000cm
+
+效果：
+- P08激活，权重0.2
+- P01主导
+- 焦点主要在玩家，微微向目标偏移
+- 不会因为目标太远而破坏构图
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过（0 errors, 0 warnings）
+   - [ ] 文件编码为UTF-8 Without BOM
+   - [ ] 所有注释为英文
+
+2. **代码完整性：**
+   - [ ] ShouldActivate()实现完整
+   - [ ] Compute()实现完整
+   - [ ] 所有方法签名与. h一致
+
+3. **逻辑正确性：**
+   - [ ] 仅需要有目标即可激活
+   - [ ] 使用Blend混合策略
+   - [ ] 加权中点计算正确
+   - [ ] 动态高度调整正确
+   - [ ] 动态权重计算正确
+   - [ ] 输出bHasPositionOutput=true
+
+4. **字段访问：**
+   - [ ] Context.InputContext.bHasTarget
+   - [ ] Context.InputContext.TargetLocation
+   - [ ] Context.InputContext.TargetDistance（可选，可计算）
+   - [ ] StateConfig.Module.Position.MidPointBias
+
+【注意事项】
+
+1. **不需要Regenerate：**
+   本Sub-Step只修改现有. cpp文件内容，不添加新文件。
+   保存后可以直接编译，无需Regenerate。
+
+2. **TargetDistance处理：**
+   ```cpp
+   // 如果InputContext提供了TargetDistance，直接使用
+   float TargetDistance = Context.InputContext.TargetDistance;
+   
+   // 如果没有，从位置计算
+   if (TargetDistance <= 0.0f)
+   {
+       TargetDistance = (TargetLocation - PlayerLocation).Size();
+   }
+   ```
+
+3. **MidPointBias范围：**
+   ```cpp
+   // 有效范围：0.0-1.0
+   // 0.0 = 完全偏向玩家
+   // 0.5 = 精确中点
+   // 1.0 = 完全偏向目标
+   
+   // 超出范围使用默认值0.5
+   if (MidPointBias < 0.0f || MidPointBias > 1.0f)
+   {
+       MidPointBias = 0.5f;
+   }
+   ```
+
+4. **权重计算的意义：**
+   - 不是性能优化
+   - 是设计特性
+   - 允许P08在不同距离下有不同影响
+   - 与其他模块协作的关键
+
+5. **测试建议：**
+   编译通过后，可以测试：
+   - MidPointBias = 0.2 → 更关注玩家
+   - MidPointBias = 0.8 → 更关注目标
+   - 不同距离下的权重变化
+   - 与P01混合的效果
+
+【输出要求】
+
+完成修改后，请报告：
+
+```
+================================================================================
+Sub-Step 3. 2. 9 完成报告
+================================================================================
+
+【修改内容】
+- 文件：CameraModule_Position.cpp
+- 修改位置：P08模块（ShouldActivate、Compute）
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ ShouldActivate：检查有目标
+- ✅ Compute：加权中点 + 动态高度 + 动态权重
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误数：[数量]
+- 警告数：[数量]
+
+【遇到的问题】
+[如果有字段路径问题，详细描述]
+
+【最终状态】
+✅ P08模块完整实现，Position模块系列全部完成！
+
+================================================================================
+```
+
+【🎉 Step 3.2 完成庆祝】
+
+**Position模块系列全部完成！**
+
+完成后，Position模块最终状态：
+- [x] ✅ P01:  Follow Target（基础跟随）
+- [x] ✅ P02: Follow Target Lagged（平滑跟随）
+- [x] ✅ P03: Follow Target Predictive（预测跟随）
+- [x] ✅ P04: Orbit Lock-On（战斗轨道）
+- [x] ✅ P05: Orbit Boss（Boss轨道）
+- [x] ✅ P06: Fixed Point（固定焦点）
+- [x] ✅ P07: Spline Follow（样条路径，占位符）
+- [x] ✅ P08: MidPoint Two Target（通用双目标）
+
+**Position模块完成度：8/8 (100%)** 🎊
+
+**模块分类总结：**
+
+| 分类 | 模块 | 用途 |
+|------|------|------|
+| **基础跟随** | P01, P02, P03 | 探索、移动 |
+| **战斗定位** | P04, P05 | 锁定、Boss战 |
+| **脚本化** | P06, P07 | 过场、样条 |
+| **通用工具** | P08 | 双目标场景 |
+
+**下一步：**
+- Step 3.3: Rotation模块（9个模块）
+- Step 3.4: Distance模块（7个模块）
+- Step 3.5: FOV模块（6个模块）
+- Step 3.6: Offset模块（5个模块）
+- Step 3.7: Constraint模块（4个模块）
+
+**准备好进入Rotation模块了吗？** 🚀
+
+完成P08后告诉我："Position模块完成，准备Rotation"
+
+================================================================================

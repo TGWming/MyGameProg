@@ -1,0 +1,109 @@
+操作日志
+开始时间: 2025-09-03 17:46:16.415262
+
+
+复制完成：共复制 0 个文件，跳过 0 个已存在文件。
+
+
+未分配文件列表：
+未匹配: Act_Furong_Achan_1001.wav
+未匹配: Act_Furong_Achan_1002.wav
+未匹配: Act_Furong_Achan_1003.wav
+未匹配: Branch_Achan_1001.wav
+未匹配: Branch_Achan_1003.wav
+未匹配: Branch_Achan_1004.wav
+未匹配: Branch_Achan_1005.wav
+未匹配: Branch_Achan_Furong_1001.wav
+未匹配: Branch_Achan_Furong_1002.wav
+未匹配: Branch_Achan_Furong_1003.wav
+未匹配: Branch_Caiyan_Achan_1001.wav
+未匹配: Branch_Caiyan_Achan_1002.wav
+未匹配: Branch_Caiyan_Achan_2001.wav
+未匹配: Branch_Caiyan_Furong_1001.wav
+未匹配: Branch_Caiyan_Furong_1002.wav
+未匹配: Branch_Caiyan_Furong_1003.wav
+未匹配: Branch_Caiyan_F_2001.wav
+未匹配: Branch_Caiyan_F_2002.wav
+未匹配: Branch_Caiyan_F_2003.wav
+未匹配: Branch_Caiyan_M_1001.wav
+未匹配: Branch_Caiyan_M_1002.wav
+未匹配: Branch_Caiyan_M_1003.wav
+未匹配: Branch_Caiyan_M_1004.wav
+未匹配: Branch_Caiyan_M_1005.wav
+未匹配: inc_act_Qixi_Furong_Achan_0601.wav
+未匹配: inc_act_Qixi_Furong_Achan_0602.wav
+未匹配: inc_act_Qixi_Furong_Achan_0603.wav
+未匹配: NPC_Caiyan_halfyear_display.wav
+未匹配: NPC_Caiyan_halfyear_lose.wav
+
+复制完成：共复制 0 个文件，跳过 0 个已存在文件。
+
+
+未分配文件列表：
+未匹配: Act_Furong_Achan_1001.wav
+未匹配: Act_Furong_Achan_1002.wav
+未匹配: Act_Furong_Achan_1003.wav
+未匹配: Branch_Achan_1001.wav
+未匹配: Branch_Achan_1003.wav
+未匹配: Branch_Achan_1004.wav
+未匹配: Branch_Achan_1005.wav
+未匹配: Branch_Achan_Furong_1001.wav
+未匹配: Branch_Achan_Furong_1002.wav
+未匹配: Branch_Achan_Furong_1003.wav
+未匹配: Branch_Caiyan_Achan_1001.wav
+未匹配: Branch_Caiyan_Achan_1002.wav
+未匹配: Branch_Caiyan_Achan_2001.wav
+未匹配: Branch_Caiyan_Furong_1001.wav
+未匹配: Branch_Caiyan_Furong_1002.wav
+未匹配: Branch_Caiyan_Furong_1003.wav
+未匹配: Branch_Caiyan_F_2001.wav
+未匹配: Branch_Caiyan_F_2002.wav
+未匹配: Branch_Caiyan_F_2003.wav
+未匹配: Branch_Caiyan_M_1001.wav
+未匹配: Branch_Caiyan_M_1002.wav
+未匹配: Branch_Caiyan_M_1003.wav
+未匹配: Branch_Caiyan_M_1004.wav
+未匹配: Branch_Caiyan_M_1005.wav
+未匹配: inc_act_Qixi_Furong_Achan_0601.wav
+未匹配: inc_act_Qixi_Furong_Achan_0602.wav
+未匹配: inc_act_Qixi_Furong_Achan_0603.wav
+未匹配: NPC_Caiyan_halfyear_display.wav
+未匹配: NPC_Caiyan_halfyear_lose.wav
+多余：lead_furong 在 Chinese 中，但ASSET无对应源文件或不应归属
+多余：NPC_SR_Achan 在 Chinese 中，但ASSET无对应源文件或不应归属
+多余：WalkOn 在 Chinese 中，但ASSET无对应源文件或不应归属
+多余：NPC_SSR_Caiyan 在 Chinese 中，但ASSET无对应源文件或不应归属
+
+未分配的ASSET文件：
+未匹配: Act_Furong_Achan_1001.wav
+未匹配: Act_Furong_Achan_1002.wav
+未匹配: Act_Furong_Achan_1003.wav
+未匹配: Branch_Achan_1001.wav
+未匹配: Branch_Achan_1003.wav
+未匹配: Branch_Achan_1004.wav
+未匹配: Branch_Achan_1005.wav
+未匹配: Branch_Achan_Furong_1001.wav
+未匹配: Branch_Achan_Furong_1002.wav
+未匹配: Branch_Achan_Furong_1003.wav
+未匹配: Branch_Caiyan_Achan_1001.wav
+未匹配: Branch_Caiyan_Achan_1002.wav
+未匹配: Branch_Caiyan_Achan_2001.wav
+未匹配: Branch_Caiyan_Furong_1001.wav
+未匹配: Branch_Caiyan_Furong_1002.wav
+未匹配: Branch_Caiyan_Furong_1003.wav
+未匹配: Branch_Caiyan_F_2001.wav
+未匹配: Branch_Caiyan_F_2002.wav
+未匹配: Branch_Caiyan_F_2003.wav
+未匹配: Branch_Caiyan_M_1001.wav
+未匹配: Branch_Caiyan_M_1002.wav
+未匹配: Branch_Caiyan_M_1003.wav
+未匹配: Branch_Caiyan_M_1004.wav
+未匹配: Branch_Caiyan_M_1005.wav
+未匹配: inc_act_Qixi_Furong_Achan_0601.wav
+未匹配: inc_act_Qixi_Furong_Achan_0602.wav
+未匹配: inc_act_Qixi_Furong_Achan_0603.wav
+未匹配: NPC_Caiyan_halfyear_display.wav
+未匹配: NPC_Caiyan_halfyear_lose.wav
+
+对比结果：已匹配 0，缺失 0，多余 4。
+

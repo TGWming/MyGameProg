@@ -1,0 +1,558 @@
+Sub-Step 6.3. 5 Prompt
+
+================================================================================
+任务：创建SoulsCameraTestActor.  cpp - 测试用Actor实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.  27 C++项目。
+实现测试Actor的所有测试功能。
+
+【当前进度】
+Phase 6 Step 6.3 Sub-Step 6.3.5 (共190个Sub-Step中的第188个)
+前置完成：6.3.4 测试Actor头文件
+
+【任务目标】
+创建文件：Source/MyProject/Camera/Test/SoulsCameraTestActor.cpp
+实现测试Actor。
+
+【已有系统接口参考】
+需要调用的已确认存在的接口：
+
+USoulsCameraManager: 
+- IsInitialized() -> bool
+- RequestStateChange(FName StateName, bool bForce) -> bool
+- GetCurrentStateName() -> FName
+- GetCurrentCategory() -> ECameraStateCategory
+- SetLockOnTarget(AActor* Target)
+- ClearLockOnTarget()
+- GetLockOnTarget() -> AActor*
+- HasLockOnTarget() -> bool
+- GetModuleRegistry() -> UCameraModuleRegistry*
+- GetModifierManager() -> UCameraModifierManager*
+- GetCollisionResolver() -> UCameraCollisionResolver*
+- IsCollisionActive() -> bool
+- TriggerCameraShake(ECameraModifierID ShakeID, float Intensity)
+- TriggerHitReaction(bool bHeavyHit, float Intensity, FVector HitDirection)
+- TriggerSlowMotion(float Duration, float TimeDilation)
+- TriggerHitStop(float Intensity)
+- TriggerLowHealthEffect(float HealthPercent)
+- StopLowHealthEffect()
+- GetDebugString() -> FString
+
+UCameraModuleRegistry: 
+- GetModuleCount() -> int32
+- GetAllModules() -> TArray<UCameraModuleBase*>
+
+UCameraModifierManager:
+- GetModifierCount() -> int32
+- TriggerModifierSimple(ECameraModifierID ModifierID, float Intensity) -> bool
+- StopModifier(ECameraModifierID ModifierID, bool bImmediate)
+- IsModifierActive(ECameraModifierID ModifierID) -> bool
+
+UCameraCollisionResolver:
+- GetStrategyCount() -> int32
+
+USoulsCameraBlueprintLibrary: 
+- GetSoulsCameraManager(WorldContext, PlayerIndex) -> USoulsCameraManager*
+
+注意：
+- 状态使用FName，不使用ECameraState枚举
+- 修改器使用ECameraModifierID枚举
+- 不要调用不存在的方法
+
+【具体要求】
+
+1. 文件路径：Source/MyProject/Camera/Test/SoulsCameraTestActor.cpp
+
+2. 必须包含的头文件：
+```cpp
+#include "Camera/Test/SoulsCameraTestActor.h"
+#include "Camera/Core/SoulsCameraManager. h"
+#include "Camera/Modules/CameraModuleRegistry.h"
+#include "Camera/Core/CameraModifierManager.h"
+#include "Camera/Collision/CameraCollisionResolver.  h"
+#include "Camera/Utility/SoulsCameraBlueprintLibrary.h"
+#include "Kismet/GameplayStatics.h"
+#include "GameFramework/Character.h"
+#include "Engine/Engine.h"
+```
+
+3. 构造函数和生命周期：
+```cpp
+ASoulsCameraTestActor::ASoulsCameraTestActor()
+    : bAutoFindCameraManager(true)
+    , bValidateOnBeginPlay(true)
+    , bShowDebugDisplay(false)
+    , CameraManager(nullptr)
+    , bTestCombatMode(false)
+    , bValidationReportDirty(true)
+{
+    PrimaryActorTick.bCanEverTick = true;
+}
+
+void ASoulsCameraTestActor::BeginPlay()
+{
+    Super::BeginPlay();
+
+    if (bAutoFindCameraManager)
+    {
+        CameraManager = FindCameraManager();
+
+        if (CameraManager)
+        {
+            UE_LOG(LogTemp, Log, TEXT("SoulsCameraTestActor: Found camera manager"));
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("SoulsCameraTestActor: No camera manager found"));
+        }
+    }
+
+    if (bValidateOnBeginPlay && CameraManager)
+    {
+        ValidateSystemInitialization();
+    }
+}
+
+void ASoulsCameraTestActor:: Tick(float DeltaTime)
+{
+    Super:: Tick(DeltaTime);
+
+    if (bShowDebugDisplay && CameraManager && GEngine)
+    {
+        FString DebugStr = GetCameraDebugString();
+        GEngine->AddOnScreenDebugMessage(1, 0.0f, FColor:: Cyan, DebugStr);
+    }
+}
+```
+
+4. FindCameraManager实现：
+```cpp
+USoulsCameraManager* ASoulsCameraTestActor:: FindCameraManager()
+{
+    // 首先尝试蓝图库方法
+    USoulsCameraManager* Manager = USoulsCameraBlueprintLibrary::GetSoulsCameraManager(this, 0);
+    if (Manager)
+    {
+        return Manager;
+    }
+
+    // 尝试从玩家角色获取
+    ACharacter* PlayerCharacter = UGameplayStatics:: GetPlayerCharacter(this, 0);
+    if (PlayerCharacter)
+    {
+        Manager = PlayerCharacter->FindComponentByClass<USoulsCameraManager>();
+        if (Manager)
+        {
+            return Manager;
+        }
+    }
+
+    return nullptr;
+}
+```
+
+5. 测试函数实现（使用FName进行状态切换）：
+```cpp
+void ASoulsCameraTestActor::RunAllTests()
+{
+    TestResults.  Empty();
+    bValidationReportDirty = true;
+
+    UE_LOG(LogTemp, Log, TEXT("========================================"));
+    UE_LOG(LogTemp, Log, TEXT("Running All Camera System Tests"));
+    UE_LOG(LogTemp, Log, TEXT("========================================"));
+
+    // 验证测试
+    ValidateSystemInitialization();
+    ValidateModuleCount();
+    ValidateModifierCount();
+    ValidateCollisionCount();
+
+    // 功能测试
+    TestStateTransitions();
+    TestModifiers();
+    TestTargetLock();
+
+    UE_LOG(LogTemp, Log, TEXT("========================================"));
+    UE_LOG(LogTemp, Log, TEXT("Test Results:  %d tests completed"), TestResults.Num());
+    UE_LOG(LogTemp, Log, TEXT("========================================"));
+
+    BuildValidationReport();
+}
+
+void ASoulsCameraTestActor::TestStateTransitions()
+{
+    if (!CameraManager)
+    {
+        LogTestResult(TEXT("StateTransitions"), false, TEXT("No camera manager"));
+        return;
+    }
+
+    // 测试状态转换（使用FName）
+    TArray<FName> StatesToTest = {
+        FName("Exploration"),
+        FName("Combat"),
+        FName("Exploration")
+    };
+
+    bool bAllPassed = true;
+    for (const FName& StateName : StatesToTest)
+    {
+        bool bSuccess = CameraManager->RequestStateChange(StateName, false);
+        if (!bSuccess)
+        {
+            bAllPassed = false;
+            UE_LOG(LogTemp, Warning, TEXT("Failed to transition to state: %s"), *StateName.ToString());
+        }
+    }
+
+    LogTestResult(TEXT("StateTransitions"), bAllPassed, 
+        bAllPassed ? TEXT("All transitions successful") : TEXT("Some transitions failed"));
+}
+
+void ASoulsCameraTestActor:: TestModifiers()
+{
+    if (! CameraManager)
+    {
+        LogTestResult(TEXT("Modifiers"), false, TEXT("No camera manager"));
+        return;
+    }
+
+    UCameraModifierManager* ModifierManager = CameraManager->GetModifierManager();
+    if (!ModifierManager)
+    {
+        LogTestResult(TEXT("Modifiers"), false, TEXT("No modifier manager"));
+        return;
+    }
+
+    // 测试触发修改器（使用ECameraModifierID）
+    bool bTriggered = ModifierManager->TriggerModifierSimple(
+        ECameraModifierID:: Modifier_S01_Shake_Light, 1.0f);
+    
+    // 检查修改器是否激活
+    bool bIsActive = ModifierManager->IsModifierActive(
+        ECameraModifierID::Modifier_S01_Shake_Light);
+
+    LogTestResult(TEXT("Modifiers"), bTriggered, 
+        FString::Printf(TEXT("Triggered: %s, Active: %s"), 
+            bTriggered ? TEXT("Yes") : TEXT("No"),
+            bIsActive ? TEXT("Yes") : TEXT("No")));
+
+    // 停止修改器
+    ModifierManager->StopModifier(ECameraModifierID:: Modifier_S01_Shake_Light, true);
+}
+
+void ASoulsCameraTestActor::TestCollision()
+{
+    if (!CameraManager)
+    {
+        LogTestResult(TEXT("Collision"), false, TEXT("No camera manager"));
+        return;
+    }
+
+    bool bCollisionActive = CameraManager->IsCollisionActive();
+    
+    LogTestResult(TEXT("Collision"), true, 
+        FString::Printf(TEXT("Collision system check - Current state: %s"), 
+            bCollisionActive ? TEXT("In Collision") : TEXT("Clear")));
+}
+
+void ASoulsCameraTestActor::TestTargetLock()
+{
+    if (!CameraManager)
+    {
+        LogTestResult(TEXT("TargetLock"), false, TEXT("No camera manager"));
+        return;
+    }
+
+    // 设置此Actor为目标
+    CameraManager->SetLockOnTarget(this);
+    bool bLocked = CameraManager->HasLockOnTarget();
+    AActor* Target = CameraManager->GetLockOnTarget();
+    bool bCorrectTarget = (Target == this);
+
+    // 清除锁定
+    CameraManager->ClearLockOnTarget();
+    bool bCleared = ! CameraManager->HasLockOnTarget();
+
+    bool bSuccess = bLocked && bCorrectTarget && bCleared;
+    LogTestResult(TEXT("TargetLock"), bSuccess,
+        FString:: Printf(TEXT("Locked: %s, CorrectTarget: %s, Cleared: %s"), 
+            bLocked ? TEXT("Yes") : TEXT("No"),
+            bCorrectTarget ?  TEXT("Yes") : TEXT("No"),
+            bCleared ?  TEXT("Yes") : TEXT("No")));
+}
+```
+
+6. 效果触发实现（使用正确的Manager方法）：
+```cpp
+void ASoulsCameraTestActor::TriggerShakeTest(bool bHeavy)
+{
+    if (!CameraManager) return;
+    
+    ECameraModifierID ShakeID = bHeavy ? 
+        ECameraModifierID::Modifier_S02_Shake_Medium :  
+        ECameraModifierID:: Modifier_S01_Shake_Light;
+    
+    CameraManager->TriggerCameraShake(ShakeID, 1.0f);
+    UE_LOG(LogTemp, Log, TEXT("Triggered %s shake"), bHeavy ? TEXT("heavy") : TEXT("light"));
+}
+
+void ASoulsCameraTestActor::TriggerSlowMotionTest(float Duration)
+{
+    if (!CameraManager) return;
+    
+    CameraManager->TriggerSlowMotion(Duration, 0.3f);
+    UE_LOG(LogTemp, Log, TEXT("Triggered slow motion for %. 2f seconds"), Duration);
+}
+
+void ASoulsCameraTestActor::TriggerHitStopTest()
+{
+    if (!CameraManager) return;
+    
+    CameraManager->TriggerHitStop(1.0f);
+    UE_LOG(LogTemp, Log, TEXT("Triggered hit stop"));
+}
+
+void ASoulsCameraTestActor::TriggerHitReactionTest(bool bHeavyHit)
+{
+    if (!CameraManager) return;
+    
+    CameraManager->TriggerHitReaction(bHeavyHit, 1.0f, FVector::ForwardVector);
+    UE_LOG(LogTemp, Log, TEXT("Triggered %s hit reaction"), bHeavyHit ? TEXT("heavy") : TEXT("light"));
+}
+
+void ASoulsCameraTestActor::TriggerLowHealthTest(float HealthPercent)
+{
+    if (!CameraManager) return;
+    
+    CameraManager->TriggerLowHealthEffect(HealthPercent);
+    UE_LOG(LogTemp, Log, TEXT("Triggered low health effect at %.0f%% health"), HealthPercent * 100.0f);
+}
+```
+
+7. 状态触发实现（使用FName）：
+```cpp
+void ASoulsCameraTestActor::ForceStateChange(FName NewStateName)
+{
+    if (!CameraManager) return;
+    
+    bool bSuccess = CameraManager->RequestStateChange(NewStateName, true);
+    UE_LOG(LogTemp, Log, TEXT("Force state change to %s: %s"), 
+        *NewStateName.ToString(), 
+        bSuccess ?  TEXT("Success") : TEXT("Failed"));
+}
+
+void ASoulsCameraTestActor::SetExplorationState()
+{
+    ForceStateChange(FName("Exploration"));
+}
+
+void ASoulsCameraTestActor::SetCombatState()
+{
+    ForceStateChange(FName("Combat"));
+}
+
+void ASoulsCameraTestActor:: ToggleCombatMode()
+{
+    bTestCombatMode = !bTestCombatMode;
+    ForceStateChange(bTestCombatMode ? FName("Combat") : FName("Exploration"));
+}
+
+void ASoulsCameraTestActor::SetAsLockOnTarget()
+{
+    if (!CameraManager) return;
+    
+    CameraManager->SetLockOnTarget(this);
+    UE_LOG(LogTemp, Log, TEXT("Set this actor as lock-on target"));
+}
+
+void ASoulsCameraTestActor::ClearLockOn()
+{
+    if (!CameraManager) return;
+    
+    CameraManager->ClearLockOnTarget();
+    UE_LOG(LogTemp, Log, TEXT("Cleared lock-on"));
+}
+```
+
+8. 验证函数实现：
+```cpp
+bool ASoulsCameraTestActor:: ValidateSystemInitialization()
+{
+    if (!CameraManager)
+    {
+        CameraManager = FindCameraManager();
+    }
+
+    bool bValid = (CameraManager != nullptr) && CameraManager->IsInitialized();
+    LogTestResult(TEXT("SystemInit"), bValid, 
+        bValid ? TEXT("Camera system initialized") : TEXT("Camera system NOT initialized"));
+    
+    bValidationReportDirty = true;
+    return bValid;
+}
+
+bool ASoulsCameraTestActor::ValidateModuleCount()
+{
+    if (!CameraManager)
+    {
+        LogTestResult(TEXT("ModuleCount"), false, TEXT("No camera manager"));
+        return false;
+    }
+
+    UCameraModuleRegistry* Registry = CameraManager->GetModuleRegistry();
+    if (!Registry)
+    {
+        LogTestResult(TEXT("ModuleCount"), false, TEXT("No module registry"));
+        return false;
+    }
+
+    int32 ModuleCount = Registry->GetModuleCount();
+    bool bValid = (ModuleCount == 39);
+
+    LogTestResult(TEXT("ModuleCount"), bValid,
+        FString::Printf(TEXT("Expected 39, found %d"), ModuleCount));
+
+    bValidationReportDirty = true;
+    return bValid;
+}
+
+bool ASoulsCameraTestActor::ValidateModifierCount()
+{
+    if (! CameraManager)
+    {
+        LogTestResult(TEXT("ModifierCount"), false, TEXT("No camera manager"));
+        return false;
+    }
+
+    UCameraModifierManager* ModifierManager = CameraManager->GetModifierManager();
+    if (!ModifierManager)
+    {
+        LogTestResult(TEXT("ModifierCount"), false, TEXT("No modifier manager"));
+        return false;
+    }
+
+    int32 ModifierCount = ModifierManager->GetModifierCount();
+    bool bValid = (ModifierCount == 26);
+
+    LogTestResult(TEXT("ModifierCount"), bValid,
+        FString::Printf(TEXT("Expected 26, found %d"), ModifierCount));
+
+    bValidationReportDirty = true;
+    return bValid;
+}
+
+bool ASoulsCameraTestActor::ValidateCollisionCount()
+{
+    if (!CameraManager)
+    {
+        LogTestResult(TEXT("CollisionCount"), false, TEXT("No camera manager"));
+        return false;
+    }
+
+    UCameraCollisionResolver* CollisionResolver = CameraManager->GetCollisionResolver();
+    if (!CollisionResolver)
+    {
+        LogTestResult(TEXT("CollisionCount"), false, TEXT("No collision resolver"));
+        return false;
+    }
+
+    int32 StrategyCount = CollisionResolver->GetStrategyCount();
+    bool bValid = (StrategyCount == 20);
+
+    LogTestResult(TEXT("CollisionCount"), bValid,
+        FString:: Printf(TEXT("Expected 20, found %d"), StrategyCount));
+
+    bValidationReportDirty = true;
+    return bValid;
+}
+```
+
+9. 报告和调试函数：
+```cpp
+void ASoulsCameraTestActor::LogTestResult(const FString& TestName, bool bSuccess, const FString& Details)
+{
+    FString Result = FString::Printf(TEXT("[%s] %s:  %s"),
+        bSuccess ? TEXT("PASS") : TEXT("FAIL"),
+        *TestName,
+        *Details);
+
+    TestResults.Add(Result);
+    UE_LOG(LogTemp, Log, TEXT("%s"), *Result);
+
+    if (GEngine)
+    {
+        GEngine->AddOnScreenDebugMessage(-1, 5.0f, bSuccess ? FColor:: Green : FColor:: Red, Result);
+    }
+}
+
+void ASoulsCameraTestActor::BuildValidationReport()
+{
+    CachedValidationReport = TEXT("=== Camera System Validation Report ===\n\n");
+
+    for (const FString& Result : TestResults)
+    {
+        CachedValidationReport += Result + TEXT("\n");
+    }
+
+    CachedValidationReport += TEXT("\n=== End Report ===");
+    bValidationReportDirty = false;
+}
+
+FString ASoulsCameraTestActor::GetValidationReport() const
+{
+    if (bValidationReportDirty || CachedValidationReport. IsEmpty())
+    {
+        // 返回当前测试结果的临时报告
+        FString TempReport = TEXT("=== Camera System Validation Report ===\n\n");
+        for (const FString& Result : TestResults)
+        {
+            TempReport += Result + TEXT("\n");
+        }
+        TempReport += TEXT("\n=== End Report ===");
+        return TempReport;
+    }
+    return CachedValidationReport;
+}
+
+void ASoulsCameraTestActor::PrintValidationReport()
+{
+    FString Report = GetValidationReport();
+    UE_LOG(LogTemp, Log, TEXT("%s"), *Report);
+    
+    if (GEngine)
+    {
+        GEngine->AddOnScreenDebugMessage(-1, 10.0f, FColor::White, Report);
+    }
+}
+
+void ASoulsCameraTestActor::SetDebugDisplayEnabled(bool bEnabled)
+{
+    bShowDebugDisplay = bEnabled;
+}
+
+FString ASoulsCameraTestActor::GetCameraDebugString() const
+{
+    if (! CameraManager)
+    {
+        return TEXT("No Camera Manager");
+    }
+    
+    return CameraManager->GetDebugString();
+}
+```
+
+【验证标准】
+- 编译通过
+- 测试Actor可在关卡中运行测试
+- 所有验证函数返回正确结果
+- 使用FName进行状态切换
+- 使用ECameraModifierID进行修改器操作
+- 只调用已确认存在的方法
+
+【输出要求】
+输出完整的SoulsCameraTestActor.cpp文件代码。
+================================================================================

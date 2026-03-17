@@ -1,0 +1,274 @@
+在我的UE4.27工程中创建相机碰撞处理策略数据表的C++结构体代码。
+
+## 任务要求
+
+### 任务1：创建 CameraCollisionHandleEnums. h
+路径：Source/[YourProject]/Public/Camera/Data/CameraCollisionHandleEnums.h
+
+创建必要的枚举类型：
+- ECollisionHandleCategory - 碰撞处理分类枚举（Detection, Response, Occlusion, Recovery, Special）
+- ECollisionHandleType - 碰撞处理类型枚举（Trace, Sweep, Position, FOV, Material, Visibility, Timing, Interpolation, Environment）
+
+### 任务2：创建 CameraCollisionHandleData.h
+路径：Source/[YourProject]/Public/Camera/Data/CameraCollisionHandleData.h
+
+创建一个继承自 FTableRowBase 的 USTRUCT，用于从CSV导入相机碰撞处理策略配置数据
+
+CSV文件结构如下（共20行数据）：
+- StrategyID:  FString - 策略唯一标识符，格式如 "CompleteCollisionHandle_D01", "CompleteCollisionHandle_RS01"
+- StrategyName: FName - 策略名称，作为程序引用标识符（如 SingleRay, PullIn, FadeOut）
+- ChineseName: FString - 中文显示名称
+- Category: FString - 主分类（Detection, Response, Occlusion, Recovery, Special）
+- Type: FString - 类型（Trace, Sweep, Position, FOV, Material, Visibility, Timing, Interpolation, Environment）
+- Description: FString - 策略功能描述
+- Priority: int32 - 优先级（数值越大优先级越高，范围80-200）
+- bIsCore: bool - 是否为核心策略（注意：布尔类型字段命名以小写b开头）
+- InputParams: FString - 输入参数列表，用斜杠分隔（如 "FocusPoint/DesiredPos/ProbeRadius"）
+- OutputParams:  FString - 输出参数列表，用斜杠分隔（如 "bHit/HitPoint/HitNormal"）
+- Condition: FString - 触发条件描述（如 "检测到碰撞时", "遮挡物支持透明化"）
+
+结构体命名为 `FCameraCollisionHandleRow`
+
+添加必要的UPROPERTY宏，确保：
+- 所有属性可在编辑器中编辑（EditAnywhere）
+- 所有属性可在蓝图中读取（BlueprintReadWrite）
+- 添加Category分组便于编辑器查看
+
+**重要：结构体中不要包含任何UFUNCTION函数，只保留UPROPERTY属性和构造函数**
+
+### 任务3：创建 CameraCollisionHandleHelpers.h
+路径：Source/[YourProject]/Public/Camera/Data/CameraCollisionHandleHelpers.h
+
+创建 UCameraCollisionHandleHelpers 类，继承自 UBlueprintFunctionLibrary
+
+所有函数标记为 UFUNCTION(BlueprintPure, Category = "Camera|CollisionHandle")
+所有函数为静态函数
+
+需要实现的函数：
+```cpp
+// 数组解析函数
+static TArray<FString> GetInputParamsArray(const FCameraCollisionHandleRow& Row);
+static TArray<FString> GetOutputParamsArray(const FCameraCollisionHandleRow& Row);
+
+// 分类检查函数
+static bool IsDetectionStrategy(const FCameraCollisionHandleRow& Row);
+static bool IsResponseStrategy(const FCameraCollisionHandleRow& Row);
+static bool IsOcclusionStrategy(const FCameraCollisionHandleRow& Row);
+static bool IsRecoveryStrategy(const FCameraCollisionHandleRow& Row);
+static bool IsSpecialStrategy(const FCameraCollisionHandleRow& Row);
+
+// 枚举转换函数
+static ECollisionHandleCategory StringToCategory(const FString& CategoryString);
+static FString CategoryToString(ECollisionHandleCategory Category);
+static ECollisionHandleType StringToType(const FString& TypeString);
+static FString TypeToString(ECollisionHandleType Type);
+
+// 中文显示名称
+static FString GetCategoryDisplayName(ECollisionHandleCategory Category);
+static FString GetTypeDisplayName(ECollisionHandleType Type);
+```
+
+### 任务4：创建 CameraCollisionHandleHelpers.cpp
+路径：Source/[YourProject]/Private/Camera/Data/CameraCollisionHandleHelpers.cpp
+
+实现头文件中声明的所有静态函数
+
+## 函数实现逻辑参考
+
+### GetInputParamsArray
+```cpp
+TArray<FString> Result;
+if (Row.InputParams.IsEmpty()) return Result;
+Row.InputParams.ParseIntoArray(Result, TEXT("/"), true);
+for (FString& Str : Result) { Str = Str.TrimStartAndEnd(); }
+return Result;
+```
+
+### GetOutputParamsArray
+```cpp
+TArray<FString> Result;
+if (Row.OutputParams.IsEmpty()) return Result;
+Row.OutputParams.ParseIntoArray(Result, TEXT("/"), true);
+for (FString& Str :  Result) { Str = Str.TrimStartAndEnd(); }
+return Result;
+```
+
+### IsDetectionStrategy
+```cpp
+return Row.Category. Equals(TEXT("Detection"), ESearchCase::IgnoreCase);
+```
+
+### IsResponseStrategy
+```cpp
+return Row.Category.Equals(TEXT("Response"), ESearchCase:: IgnoreCase);
+```
+
+### IsOcclusionStrategy
+```cpp
+return Row.Category.Equals(TEXT("Occlusion"), ESearchCase::IgnoreCase);
+```
+
+### IsRecoveryStrategy
+```cpp
+return Row.Category. Equals(TEXT("Recovery"), ESearchCase::IgnoreCase);
+```
+
+### IsSpecialStrategy
+```cpp
+return Row.Category.Equals(TEXT("Special"), ESearchCase:: IgnoreCase);
+```
+
+### StringToCategory
+```cpp
+FString TrimmedString = CategoryString.TrimStartAndEnd();
+if (TrimmedString.Equals(TEXT("Detection"), ESearchCase::IgnoreCase))
+    return ECollisionHandleCategory::Detection;
+else if (TrimmedString.Equals(TEXT("Response"), ESearchCase::IgnoreCase))
+    return ECollisionHandleCategory::Response;
+else if (TrimmedString. Equals(TEXT("Occlusion"), ESearchCase::IgnoreCase))
+    return ECollisionHandleCategory::Occlusion;
+else if (TrimmedString.Equals(TEXT("Recovery"), ESearchCase::IgnoreCase))
+    return ECollisionHandleCategory::Recovery;
+else if (TrimmedString. Equals(TEXT("Special"), ESearchCase::IgnoreCase))
+    return ECollisionHandleCategory:: Special;
+return ECollisionHandleCategory::Detection;
+```
+
+### CategoryToString
+```cpp
+switch (Category)
+{
+case ECollisionHandleCategory::Detection:  return TEXT("Detection");
+case ECollisionHandleCategory::Response: return TEXT("Response");
+case ECollisionHandleCategory:: Occlusion:  return TEXT("Occlusion");
+case ECollisionHandleCategory::Recovery: return TEXT("Recovery");
+case ECollisionHandleCategory::Special:  return TEXT("Special");
+default: return TEXT("Detection");
+}
+```
+
+### StringToType
+```cpp
+FString TrimmedString = TypeString.TrimStartAndEnd();
+if (TrimmedString.Equals(TEXT("Trace"), ESearchCase::IgnoreCase))
+    return ECollisionHandleType:: Trace;
+else if (TrimmedString.Equals(TEXT("Sweep"), ESearchCase:: IgnoreCase))
+    return ECollisionHandleType:: Sweep;
+else if (TrimmedString.Equals(TEXT("Position"), ESearchCase::IgnoreCase))
+    return ECollisionHandleType::Position;
+else if (TrimmedString.Equals(TEXT("FOV"), ESearchCase::IgnoreCase))
+    return ECollisionHandleType:: FOV;
+else if (TrimmedString.Equals(TEXT("Material"), ESearchCase::IgnoreCase))
+    return ECollisionHandleType::Material;
+else if (TrimmedString. Equals(TEXT("Visibility"), ESearchCase::IgnoreCase))
+    return ECollisionHandleType::Visibility;
+else if (TrimmedString.Equals(TEXT("Timing"), ESearchCase::IgnoreCase))
+    return ECollisionHandleType:: Timing;
+else if (TrimmedString.Equals(TEXT("Interpolation"), ESearchCase::IgnoreCase))
+    return ECollisionHandleType:: Interpolation;
+else if (TrimmedString.Equals(TEXT("Environment"), ESearchCase:: IgnoreCase))
+    return ECollisionHandleType::Environment;
+return ECollisionHandleType:: Trace;
+```
+
+### TypeToString
+```cpp
+switch (Type)
+{
+case ECollisionHandleType::Trace: return TEXT("Trace");
+case ECollisionHandleType:: Sweep: return TEXT("Sweep");
+case ECollisionHandleType::Position: return TEXT("Position");
+case ECollisionHandleType::FOV: return TEXT("FOV");
+case ECollisionHandleType::Material: return TEXT("Material");
+case ECollisionHandleType::Visibility:  return TEXT("Visibility");
+case ECollisionHandleType:: Timing: return TEXT("Timing");
+case ECollisionHandleType::Interpolation: return TEXT("Interpolation");
+case ECollisionHandleType::Environment:  return TEXT("Environment");
+default: return TEXT("Trace");
+}
+```
+
+### GetCategoryDisplayName
+```cpp
+switch (Category)
+{
+case ECollisionHandleCategory::Detection: return TEXT("检测");
+case ECollisionHandleCategory::Response: return TEXT("响应");
+case ECollisionHandleCategory::Occlusion: return TEXT("遮挡处理");
+case ECollisionHandleCategory::Recovery: return TEXT("恢复");
+case ECollisionHandleCategory::Special: return TEXT("特殊情况");
+default: return TEXT("未知");
+}
+```
+
+### GetTypeDisplayName
+```cpp
+switch (Type)
+{
+case ECollisionHandleType::Trace: return TEXT("射线检测");
+case ECollisionHandleType::Sweep: return TEXT("扫描检测");
+case ECollisionHandleType::Position: return TEXT("位置调整");
+case ECollisionHandleType::FOV: return TEXT("FOV调整");
+case ECollisionHandleType::Material: return TEXT("材质处理");
+case ECollisionHandleType::Visibility: return TEXT("可见性处理");
+case ECollisionHandleType::Timing: return TEXT("时序控制");
+case ECollisionHandleType::Interpolation:  return TEXT("插值处理");
+case ECollisionHandleType::Environment: return TEXT("环境处理");
+default: return TEXT("未知");
+}
+```
+
+## 特殊处理说明
+- StrategyID前缀说明：
+  - D开头：Detection（检测类）策略
+  - RS开头：Response（响应类）策略
+  - OC开头：Occlusion（遮挡处理类）策略
+  - RC开头：Recovery（恢复类）策略
+  - SP开头：Special（特殊情况处理类）策略
+- InputParams和OutputParams使用斜杠"/"分隔多个参数
+- Condition字段为中文描述，说明该策略的触发条件
+
+## Category与Type的对应关系
+- Detection: Trace, Sweep
+- Response:  Position, FOV
+- Occlusion: Material, Visibility, Position
+- Recovery: Timing, Interpolation
+- Special: Environment
+
+## 示例数据参考
+```csv
+CompleteCollisionHandle_D01,SingleRay,单射线检测,Detection,Trace,从FocusPoint到DesiredPos的单条射线检测,100,false,FocusPoint/DesiredPos,bHit/HitPoint/HitNormal,默认关闭仅用于简单场景
+CompleteCollisionHandle_D02,SphereSweep,球扫检测,Detection,Sweep,沿路径移动球体进行检测考虑相机体积,100,true,FocusPoint/DesiredPos/ProbeRadius,bHit/HitPoint/HitNormal,默认启用推荐方法
+CompleteCollisionHandle_RS01,PullIn,拉近响应,Response,Position,将相机拉近到碰撞点前方,100,true,HitPoint/HitNormal/MinDistanceFromSurface,SafePosition,检测到碰撞时
+CompleteCollisionHandle_OC01,FadeOut,渐隐处理,Occlusion,Material,将遮挡物材质渐变为透明,100,true,OccludingActor/FadeSpeed/MinAlpha,MaterialAlpha,遮挡物支持透明化
+CompleteCollisionHandle_RC02,SmoothRecovery,平滑恢复,Recovery,Interpolation,使用指数衰减插值恢复到理想距离,100,true,CurrentDist/DesiredDist/RecoverySpeed,RecoveredDistance,延迟时间结束后
+CompleteCollisionHandle_SP01,TightSpace,狭小空间处理,Special,Environment,检测并处理狭小空间自动调整距离和FOV,100,true,EnvironmentProbes/TightSpaceThreshold,AdjustedDistance/AdjustedFOV,检测到狭小空间
+```
+
+## 文件结构
+```
+Source/[YourProject]/
+├── Public/
+│   └── Camera/
+│       └── Data/
+│           ├── CameraCollisionHandleData.h       (新建-结构体)
+│           ├── CameraCollisionHandleEnums.h      (新建-枚举)
+│           └── CameraCollisionHandleHelpers.h    (新建-辅助类)
+└── Private/
+    └── Camera/
+        └── Data/
+            └── CameraCollisionHandleHelpers.cpp  (新建-辅助类实现)
+```
+
+## UE4.27 兼容性要求
+1. 使用 GENERATED_BODY() 宏
+2. #include "XXX.generated.h" 必须是最后一个include
+3. 辅助类继承 UBlueprintFunctionLibrary
+4. 所有蓝图可调用函数使用 UFUNCTION(BlueprintPure, Category = "...")
+5. **USTRUCT结构体中不能包含UFUNCTION，只能有UPROPERTY和普通构造函数**
+
+## 完成后验证
+1. 编译项目确认无错误
+2. 确认FCameraCollisionHandleRow结构体中不包含任何UFUNCTION（只有UPROPERTY属性和构造函数）
+3. 确认UCameraCollisionHandleHelpers类包含所有12个静态辅助函数
+4. 确认枚举类型正确定义并可在蓝图中使用

@@ -1,0 +1,66 @@
+Sub-Step 4.2.5 Prompt
+
+================================================================================
+任务：在CameraModifier_Shake.cpp中添加S03 AttackShake实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+S03是玩家攻击命中时的反馈抖动，提供打击感。
+
+【当前进度】
+Phase 4 Step 4.2 Sub-Step 4.2.5 (共190个Sub-Step中的第116个)
+前置完成：4.2.4 S02实现
+
+【任务目标】
+在CameraModifier_Shake.cpp中添加S03实现。
+
+【具体要求】
+
+在S02实现之后添加：
+
+//========================================
+// S03: Attack Shake
+//========================================
+
+UCameraModifier_S03_AttackShake::UCameraModifier_S03_AttackShake()
+{
+    // Attack shake - quick and punchy
+    PositionAmplitude = 2.0f;
+    RotationAmplitude = 0.8f;
+    ShakeFrequency = 30.0f; // Higher frequency for snappier feel
+}
+
+void UCameraModifier_S03_AttackShake::OnTriggered(const FModifierTriggerData& TriggerData)
+{
+    // Generate new random seed for variation
+    RandomSeed = FMath::FRand() * 1000.0f;
+    ShakeTime = 0.0f;
+
+    // Scale parameters based on intensity (attack type/weapon weight)
+    float IntensityScale = FMath::Clamp(TriggerData.Intensity, 0.3f, 2.0f);
+    PositionAmplitude = 2.0f * IntensityScale;
+    RotationAmplitude = 0.8f * IntensityScale;
+
+    // Heavy attacks (intensity > 1.0) get additional effects
+    if (TriggerData.Intensity > 1.0f)
+    {
+        ShakeFrequency = 25.0f; // Lower frequency for heavier attacks
+        FOVEffect = -2.0f * (TriggerData.Intensity - 1.0f); // FOV punch for heavy attacks
+    }
+    else
+    {
+        ShakeFrequency = 30.0f;
+        FOVEffect = 0.0f;
+    }
+
+    UE_LOG(LogTemp, Verbose, TEXT("S03 AttackShake: Triggered with intensity %.2f"), TriggerData.Intensity);
+}
+
+【验证标准】
+- 编译通过
+- S03可触发攻击反馈抖动
+
+【输出要求】
+输出S03的完整实现代码。
+================================================================================

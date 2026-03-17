@@ -1,0 +1,135 @@
+实际使用场景
+
+场景 1：创建小兵蓝图
+
+  1. 新建蓝图 BP_Enemy_Grunt，父类 ACharacter
+  2. 添加组件 UCombatDataComponent
+  3. 在 Details 面板里：
+     OwnerID = "Grunt"                    ← 只改这一个字段
+     MontageConfigTable = DT_MontageConfig ← 跟玩家用同一张表
+     CharacterStatsTable = DT_CharacterStats
+  4. 完成
+
+  这个小兵现在自动拥有了总表里 Owner="Grunt" 的所有行：
+  AM_Grunt_LightAtk_01, AM_Grunt_LightAtk_02, AM_Grunt_ComboAtk,
+  AM_Grunt_HeavyAtk, AM_Grunt_HitReact_Light, AM_Grunt_Death_F...
+
+场景 2：创建最终 Boss 蓝图
+
+  1. 新建蓝图 BP_Boss_Final，父类 ACharacter
+  2. 添加组件 UCombatDataComponent
+  3. Details 面板：
+     OwnerID = "FinalBoss"               ← 只改这个
+     同样的两张表
+  4. 完成
+
+  AI 代码里：
+  // 获取 P2 阶段的所有攻击
+  TArray<FMontageConfigRow> P2Attacks = 
+      CombatData->FindMontagesBySubCategory("ComboAtk", "P2");
+  // 随机选一个
+  int32 Idx = FMath::RandRange(0, P2Attacks.Num() - 1);
+  CombatData->PlayMontageByRowName(P2Attacks[Idx].RowName);
+
+场景 3：调参——所有小兵轻击伤害太低
+
+  1. 打开 CSV 总表
+  2. 筛选 Owner = "Grunt"，SubCategory = "LightAtk"
+  3. 把 Damage 从 "15~25" 改成 "20~35"
+  4. 重新 Import 到 UE4
+  5. 不用改任何代码，不用打开任何蓝图
+  6. 游戏里小兵伤害自动变高
+
+命名规范总表
+这是确保"命名一致 = 自动连接"的完整规范：
+
+★ 需要手动保持一致的三个地方：
+
+地方 1：CSV 总表
+  Owner 列写 "Grunt"
+  ID 列写 "M057"
+  Name 列写 "AM_Grunt_LightAtk_01"
+
+地方 2：UE4 DataTable
+  Import 后 RowName 自动 = "M057"（CSV 第一列）
+  MontageAsset 列手动拖入 AM_Grunt_LightAtk_01.uasset
+
+地方 3：角色蓝图 Details 面板
+  UCombatDataComponent → OwnerID = "Grunt"
+
+只要这三个地方的字符串对得上，整个系统自动工作。
+
+命名项	格式	示例	出现在哪
+OwnerID	英文无空格	Player / Grunt / FinalBoss	CSV Owner列 + 蓝图 Details
+RowName	M + 3位数字	M001 / M057 / M183	CSV ID列 + 代码 FindRow
+Montage 资产名	AM_[Owner]_[Action]	AM_Player_Roll_F	CSV Name列 + UE4 Content
+SubCategory	英文无空格	Roll / LightAtk / HitReact	CSV + 代码筛选
+ActionType	英文无空格	Attack / Death / Execution	CSV + 代码筛选
+Phase	P + 数字	P1 / P2 / P3	CSV + 代码筛选
+
+
+一句话总结：CSV 是设计母版，DataTable 是引擎里的运行副本，UCombatDataComponent 是读取器。三者通过字符串命名连接。名字对了，一切自动工作。
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+运行原理解释：
+
+
+第一个判断：一个组件 + 一张总表 → 挂到任何角色
+
+
+核心思想：
+
+  UCombatDataComponent（一个组件）
+       +
+  DT_MontageConfig（一张总表）
+       =
+  挂到谁身上，谁就有完整的战斗动画能力
+
+  ┌──────────────┐
+  │ 玩家蓝图      │ ← 挂 UCombatDataComponent，Owner 筛选 "Player"
+  ├──────────────┤
+  │ 小兵蓝图      │ ← 挂同一个组件，Owner 筛选 "Grunt"
+  ├──────────────┤
+  │ 精英蓝图      │ ← 挂同一个组件，Owner 筛选 "Elite"
+  ├──────────────┤
+  │ Boss 蓝图     │ ← 挂同一个组件，Owner 筛选 "FinalBoss"
+  ├──────────────┤
+  │ 宝箱怪蓝图    │ ← 挂同一个组件，Owner 筛选 "Mimic"
+  └──────────────┘
+
+  所有角色共用同一份代码
+  所有角色共用同一张表
+  区别只在于：蓝图 Details 面板里填的 OwnerID 不同
+
+这跟你现有的锁定系统架构完全一致：
+
+你已经做过的（成功验证的模式）：
+
+  UTargetDetectionComponent  → 挂到玩家，检测敌人
+  UUIManagerComponent        → 挂到玩家，管锁定 UI
+  USubTargetManager          → 挂到玩家，管多锁点
+  USoulsCameraManager        → 挂到玩家，管相机状态
+
+现在要做的（完全相同的模式）：
+
+  UCombatDataComponent       → 挂到任何角色，管战斗动画行为
+
+
+第二个判断：命名一致 = 自动连接
+这是整个系统的灵魂。
+
+连接原理：
+
+  CSV 总表里写的名字          UE4 里的资产/RowName
+        ↓                           ↓
+  "AM_Player_Roll_F"    =    AM_Player_Roll_F.uasset
+  "M001"                =    DataTable 里 RowName = "M001"
+  "Player"              =    蓝图里 OwnerID = "Player"
+
+  只要这三层名字对上，代码自动找到正确的行和正确的资产
+  不需要额外的手动绑定
+
+所以整个系统的工作保障就是一套命名规范。
+

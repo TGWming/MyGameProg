@@ -1,0 +1,11 @@
+
+.git
+.vscode
+
+Config/*
+!Config/config.ini
+
+mods
+SourceCode/x64
+Thumbnail.png
+/.vs

@@ -1,0 +1,100 @@
+Sub-Step 4.6.5 Prompt
+
+================================================================================
+任务：更新CameraModifierManager.cpp - 注册所有26个修改器
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+现在所有26个修改器都已创建，需要更新Manager以注册它们。
+
+【当前进度】
+Phase 4 Step 4.6 Sub-Step 4.6.5 (共190个Sub-Step中的第146个)
+前置完成：4.6.1-4.6.4 所有Special修改器
+
+【任务目标】
+更新文件：Source/[ProjectName]/Camera/Modifiers/CameraModifierManager. cpp
+在CreateAllModifiers()函数中注册所有26个修改器。
+
+【具体要求】
+
+1. 在文件顶部添加所有修改器的#include：
+
+// Modifier includes
+#include "CameraModifier_Shake.h"
+#include "CameraModifier_Reaction.h"
+#include "CameraModifier_Cinematic.h"
+#include "CameraModifier_Zoom.h"
+#include "CameraModifier_Effect.h"
+#include "CameraModifier_Special.h"
+
+2. 替换CreateAllModifiers()函数为完整实现：
+
+void UCameraModifierManager::CreateAllModifiers(UObject* Outer)
+{
+    UE_LOG(LogTemp, Log, TEXT("CameraModifierManager: Creating all 26 modifiers... "));
+
+    //========================================
+    // Shake Modifiers (S01-S05) - 5 modifiers
+    //========================================
+    RegisterModifier(NewObject<UCameraModifier_S01_HitShake_Light>(Outer));
+    RegisterModifier(NewObject<UCameraModifier_S02_HitShake_Heavy>(Outer));
+    RegisterModifier(NewObject<UCameraModifier_S03_AttackShake>(Outer));
+    RegisterModifier(NewObject<UCameraModifier_S04_LandShake>(Outer));
+    RegisterModifier(NewObject<UCameraModifier_S05_EnvironmentShake>(Outer));
+
+    //========================================
+    // Reaction Modifiers (R01-R06) - 6 modifiers
+    //========================================
+    RegisterModifier(NewObject<UCameraModifier_R01_Parry_Pull>(Outer));
+    RegisterModifier(NewObject<UCameraModifier_R02_Stagger_React>(Outer));
+    RegisterModifier(NewObject<UCameraModifier_R03_Knockback_React>(Outer));
+    RegisterModifier(NewObject<UCameraModifier_R04_GuardBreak_React>(Outer));
+    RegisterModifier(NewObject<UCameraModifier_R05_Counter_React>(Outer));
+    RegisterModifier(NewObject<UCameraModifier_R06_Dodge_React>(Outer));
+
+    //========================================
+    // Cinematic Modifiers (C01-C05) - 5 modifiers
+    //========================================
+    RegisterModifier(NewObject<UCameraModifier_C01_Execution>(Outer));
+    RegisterModifier(NewObject<UCameraModifier_C02_Backstab>(Outer));
+    RegisterModifier(NewObject<UCameraModifier_C03_Riposte>(Outer));
+    RegisterModifier(NewObject<UCameraModifier_C04_BossIntro>(Outer));
+    RegisterModifier(NewObject<UCameraModifier_C05_DeathCam>(Outer));
+
+    //========================================
+    // Zoom Modifiers (Z01-Z04) - 4 modifiers
+    //========================================
+    RegisterModifier(NewObject<UCameraModifier_Z01_AttackImpact>(Outer));
+    RegisterModifier(NewObject<UCameraModifier_Z02_ChargeRelease>(Outer));
+    RegisterModifier(NewObject<UCameraModifier_Z03_SkillZoom>(Outer));
+    RegisterModifier(NewObject<UCameraModifier_Z04_DramaticZoom>(Outer));
+
+    //========================================
+    // Effect Modifiers (E01-E03) - 3 modifiers
+    //========================================
+    RegisterModifier(NewObject<UCameraModifier_E01_LowHealth>(Outer));
+    RegisterModifier(NewObject<UCameraModifier_E02_StatusAilment>(Outer));
+    RegisterModifier(NewObject<UCameraModifier_E03_EnvironmentEffect>(Outer));
+
+    //========================================
+    // Special Modifiers (X01-X03) - 3 modifiers
+    //========================================
+    RegisterModifier(NewObject<UCameraModifier_X01_SlowMotion>(Outer));
+    RegisterModifier(NewObject<UCameraModifier_X02_HitStop>(Outer));
+    RegisterModifier(NewObject<UCameraModifier_X03_FinalBlow>(Outer));
+
+    UE_LOG(LogTemp, Log, TEXT("CameraModifierManager: Successfully created %d modifiers"), RegisteredModifiers.Num());
+
+    // Verify count
+    check(RegisteredModifiers.Num() == 26);
+}
+
+【验证标准】
+- 编译通过
+- Manager初始化后包含26个修改器
+- 日志显示正确的修改器数量
+
+【输出要求】
+输出需要添加的#include和替换的CreateAllModifiers()函数代码。
+================================================================================

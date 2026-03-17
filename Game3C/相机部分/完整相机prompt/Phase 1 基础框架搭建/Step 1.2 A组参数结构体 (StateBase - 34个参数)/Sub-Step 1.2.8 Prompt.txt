@@ -1,0 +1,89 @@
+Sub-Step 1.2.8 Prompt
+
+================================================================================
+任务：在SoulsCameraParams_StateBase.h中添加Collision和AutoCorrect子组
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+继续添加A组参数结构体的子组。
+
+【当前进度】
+Phase 1 Step 1.2 Sub-Step 1.2.8 (共190个Sub-Step中的第15个)
+前置完成：1.2.1-1.2.7 Identity至Transition子组
+
+【任务目标】
+在SoulsCameraParams_StateBase.h中添加碰撞和自动校正相关的参数结构体（5个参数）。
+
+【具体要求】
+
+1. 在FStateTransitionParams之后添加：
+
+/**
+ * State collision parameters
+ * Controls collision behavior specific to this state
+ */
+USTRUCT(BlueprintType)
+struct FStateCollisionParams
+{
+    GENERATED_BODY()
+
+    /** Whether collision detection is enabled for this state */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Collision")
+    bool bEnableCollision;
+
+    /** Collision probe radius in centimeters */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Collision", meta = (ClampMin = "5.0", ClampMax = "100.0", EditCondition = "bEnableCollision"))
+    float CollisionRadius;
+
+    /** Recovery delay after collision ends (seconds) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Collision", meta = (ClampMin = "0.0", ClampMax = "3.0", EditCondition = "bEnableCollision"))
+    float RecoveryDelay;
+
+    FStateCollisionParams()
+        : bEnableCollision(true)
+        , CollisionRadius(12.0f)
+        , RecoveryDelay(0.5f)
+    {}
+};
+
+/**
+ * State auto-correction parameters
+ * Controls automatic camera adjustments for this state
+ */
+USTRUCT(BlueprintType)
+struct FStateAutoCorrectParams
+{
+    GENERATED_BODY()
+
+    /** Enable auto-centering when no input */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AutoCorrect")
+    bool bEnableAutoCenter;
+
+    /** Delay before auto-centering starts (seconds) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AutoCorrect", meta = (ClampMin = "0.0", ClampMax = "10.0", EditCondition = "bEnableAutoCenter"))
+    float AutoCenterDelay;
+
+    FStateAutoCorrectParams()
+        : bEnableAutoCenter(true)
+        , AutoCenterDelay(3.0f)
+    {}
+};
+
+2. 代码风格：
+   - 使用EditCondition使相关属性在bool为false时变灰
+   - 碰撞半径12cm是UE4 SpringArm默认值
+   - 自动回中延迟3秒符合类魂游戏习惯
+
+【验证标准】
+- 编译通过
+- 可创建两个结构体实例
+- EditCondition在编辑器中生效
+
+【注意事项】
+- 添加在FStateTransitionParams之后
+- 本Sub-Step添加两个结构体
+
+【输出要求】
+输出FStateCollisionParams和FStateAutoCorrectParams两个结构体代码块。
+================================================================================

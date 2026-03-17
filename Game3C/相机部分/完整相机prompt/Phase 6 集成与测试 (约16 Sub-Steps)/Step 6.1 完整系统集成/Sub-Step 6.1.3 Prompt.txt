@@ -1,0 +1,840 @@
+Sub-Step 6.1.3 Prompt
+
+================================================================================
+任务：验证并更新SoulsCameraRuntimeTypes.h - 确保运行时结构体完整
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4. 27 C++项目。
+确保所有运行时数据结构完整，支持完整的8阶段Pipeline执行。
+
+【当前进度】
+Phase 6 Step 6. 1 Sub-Step 6.1.3 (共190个Sub-Step中的第177个)
+前置完成：
+- 6.1.1 枚举验证完成 ✅
+- 6.1.2 配置结构体更新完成 ✅
+- FStageExecutionContext 编译错误已修复 ✅
+
+【任务目标】
+验证并更新文件：`Source/MyProject/Public/Camera/Core/SoulsCameraRuntimeTypes.h`
+确保运行时结构体完整，支持：
+- 39个模块的输出
+- 26个修改器的输出
+- 20个碰撞策略的输出
+- 8个Pipeline阶段的执行
+
+【⚠️ 重要说明】
+
+1. **本Sub-Step是验证和补充，不是重写**
+   - 首先检查现有结构体
+   - 只添加缺失的字段
+   - 保留已有的正确定义
+
+2. **结构体依赖关系：**
+   ```
+   FCameraInputContext (输入)
+        ↓
+   FStageExecutionContext (执行上下文)
+        ↓
+   FModuleOutput (模块输出)
+   FModifierOutput (修改器输出)
+   FCollisionOutput (碰撞输出)
+        ↓
+   FSoulsCameraOutput (最终输出)
+   ```
+
+3. **编码格式：UTF-8 Without BOM，所有注释英文。**
+
+【具体要求】
+
+================================================================================
+第一步：验证 FCameraInputContext 结构体
+================================================================================
+
+确保包含以下所有字段：
+
+```cpp
+/**
+ * FCameraInputContext
+ * Input data gathered at the start of each frame
+ * Used by Stage 1 (InputGather) and passed to all subsequent stages
+ */
+USTRUCT(BlueprintType)
+struct MYPROJECT_API FCameraInputContext
+{
+    GENERATED_BODY()
+
+    //========================================
+    // Timing
+    //========================================
+    
+    /** Delta time for this frame */
+    UPROPERTY(BlueprintReadWrite, Category = "Timing")
+    float DeltaTime;
+
+    /** Total game time */
+    UPROPERTY(BlueprintReadWrite, Category = "Timing")
+    float GameTime;
+
+    //========================================
+    // Character Info
+    //========================================
+    
+    /** Character world location */
+    UPROPERTY(BlueprintReadWrite, Category = "Character")
+    FVector CharacterLocation;
+
+    /** Character world rotation */
+    UPROPERTY(BlueprintReadWrite, Category = "Character")
+    FRotator CharacterRotation;
+
+    /** Character velocity */
+    UPROPERTY(BlueprintReadWrite, Category = "Character")
+    FVector CharacterVelocity;
+
+    /** Character speed (2D, ignoring Z) */
+    UPROPERTY(BlueprintReadWrite, Category = "Character")
+    float CharacterSpeed;
+
+    /** Reference to character actor */
+    TWeakObjectPtr<AActor> CharacterActor;
+
+    //========================================
+    // Movement State
+    //========================================
+    
+    /** Is character moving */
+    UPROPERTY(BlueprintReadWrite, Category = "Movement")
+    bool bIsMoving;
+
+    /** Is character sprinting */
+    UPROPERTY(BlueprintReadWrite, Category = "Movement")
+    bool bIsSprinting;
+
+    /** Is character crouching */
+    UPROPERTY(BlueprintReadWrite, Category = "Movement")
+    bool bIsCrouching;
+
+    /** Is character in air (jumping/falling) */
+    UPROPERTY(BlueprintReadWrite, Category = "Movement")
+    bool bIsInAir;
+
+    /** Is character climbing */
+    UPROPERTY(BlueprintReadWrite, Category = "Movement")
+    bool bIsClimbing;
+
+    /** Is character swimming */
+    UPROPERTY(BlueprintReadWrite, Category = "Movement")
+    bool bIsSwimming;
+
+    //========================================
+    // Combat State
+    //========================================
+    
+    /** Is in combat mode */
+    UPROPERTY(BlueprintReadWrite, Category = "Combat")
+    bool bIsInCombat;
+
+    /** Is blocking/guarding */
+    UPROPERTY(BlueprintReadWrite, Category = "Combat")
+    bool bIsBlocking;
+
+    /** Is attacking */
+    UPROPERTY(BlueprintReadWrite, Category = "Combat")
+    bool bIsAttacking;
+
+    /** Is aiming (ranged/magic) */
+    UPROPERTY(BlueprintReadWrite, Category = "Combat")
+    bool bIsAiming;
+
+    //========================================
+    // Target Info (Lock-On)
+    //========================================
+    
+    /** Has a lock-on target */
+    UPROPERTY(BlueprintReadWrite, Category = "Target")
+    bool bHasTarget;
+
+    /** Target world location */
+    UPROPERTY(BlueprintReadWrite, Category = "Target")
+    FVector TargetLocation;
+
+    /** Distance to target */
+    UPROPERTY(BlueprintReadWrite, Category = "Target")
+    float TargetDistance;
+
+    /** Target size for framing */
+    UPROPERTY(BlueprintReadWrite, Category = "Target")
+    float TargetSize;
+
+    /** Is target a boss */
+    UPROPERTY(BlueprintReadWrite, Category = "Target")
+    bool bTargetIsBoss;
+
+    /** Reference to target actor */
+    TWeakObjectPtr<AActor> TargetActor;
+
+    //========================================
+    // Player Input
+    //========================================
+    
+    /** Raw camera input from player (Yaw, Pitch) */
+    UPROPERTY(BlueprintReadWrite, Category = "Input")
+    FVector2D CameraInput;
+
+    /** Camera input magnitude */
+    UPROPERTY(BlueprintReadWrite, Category = "Input")
+    float InputMagnitude;
+
+    //========================================
+    // Previous Frame Data
+    //========================================
+    
+    /** Previous frame camera rotation */
+    UPROPERTY(BlueprintReadWrite, Category = "Previous")
+    FRotator PreviousCameraRotation;
+
+    /** Previous frame camera location */
+    UPROPERTY(BlueprintReadWrite, Category = "Previous")
+    FVector PreviousCameraLocation;
+
+    //========================================
+    // Environment
+    //========================================
+    
+    /** Water surface height (for underwater detection) */
+    UPROPERTY(BlueprintReadWrite, Category = "Environment")
+    float WaterSurfaceHeight;
+
+    /** Is camera underwater */
+    UPROPERTY(BlueprintReadWrite, Category = "Environment")
+    bool bIsUnderwater;
+
+    //========================================
+    // Constructor & Methods
+    //========================================
+
+    FCameraInputContext()
+        : DeltaTime(0.0f)
+        , GameTime(0.0f)
+        , CharacterLocation(FVector:: ZeroVector)
+        , CharacterRotation(FRotator::ZeroRotator)
+        , CharacterVelocity(FVector:: ZeroVector)
+        , CharacterSpeed(0.0f)
+        , bIsMoving(false)
+        , bIsSprinting(false)
+        , bIsCrouching(false)
+        , bIsInAir(false)
+        , bIsClimbing(false)
+        , bIsSwimming(false)
+        , bIsInCombat(false)
+        , bIsBlocking(false)
+        , bIsAttacking(false)
+        , bIsAiming(false)
+        , bHasTarget(false)
+        , TargetLocation(FVector::ZeroVector)
+        , TargetDistance(0.0f)
+        , TargetSize(100.0f)
+        , bTargetIsBoss(false)
+        , CameraInput(FVector2D::ZeroVector)
+        , InputMagnitude(0.0f)
+        , PreviousCameraRotation(FRotator:: ZeroRotator)
+        , PreviousCameraLocation(FVector::ZeroVector)
+        , WaterSurfaceHeight(-99999.0f)
+        , bIsUnderwater(false)
+    {}
+
+    /** Reset to default values */
+    void Reset()
+    {
+        *this = FCameraInputContext();
+    }
+};
+```
+
+================================================================================
+第二步：验证 FCollisionOutput 结构体
+================================================================================
+
+确保包含所有碰撞系统需要的输出字段：
+
+```cpp
+/**
+ * FCollisionOutput
+ * Output from Stage 6 (CollisionResolve)
+ * Contains all camera adjustments from collision handling
+ */
+USTRUCT(BlueprintType)
+struct MYPROJECT_API FCollisionOutput
+{
+    GENERATED_BODY()
+
+    //========================================
+    // Camera Adjustments
+    //========================================
+    
+    /** Position adjustment from collision */
+    UPROPERTY(BlueprintReadOnly, Category = "Collision")
+    FVector PositionAdjustment;
+
+    /** Distance adjustment (negative = closer) */
+    UPROPERTY(BlueprintReadOnly, Category = "Collision")
+    float DistanceAdjustment;
+
+    /** Rotation adjustment */
+    UPROPERTY(BlueprintReadOnly, Category = "Collision")
+    FRotator RotationAdjustment;
+
+    /** FOV adjustment */
+    UPROPERTY(BlueprintReadOnly, Category = "Collision")
+    float FOVAdjustment;
+
+    //========================================
+    // Collision State
+    //========================================
+    
+    /** Is collision currently active */
+    UPROPERTY(BlueprintReadOnly, Category = "Collision|State")
+    bool bCollisionActive;
+
+    /** Is in recovery mode */
+    UPROPERTY(BlueprintReadOnly, Category = "Collision|State")
+    bool bIsRecovering;
+
+    /** Current safe distance */
+    UPROPERTY(BlueprintReadOnly, Category = "Collision|State")
+    float SafeDistance;
+
+    /** Desired distance (before collision) */
+    UPROPERTY(BlueprintReadOnly, Category = "Collision|State")
+    float DesiredDistance;
+
+    //========================================
+    // Occlusion State
+    //========================================
+    
+    /** Is character occluded from camera view */
+    UPROPERTY(BlueprintReadOnly, Category = "Collision|Occlusion")
+    bool bCharacterOccluded;
+
+    /** Is target occluded from camera view */
+    UPROPERTY(BlueprintReadOnly, Category = "Collision|Occlusion")
+    bool bTargetOccluded;
+
+    /** Character fade alpha (1 = visible, 0 = invisible) */
+    UPROPERTY(BlueprintReadOnly, Category = "Collision|Occlusion")
+    float CharacterFadeAlpha;
+
+    //========================================
+    // Special Environment State
+    //========================================
+    
+    /** Is in tight space */
+    UPROPERTY(BlueprintReadOnly, Category = "Collision|Special")
+    bool bInTightSpace;
+
+    /** Tight space factor (0-1) */
+    UPROPERTY(BlueprintReadOnly, Category = "Collision|Special")
+    float TightSpaceFactor;
+
+    /** Is near cliff edge */
+    UPROPERTY(BlueprintReadOnly, Category = "Collision|Special")
+    bool bNearCliffEdge;
+
+    /** Is in corner */
+    UPROPERTY(BlueprintReadOnly, Category = "Collision|Special")
+    bool bInCorner;
+
+    //========================================
+    // Constructor
+    //========================================
+
+    FCollisionOutput()
+        : PositionAdjustment(FVector:: ZeroVector)
+        , DistanceAdjustment(0.0f)
+        , RotationAdjustment(FRotator:: ZeroRotator)
+        , FOVAdjustment(0.0f)
+        , bCollisionActive(false)
+        , bIsRecovering(false)
+        , SafeDistance(0.0f)
+        , DesiredDistance(0.0f)
+        , bCharacterOccluded(false)
+        , bTargetOccluded(false)
+        , CharacterFadeAlpha(1.0f)
+        , bInTightSpace(false)
+        , TightSpaceFactor(0.0f)
+        , bNearCliffEdge(false)
+        , bInCorner(false)
+    {}
+
+    /** Reset to default values */
+    void Reset()
+    {
+        *this = FCollisionOutput();
+    }
+
+    /** Check if any adjustment is active */
+    bool HasAdjustments() const
+    {
+        return ! PositionAdjustment.IsNearlyZero() ||
+               !FMath::IsNearlyZero(DistanceAdjustment) ||
+               ! RotationAdjustment.IsNearlyZero() ||
+               !FMath::IsNearlyZero(FOVAdjustment);
+    }
+};
+```
+
+================================================================================
+第三步：验证 FStageExecutionContext 结构体
+================================================================================
+
+确保包含完整的Pipeline执行上下文：
+
+```cpp
+/**
+ * FStageExecutionContext
+ * Execution context passed through all 8 pipeline stages
+ * Contains input, accumulated output, and stage-specific data
+ */
+USTRUCT(BlueprintType)
+struct MYPROJECT_API FStageExecutionContext
+{
+    GENERATED_BODY()
+
+    //========================================
+    // Timing
+    //========================================
+    
+    /** Delta time for this frame */
+    UPROPERTY(BlueprintReadOnly, Category = "Context|Timing")
+    float DeltaTime;
+
+    /** Total game time */
+    UPROPERTY(BlueprintReadOnly, Category = "Context|Timing")
+    float GameTime;
+
+    //========================================
+    // References
+    //========================================
+    
+    /** Reference to camera manager */
+    UPROPERTY(BlueprintReadOnly, Category = "Context|References")
+    USoulsCameraManager* Manager;
+
+    //========================================
+    // Input Data
+    //========================================
+    
+    /** Input context from game (Stage 1 output) */
+    UPROPERTY(BlueprintReadWrite, Category = "Context|Input")
+    FCameraInputContext InputContext;
+
+    //========================================
+    // Accumulated Output
+    //========================================
+    
+    /** Current camera output being built through stages */
+    UPROPERTY(BlueprintReadWrite, Category = "Context|Output")
+    FSoulsCameraOutput Output;
+
+    //========================================
+    // Stage-Specific Outputs
+    //========================================
+    
+    /** Module outputs from Stage 3 */
+    UPROPERTY(BlueprintReadOnly, Category = "Context|Stages")
+    TArray<FModuleOutput> ModuleOutputs;
+
+    /** Modifier outputs from Stage 4 */
+    UPROPERTY(BlueprintReadOnly, Category = "Context|Stages")
+    TArray<FModifierOutput> ModifierOutputs;
+
+    /** Collision output from Stage 6 */
+    UPROPERTY(BlueprintReadOnly, Category = "Context|Stages")
+    FCollisionOutput CollisionOutput;
+
+    //========================================
+    // State Tracking
+    //========================================
+    
+    /** Current executing stage index (1-8) */
+    UPROPERTY(BlueprintReadOnly, Category = "Context|State")
+    int32 CurrentStageIndex;
+
+    /** Is this the first frame after initialization */
+    UPROPERTY(BlueprintReadOnly, Category = "Context|State")
+    bool bIsFirstFrame;
+
+    /** Frame counter (for debugging) */
+    UPROPERTY(BlueprintReadOnly, Category = "Context|State")
+    uint64 FrameCounter;
+
+    /** Did any stage fail this frame */
+    UPROPERTY(BlueprintReadOnly, Category = "Context|State")
+    bool bHasStageError;
+
+    //========================================
+    // Constructor & Methods
+    //========================================
+
+    FStageExecutionContext()
+        : DeltaTime(0.0f)
+        , GameTime(0.0f)
+        , Manager(nullptr)
+        , CurrentStageIndex(0)
+        , bIsFirstFrame(true)
+        , FrameCounter(0)
+        , bHasStageError(false)
+    {}
+
+    /** Reset for new frame */
+    void Reset()
+    {
+        ModuleOutputs.Reset();
+        ModifierOutputs.Reset();
+        CollisionOutput.Reset();
+        CurrentStageIndex = 0;
+        bHasStageError = false;
+    }
+
+    /** Increment frame counter */
+    void IncrementFrame()
+    {
+        FrameCounter++;
+        bIsFirstFrame = false;
+    }
+
+    /** Set current stage */
+    void SetCurrentStage(int32 StageIndex)
+    {
+        CurrentStageIndex = StageIndex;
+    }
+};
+```
+
+================================================================================
+第四步：验证 FSoulsCameraOutput 结构体
+================================================================================
+
+确保最终输出结构体完整：
+
+```cpp
+/**
+ * FSoulsCameraOutput
+ * Final camera output after all 8 pipeline stages
+ * Applied to SpringArm and Camera components
+ */
+USTRUCT(BlueprintType)
+struct MYPROJECT_API FSoulsCameraOutput
+{
+    GENERATED_BODY()
+
+    //========================================
+    // Core Camera Values
+    //========================================
+    
+    /** Focus point (where camera looks at) */
+    UPROPERTY(BlueprintReadWrite, Category = "Output|Core")
+    FVector FocusPoint;
+
+    /** Camera rotation */
+    UPROPERTY(BlueprintReadWrite, Category = "Output|Core")
+    FRotator Rotation;
+
+    /** Camera distance from focus point */
+    UPROPERTY(BlueprintReadWrite, Category = "Output|Core")
+    float Distance;
+
+    /** Field of view */
+    UPROPERTY(BlueprintReadWrite, Category = "Output|Core")
+    float FOV;
+
+    //========================================
+    // Offsets
+    //========================================
+    
+    /** Socket offset (local space offset at camera end) */
+    UPROPERTY(BlueprintReadWrite, Category = "Output|Offset")
+    FVector SocketOffset;
+
+    /** Target offset (offset applied to focus point) */
+    UPROPERTY(BlueprintReadWrite, Category = "Output|Offset")
+    FVector TargetOffset;
+
+    //========================================
+    // State Info
+    //========================================
+    
+    /** Current camera state name */
+    UPROPERTY(BlueprintReadWrite, Category = "Output|State")
+    FName CurrentStateName;
+
+    /** Is output valid */
+    UPROPERTY(BlueprintReadWrite, Category = "Output|State")
+    bool bIsValid;
+
+    /** Was adjusted by collision */
+    UPROPERTY(BlueprintReadWrite, Category = "Output|State")
+    bool bCollisionAdjusted;
+
+    /** Distance before collision adjustment */
+    UPROPERTY(BlueprintReadWrite, Category = "Output|State")
+    float PreCollisionDistance;
+
+    /** Collision compression ratio (1 = no compression) */
+    UPROPERTY(BlueprintReadWrite, Category = "Output|State")
+    float CollisionCompressionRatio;
+
+    //========================================
+    // Constructor
+    //========================================
+
+    FSoulsCameraOutput()
+        : FocusPoint(FVector::ZeroVector)
+        , Rotation(FRotator::ZeroRotator)
+        , Distance(300.0f)
+        , FOV(90.0f)
+        , SocketOffset(FVector::ZeroVector)
+        , TargetOffset(FVector::ZeroVector)
+        , CurrentStateName(NAME_None)
+        , bIsValid(false)
+        , bCollisionAdjusted(false)
+        , PreCollisionDistance(0.0f)
+        , CollisionCompressionRatio(1.0f)
+    {}
+
+    /** Reset to default values */
+    void Reset()
+    {
+        *this = FSoulsCameraOutput();
+    }
+};
+```
+
+================================================================================
+第五步：验证辅助结构体
+================================================================================
+
+确保以下辅助结构体存在且完整：
+
+### EModifierState 枚举
+```cpp
+/**
+ * EModifierState
+ * Lifecycle state for camera modifiers
+ */
+UENUM(BlueprintType)
+enum class EModifierState : uint8
+{
+    Inactive UMETA(DisplayName = "Inactive"),
+    BlendingIn UMETA(DisplayName = "Blending In"),
+    Active UMETA(DisplayName = "Active"),
+    BlendingOut UMETA(DisplayName = "Blending Out"),
+    Paused UMETA(DisplayName = "Paused")
+};
+```
+
+### FModuleOutput 结构体
+```cpp
+/**
+ * FModuleOutput
+ * Output from a single camera module (Stage 3)
+ */
+USTRUCT(BlueprintType)
+struct MYPROJECT_API FModuleOutput
+{
+    GENERATED_BODY()
+
+    /** Which module produced this output */
+    UPROPERTY(BlueprintReadOnly, Category = "Module")
+    ECameraModuleID ModuleID;
+
+    /** Output weight for blending */
+    UPROPERTY(BlueprintReadOnly, Category = "Module")
+    float Weight;
+
+    /** Position contribution */
+    UPROPERTY(BlueprintReadOnly, Category = "Module")
+    FVector Position;
+
+    /** Rotation contribution */
+    UPROPERTY(BlueprintReadOnly, Category = "Module")
+    FRotator Rotation;
+
+    /** Distance contribution */
+    UPROPERTY(BlueprintReadOnly, Category = "Module")
+    float Distance;
+
+    /** FOV contribution */
+    UPROPERTY(BlueprintReadOnly, Category = "Module")
+    float FOV;
+
+    /** Offset contribution */
+    UPROPERTY(BlueprintReadOnly, Category = "Module")
+    FVector Offset;
+
+    FModuleOutput()
+        : ModuleID(ECameraModuleID::None)
+        , Weight(1.0f)
+        , Position(FVector::ZeroVector)
+        , Rotation(FRotator::ZeroRotator)
+        , Distance(0.0f)
+        , FOV(0.0f)
+        , Offset(FVector::ZeroVector)
+    {}
+};
+```
+
+### FModifierOutput 结构体
+```cpp
+/**
+ * FModifierOutput
+ * Output from a single camera modifier (Stage 4)
+ */
+USTRUCT(BlueprintType)
+struct MYPROJECT_API FModifierOutput
+{
+    GENERATED_BODY()
+
+    /** Which modifier produced this output */
+    UPROPERTY(BlueprintReadOnly, Category = "Modifier")
+    ECameraModifierID ModifierID;
+
+    /** Current modifier state */
+    UPROPERTY(BlueprintReadOnly, Category = "Modifier")
+    EModifierState State;
+
+    /** Output weight for blending */
+    UPROPERTY(BlueprintReadOnly, Category = "Modifier")
+    float Weight;
+
+    /** Position offset */
+    UPROPERTY(BlueprintReadOnly, Category = "Modifier")
+    FVector PositionOffset;
+
+    /** Rotation offset */
+    UPROPERTY(BlueprintReadOnly, Category = "Modifier")
+    FRotator RotationOffset;
+
+    /** Distance offset */
+    UPROPERTY(BlueprintReadOnly, Category = "Modifier")
+    float DistanceOffset;
+
+    /** FOV offset */
+    UPROPERTY(BlueprintReadOnly, Category = "Modifier")
+    float FOVOffset;
+
+    /** Vignette intensity (0-1) */
+    UPROPERTY(BlueprintReadOnly, Category = "Modifier|Effect")
+    float VignetteIntensity;
+
+    /** Color tint */
+    UPROPERTY(BlueprintReadOnly, Category = "Modifier|Effect")
+    FLinearColor ColorTint;
+
+    /** Time dilation (1 = normal) */
+    UPROPERTY(BlueprintReadOnly, Category = "Modifier|Effect")
+    float TimeDilation;
+
+    /** Should override camera completely */
+    UPROPERTY(BlueprintReadOnly, Category = "Modifier")
+    bool bIsOverride;
+
+    /** Override transform (if bIsOverride) */
+    UPROPERTY(BlueprintReadOnly, Category = "Modifier")
+    FTransform OverrideTransform;
+
+    FModifierOutput()
+        : ModifierID(ECameraModifierID::None)
+        , State(EModifierState:: Inactive)
+        , Weight(1.0f)
+        , PositionOffset(FVector::ZeroVector)
+        , RotationOffset(FRotator::ZeroRotator)
+        , DistanceOffset(0.0f)
+        , FOVOffset(0.0f)
+        , VignetteIntensity(0.0f)
+        , ColorTint(FLinearColor::White)
+        , TimeDilation(1.0f)
+        , bIsOverride(false)
+        , OverrideTransform(FTransform:: Identity)
+    {}
+};
+```
+
+================================================================================
+【验证标准】
+================================================================================
+
+1. **结构体完整性：**
+   - [ ] FCameraInputContext 包含所有输入字段
+   - [ ] FCollisionOutput 包含所有碰撞输出字段
+   - [ ] FStageExecutionContext 包含完整执行上下文
+   - [ ] FSoulsCameraOutput 包含最终输出字段
+   - [ ] FModuleOutput 包含模块输出字段
+   - [ ] FModifierOutput 包含修改器输出字段
+   - [ ] EModifierState 枚举存在
+
+2. **编译验证：**
+   - [ ] 编译通过（0 errors）
+   - [ ] 无类型未定义警告
+
+================================================================================
+【输出要求】
+================================================================================
+
+```
+================================================================================
+Sub-Step 6. 1.3 完成报告
+================================================================================
+
+【验证结果】
+
+文件位置：
+Source/MyProject/Public/Camera/Core/SoulsCameraRuntimeTypes.h
+
+【结构体状态】
+
+FCameraInputContext: 
+- 状态：[✅ 完整 / ⚠️ 需要更新]
+- 缺失字段：[如果有，列出]
+- 添加的字段：[如果有，列出]
+
+FCollisionOutput:
+- 状态：[✅ 完整 / ⚠️ 需要更新]
+- 缺失字段：[如果有，列出]
+- 添加的字段：[如果有，列出]
+
+FStageExecutionContext:
+- 状态：[✅ 完整 / ⚠️ 需要更新]
+- 缺失字段：[如果有，列出]
+- 添加的字段：[如果有，列出]
+
+FSoulsCameraOutput: 
+- 状态：[✅ 完整 / ⚠️ 需要更新]
+- 缺失字段：[如果有，列出]
+- 添加的字段：[如果有，列出]
+
+FModuleOutput:
+- 状态：[✅ 存在 / ❌ 不存在]
+
+FModifierOutput: 
+- 状态：[✅ 存在 / ❌ 不存在]
+
+EModifierState: 
+- 状态：[✅ 存在 / ❌ 不存在]
+
+【更新内容】
+[列出所有添加/修改的内容]
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【最终状态】
+✅ 所有运行时结构体完整
+
+================================================================================
+```
+
+================================================================================

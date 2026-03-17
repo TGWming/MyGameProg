@@ -1,0 +1,821 @@
+Sub-Step 3.7.5 Prompt
+
+================================================================================
+任务：在CameraModule_Constraint. cpp中添加C04 Visibility_Ensure实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4. 27 C++项目。
+C04负责确保锁定目标保持在屏幕内可见。
+这是Constraint模块的最后一个，也是整个Phase 3模块系统的最后一个模块！
+
+【Pipeline中的位置】
+```
+Stage 3 - Module Compute (Constraint部分):
+├─ C01:  Pitch Clamp (Override, 200) ✅ 已完成
+├─ C02: Distance Clamp (Override, 200) ✅ 已完成
+├─ C03: FOV Clamp (Override, 200) ✅ 已完成
+└─ C04: Visibility Ensure (Blend, 210) ← 当前（最后一个！）
+    → 确保锁定目标始终在屏幕可见区域内
+
+C04的特殊性：
+- 优先级最高（210），在所有Clamp之后执行
+- 使用Blend策略而非Override
+- 有状态追踪（成员变量）
+- 需要屏幕投影计算
+```
+
+【当前进度】
+Phase 3 Step 3.7 Sub-Step 3.7.5 (共190个Sub-Step中的第104个)
+前置完成：3.7.4 C03实现 ✅
+
+**🎯 这是Phase 3模块系统的最后一个模块实现！**
+
+【任务目标】
+在CameraModule_Constraint.cpp中完整实现C04模块，替换现有的占位符。
+
+【⚠️ 重要提醒】
+
+1. **编译前必做步骤：**
+   本Sub-Step只修改现有.   cpp文件，不添加新文件。
+   因此**不需要Regenerate**，可以直接编译。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   确认StateConfig的字段路径与项目实际结构一致。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_Constraint.cpp
+
+2. **定位修改位置：**
+
+在文件中找到C04的占位符实现部分：
+
+```cpp
+//========================================
+// C04: Visibility Ensure
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.7.5
+// Ensures locked target remains visible on screen
+...   占位符代码（包括构造函数、ShouldActivate、Compute、辅助函数）
+```
+
+**将上述占位符代码完整替换为下方的完整实现。**
+
+---
+
+3. **C04完整实现代码：**
+
+**A. 构造函数：**
+
+```cpp
+/**
+ * Constructor - Initialize visibility tracking state
+ * 
+ * Start with target assumed visible (TimeSinceTargetVisible = 0)
+ * LastVisibleTargetPosition starts at zero, will be updated on first visible frame
+ */
+UCameraModule_C04_Visibility_Ensure::UCameraModule_C04_Visibility_Ensure()
+	: TimeSinceTargetVisible(0.0f)
+	, LastVisibleTargetPosition(FVector::ZeroVector)
+{
+}
+```
+
+---
+
+**B. ShouldActivate() 实现：**
+
+```cpp
+/**
+ * ShouldActivate - Activate when there is a locked target
+ * 
+ * C04 activates when: 
+ * - Module is enabled
+ * - There is a locked target (bHasTarget)
+ * 
+ * Unlike C01-C03, this module only activates when there's
+ * actually a target to keep visible.   No target = no visibility to ensure.
+ * 
+ * Priority 210 (highest constraint), uses Blend policy.  
+ * 
+ * Use Cases:
+ * - Lock-on combat (keep enemy in view)
+ * - Boss fights (prevent boss from going off-screen)
+ * - Any situation with a tracked target
+ */
+bool UCameraModule_C04_Visibility_Ensure::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Only activate if there is a locked target
+	if (!Context.InputContext. bHasTarget)
+	{
+		return false;
+	}
+	
+	// All conditions met - activate visibility ensure
+	return true;
+}
+```
+
+---
+
+**C.  Compute() 实现：**
+
+```cpp
+/**
+ * Compute - Ensure locked target remains visible on screen
+ * 
+ * This module checks if the current target is within the visible
+ * screen area.   If not, it calculates a rotation adjustment to
+ * bring the target back into view. 
+ * 
+ * Steps:
+ * 1. Validate target exists
+ * 2. Calculate target point (with height offset for center mass)
+ * 3. Check if target is currently visible
+ * 4. If visible:  reset timer, no adjustment needed
+ * 5. If not visible: track time and calculate adjustment
+ * 6. Apply adjustment with weight based on invisibility duration
+ * 
+ * Key Design Decisions:
+ * - Uses Blend policy for smooth adjustment (not jarring)
+ * - Has a grace period (0.1s) before adjusting
+ * - Weight increases over time (gradual correction)
+ * - Maximum weight capped at 0.8 (allows other systems to contribute)
+ * 
+ * @param Context The current pipeline execution context
+ * @param StateConfig The current camera state configuration
+ * @param OutOutput Output structure to fill with computed values
+ * @return True if computation succeeded
+ */
+bool UCameraModule_C04_Visibility_Ensure::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Step 1: Validate target exists
+	if (!Context.  InputContext. bHasTarget)
+	{
+		// No target - reset state and return
+		TimeSinceTargetVisible = 0.0f;
+		OutOutput.Weight = 0.0f;
+		return false;
+	}
+	
+	// Step 2: Calculate target point with height offset
+	// Look at target's center mass, not feet
+	FVector TargetLocation = Context.InputContext.TargetLocation;
+	float TargetSize = Context.InputContext.TargetSize;
+	
+	// Add height offset to look at center mass (30% of target height)
+	float TargetHeightOffset = TargetSize * 0.3f;
+	TargetLocation. Z += TargetHeightOffset;
+	
+	// Step 3: Check if target is currently visible
+	// Use 15% screen margin (target must be within 15%-85% of screen)
+	const float ScreenMargin = 0.15f;
+	bool bTargetVisible = IsPointVisible(Context, TargetLocation, ScreenMargin);
+	
+	// Step 4: If target is visible, update state and return
+	if (bTargetVisible)
+	{
+		// Reset invisibility timer
+		TimeSinceTargetVisible = 0.0f;
+		
+		// Update last known visible position
+		LastVisibleTargetPosition = TargetLocation;
+		
+		// No adjustment needed - output with zero weight
+		OutOutput. RotationOutput = Context.Output. Rotation;
+		OutOutput.bHasRotationOutput = true;
+		OutOutput.Weight = 0.0f;
+		
+		return true;
+	}
+	
+	// Step 5: Target not visible - track time and calculate adjustment
+	TimeSinceTargetVisible += Context.DeltaTime;
+	
+	// Grace period: don't adjust too quickly
+	// Let other systems (like lock-on rotation) try first
+	const float GracePeriod = 0.1f;
+	if (TimeSinceTargetVisible < GracePeriod)
+	{
+		OutOutput.RotationOutput = Context.Output.Rotation;
+		OutOutput.bHasRotationOutput = true;
+		OutOutput.Weight = 0.0f;
+		return true;
+	}
+	
+	// Calculate rotation adjustment to bring target into view
+	FRotator Adjustment = CalculateVisibilityAdjustment(Context, TargetLocation);
+	
+	// Apply adjustment to current rotation
+	FRotator AdjustedRotation = Context.Output. Rotation + Adjustment;
+	
+	// Clamp pitch after adjustment (respect pitch limits)
+	float MinPitch = StateConfig.StateBase. Rotation.MinPitch;
+	float MaxPitch = StateConfig. StateBase.Rotation.MaxPitch;
+	
+	// Apply defaults if not configured
+	if (MinPitch >= 0.0f) MinPitch = -80.0f;
+	if (MaxPitch <= 0.0f) MaxPitch = 80.0f;
+	
+	AdjustedRotation.Pitch = FMath:: Clamp(AdjustedRotation. Pitch, MinPitch, MaxPitch);
+	AdjustedRotation.Roll = 0.0f;  // Never allow roll
+	
+	// Step 6: Output with weight based on invisibility duration
+	OutOutput. RotationOutput = AdjustedRotation;
+	OutOutput.bHasRotationOutput = true;
+	
+	// Weight increases the longer target has been invisible
+	// Starts at 0, reaches max (0.8) after MaxInvisibleTime
+	const float MaxInvisibleTime = 0.5f;
+	const float MaxWeight = 0.8f;  // Cap at 0.8 to allow other systems to contribute
+	
+	float Weight = (TimeSinceTargetVisible - GracePeriod) / MaxInvisibleTime;
+	Weight = FMath:: Clamp(Weight, 0.0f, MaxWeight);
+	
+	OutOutput.Weight = Weight;
+	
+	return true;
+}
+```
+
+---
+
+**D. IsPointVisible() 实现：**
+
+```cpp
+/**
+ * IsPointVisible - Check if a world point is visible on screen
+ * 
+ * Projects a world point to screen coordinates and checks if it's
+ * within the visible area (accounting for margin).
+ * 
+ * @param Context Current execution context
+ * @param WorldPoint Point to check in world space
+ * @param ScreenMargin Margin from screen edge (0.0 to 0.5, default 0.15 = 15%)
+ * @return True if point is within screen bounds (accounting for margin)
+ */
+bool UCameraModule_C04_Visibility_Ensure::IsPointVisible(
+	const FStageExecutionContext& Context, 
+	const FVector& WorldPoint, 
+	float ScreenMargin) const
+{
+	// Get camera manager for projection
+	if (!Context.Manager)
+	{
+		return true;  // Assume visible if we can't check
+	}
+	
+	// Get player controller for screen projection
+	AActor* Owner = Context. Manager->GetOwner();
+	if (!Owner)
+	{
+		return true;
+	}
+	
+	APawn* Pawn = Cast<APawn>(Owner);
+	if (!Pawn)
+	{
+		return true;
+	}
+	
+	APlayerController* PC = Cast<APlayerController>(Pawn->GetController());
+	if (!PC)
+	{
+		return true;
+	}
+	
+	// Project world point to screen coordinates
+	FVector2D ScreenPosition;
+	bool bProjected = PC->ProjectWorldLocationToScreen(WorldPoint, ScreenPosition, false);
+	
+	if (! bProjected)
+	{
+		// Point is behind camera - definitely not visible
+		return false;
+	}
+	
+	// Get viewport size
+	int32 ViewportSizeX, ViewportSizeY;
+	PC->GetViewportSize(ViewportSizeX, ViewportSizeY);
+	
+	if (ViewportSizeX <= 0 || ViewportSizeY <= 0)
+	{
+		return true;  // Can't determine, assume visible
+	}
+	
+	// Normalize screen position to 0-1 range
+	float NormalizedX = ScreenPosition.X / static_cast<float>(ViewportSizeX);
+	float NormalizedY = ScreenPosition.Y / static_cast<float>(ViewportSizeY);
+	
+	// Check if within screen bounds (accounting for margin)
+	// With 0.15 margin: valid range is 0.15 to 0.85
+	bool bWithinX = (NormalizedX >= ScreenMargin) && (NormalizedX <= (1.0f - ScreenMargin));
+	bool bWithinY = (NormalizedY >= ScreenMargin) && (NormalizedY <= (1.0f - ScreenMargin));
+	
+	return bWithinX && bWithinY;
+}
+```
+
+---
+
+**E.  CalculateVisibilityAdjustment() 实现：**
+
+```cpp
+/**
+ * CalculateVisibilityAdjustment - Calculate rotation to bring target into view
+ * 
+ * Calculates the rotation adjustment needed to rotate the camera
+ * towards the target.   Uses partial correction (30%) to avoid
+ * jarring camera movements.
+ * 
+ * @param Context Current execution context
+ * @param TargetPoint Target location in world space
+ * @return Rotation offset to apply to bring target into view
+ */
+FRotator UCameraModule_C04_Visibility_Ensure::CalculateVisibilityAdjustment(
+	const FStageExecutionContext& Context, 
+	const FVector& TargetPoint) const
+{
+	FRotator Adjustment = FRotator::ZeroRotator;
+	
+	// Get camera location (focus point)
+	FVector CameraLocation = Context.Output.FocusPoint;
+	
+	// Calculate direction from camera to target
+	FVector ToTarget = TargetPoint - CameraLocation;
+	
+	// Skip if target is at same location (avoid division by zero)
+	if (ToTarget.IsNearlyZero())
+	{
+		return Adjustment;
+	}
+	
+	// Get current camera rotation
+	FRotator CurrentRotation = Context.Output. Rotation;
+	
+	// Calculate desired rotation to look at target
+	FRotator DesiredRotation = ToTarget. Rotation();
+	
+	// Calculate difference between current and desired
+	FRotator DeltaRotation = DesiredRotation - CurrentRotation;
+	DeltaRotation. Normalize();  // Normalize to -180 to +180 range
+	
+	// Apply partial correction (gradual, not instant)
+	// 30% correction per frame creates smooth tracking
+	const float CorrectionStrength = 0.3f;
+	
+	Adjustment.Yaw = DeltaRotation.Yaw * CorrectionStrength;
+	Adjustment.Pitch = DeltaRotation.Pitch * CorrectionStrength;
+	Adjustment.Roll = 0.0f;  // Never adjust roll
+	
+	// Clamp adjustment magnitude to prevent wild camera swings
+	const float MaxYawAdjustment = 15.0f;    // Max 15 degrees yaw per frame
+	const float MaxPitchAdjustment = 7.5f;   // Max 7.5 degrees pitch per frame
+	
+	Adjustment. Yaw = FMath::Clamp(Adjustment. Yaw, -MaxYawAdjustment, MaxYawAdjustment);
+	Adjustment. Pitch = FMath::Clamp(Adjustment. Pitch, -MaxPitchAdjustment, MaxPitchAdjustment);
+	
+	return Adjustment;
+}
+```
+
+---
+
+4. **完整的C04代码块（用于复制粘贴）：**
+
+```cpp
+//========================================
+// C04: Visibility Ensure - Ensures locked target remains visible
+//========================================
+
+/**
+ * Constructor - Initialize visibility tracking state
+ */
+UCameraModule_C04_Visibility_Ensure::UCameraModule_C04_Visibility_Ensure()
+	: TimeSinceTargetVisible(0.0f)
+	, LastVisibleTargetPosition(FVector::ZeroVector)
+{
+}
+
+/**
+ * ShouldActivate - Activate when there is a locked target
+ */
+bool UCameraModule_C04_Visibility_Ensure:: ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (! bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Only activate if there is a locked target
+	if (!Context.InputContext.bHasTarget)
+	{
+		return false;
+	}
+	
+	return true;
+}
+
+/**
+ * Compute - Ensure locked target remains visible on screen
+ */
+bool UCameraModule_C04_Visibility_Ensure::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output
+	OutOutput = CreateBaseOutput();
+	
+	// Validate target exists
+	if (!Context. InputContext.bHasTarget)
+	{
+		TimeSinceTargetVisible = 0.0f;
+		OutOutput.Weight = 0.0f;
+		return false;
+	}
+	
+	// Calculate target point with height offset
+	FVector TargetLocation = Context.InputContext.TargetLocation;
+	float TargetSize = Context.InputContext. TargetSize;
+	float TargetHeightOffset = TargetSize * 0.3f;
+	TargetLocation. Z += TargetHeightOffset;
+	
+	// Check visibility with 15% screen margin
+	const float ScreenMargin = 0.15f;
+	bool bTargetVisible = IsPointVisible(Context, TargetLocation, ScreenMargin);
+	
+	// If visible, reset and return
+	if (bTargetVisible)
+	{
+		TimeSinceTargetVisible = 0.0f;
+		LastVisibleTargetPosition = TargetLocation;
+		
+		OutOutput.RotationOutput = Context.Output.Rotation;
+		OutOutput.bHasRotationOutput = true;
+		OutOutput.Weight = 0.0f;
+		return true;
+	}
+	
+	// Target not visible - track time
+	TimeSinceTargetVisible += Context.DeltaTime;
+	
+	// Grace period before adjusting
+	const float GracePeriod = 0.1f;
+	if (TimeSinceTargetVisible < GracePeriod)
+	{
+		OutOutput. RotationOutput = Context.Output.Rotation;
+		OutOutput.bHasRotationOutput = true;
+		OutOutput. Weight = 0.0f;
+		return true;
+	}
+	
+	// Calculate adjustment
+	FRotator Adjustment = CalculateVisibilityAdjustment(Context, TargetLocation);
+	FRotator AdjustedRotation = Context.Output.Rotation + Adjustment;
+	
+	// Clamp pitch
+	float MinPitch = StateConfig.StateBase.Rotation. MinPitch;
+	float MaxPitch = StateConfig.StateBase.Rotation. MaxPitch;
+	if (MinPitch >= 0.0f) MinPitch = -80.0f;
+	if (MaxPitch <= 0.0f) MaxPitch = 80.0f;
+	
+	AdjustedRotation. Pitch = FMath::Clamp(AdjustedRotation.Pitch, MinPitch, MaxPitch);
+	AdjustedRotation.Roll = 0.0f;
+	
+	// Output with weight based on invisibility duration
+	OutOutput.RotationOutput = AdjustedRotation;
+	OutOutput.bHasRotationOutput = true;
+	
+	const float MaxInvisibleTime = 0.5f;
+	const float MaxWeight = 0.8f;
+	float Weight = (TimeSinceTargetVisible - GracePeriod) / MaxInvisibleTime;
+	Weight = FMath::Clamp(Weight, 0.0f, MaxWeight);
+	OutOutput.Weight = Weight;
+	
+	return true;
+}
+
+/**
+ * IsPointVisible - Check if a world point is visible on screen
+ */
+bool UCameraModule_C04_Visibility_Ensure::IsPointVisible(
+	const FStageExecutionContext& Context, 
+	const FVector& WorldPoint, 
+	float ScreenMargin) const
+{
+	// Get camera manager
+	if (!Context. Manager)
+	{
+		return true;
+	}
+	
+	// Get player controller
+	AActor* Owner = Context.Manager->GetOwner();
+	if (!Owner)
+	{
+		return true;
+	}
+	
+	APawn* Pawn = Cast<APawn>(Owner);
+	if (!Pawn)
+	{
+		return true;
+	}
+	
+	APlayerController* PC = Cast<APlayerController>(Pawn->GetController());
+	if (!PC)
+	{
+		return true;
+	}
+	
+	// Project to screen
+	FVector2D ScreenPosition;
+	bool bProjected = PC->ProjectWorldLocationToScreen(WorldPoint, ScreenPosition, false);
+	
+	if (!bProjected)
+	{
+		return false;  // Behind camera
+	}
+	
+	// Get viewport size
+	int32 ViewportSizeX, ViewportSizeY;
+	PC->GetViewportSize(ViewportSizeX, ViewportSizeY);
+	
+	if (ViewportSizeX <= 0 || ViewportSizeY <= 0)
+	{
+		return true;
+	}
+	
+	// Normalize and check bounds
+	float NormalizedX = ScreenPosition.X / static_cast<float>(ViewportSizeX);
+	float NormalizedY = ScreenPosition. Y / static_cast<float>(ViewportSizeY);
+	
+	bool bWithinX = (NormalizedX >= ScreenMargin) && (NormalizedX <= (1.0f - ScreenMargin));
+	bool bWithinY = (NormalizedY >= ScreenMargin) && (NormalizedY <= (1.0f - ScreenMargin));
+	
+	return bWithinX && bWithinY;
+}
+
+/**
+ * CalculateVisibilityAdjustment - Calculate rotation to bring target into view
+ */
+FRotator UCameraModule_C04_Visibility_Ensure::CalculateVisibilityAdjustment(
+	const FStageExecutionContext& Context, 
+	const FVector& TargetPoint) const
+{
+	FRotator Adjustment = FRotator::ZeroRotator;
+	
+	// Get camera location
+	FVector CameraLocation = Context.Output.FocusPoint;
+	
+	// Calculate direction to target
+	FVector ToTarget = TargetPoint - CameraLocation;
+	
+	if (ToTarget.IsNearlyZero())
+	{
+		return Adjustment;
+	}
+	
+	// Get current and desired rotation
+	FRotator CurrentRotation = Context.Output.Rotation;
+	FRotator DesiredRotation = ToTarget. Rotation();
+	
+	// Calculate delta
+	FRotator DeltaRotation = DesiredRotation - CurrentRotation;
+	DeltaRotation. Normalize();
+	
+	// Apply partial correction
+	const float CorrectionStrength = 0.3f;
+	Adjustment.Yaw = DeltaRotation.Yaw * CorrectionStrength;
+	Adjustment.Pitch = DeltaRotation.Pitch * CorrectionStrength;
+	Adjustment. Roll = 0.0f;
+	
+	// Clamp magnitude
+	const float MaxYawAdjustment = 15.0f;
+	const float MaxPitchAdjustment = 7.5f;
+	
+	Adjustment. Yaw = FMath::Clamp(Adjustment. Yaw, -MaxYawAdjustment, MaxYawAdjustment);
+	Adjustment.Pitch = FMath::Clamp(Adjustment. Pitch, -MaxPitchAdjustment, MaxPitchAdjustment);
+	
+	return Adjustment;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 说明每个步骤的目的
+   - 解释权重计算逻辑
+   - 描述Grace Period的作用
+   - 所有注释英文
+
+2. **格式：**
+   - Tab缩进
+   - 清晰步骤标注
+   - 方法间空两行
+
+3. **防御性编程：**
+   - 空指针检查（Manager, Owner, Pawn, PC）
+   - 零向量检查（ToTarget. IsNearlyZero）
+   - 视口大小验证
+
+【技术说明】
+
+**C04的核心机制：**
+
+### 1. 可见性检测原理
+
+```
+屏幕坐标系：
+┌────────────────────────┐
+│  (0,0)           (1,0) │
+│                        │
+│    ┌──────────────┐    │  ← 有效区域 (15%-85%)
+│    │              │    │
+│    │   Target ●   │    │
+│    │              │    │
+│    └──────────────┘    │
+│                        │
+│  (0,1)           (1,1) │
+└────────────────────────┘
+
+ScreenMargin = 0.15 (15%)
+有效范围:  0.15 到 0.85
+超出此范围 → 需要调整
+```
+
+### 2. 权重渐进系统
+
+```
+目标不可见后的时间线：
+
+0.0s:  目标刚出屏 → Weight = 0 (不调整，等其他系统)
+0.1s: 超过Grace Period → 开始计算Weight
+0.2s: Weight = (0.2-0.1)/0.5 = 0.2
+0.3s: Weight = (0.3-0.1)/0.5 = 0.4
+0.5s: Weight = (0.5-0.1)/0.5 = 0.8 (达到最大)
+
+Weight作用：
+- 决定调整强度
+- 与其他系统的混合权重
+- 避免突然的相机跳动
+```
+
+### 3. 部分校正策略
+
+```cpp
+// 为什么用30%校正而不是100%？
+const float CorrectionStrength = 0.3f;
+
+100%校正问题：
+- 相机会突然转向目标
+- 玩家感觉失去控制
+- 与其他系统冲突
+
+30%校正优点：
+- 平滑渐进的跟踪
+- 每帧只移动一小部分
+- 多帧后自然到达目标
+- 玩家有机会手动调整
+```
+
+### 4. 与Lock-On系统的配合
+
+```
+锁定系统（R05 LockOn_Yaw 等）：
+- 主动跟踪目标
+- 通常能保持目标可见
+- 优先级较低
+
+C04 Visibility Ensure：
+- 被动监控目标可见性
+- 仅在目标出屏时介入
+- 优先级最高（210）
+- 作为最后的安全网
+
+典型场景：
+1. 目标快速移动，Lock-On跟不上
+2. 0.1秒内目标出屏
+3. C04检测到并开始微调
+4. 0.3秒后Weight达到0.4，辅助Lock-On
+5. 目标重新进入视野，C04停止干预
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] 构造函数完整
+   - [ ] ShouldActivate()完整
+   - [ ] Compute()完整
+   - [ ] IsPointVisible()完整
+   - [ ] CalculateVisibilityAdjustment()完整
+
+3. **逻辑正确性：**
+   - [ ] 只在有目标时激活
+   - [ ] 有0.1秒Grace Period
+   - [ ] 权重最大0.8
+   - [ ] 15%屏幕边距
+   - [ ] 30%部分校正
+   - [ ] Pitch调整限制
+
+4. **字段访问：**
+   - [ ] Context.InputContext.bHasTarget
+   - [ ] Context. InputContext.TargetLocation
+   - [ ] Context.InputContext.TargetSize
+   - [ ] Context.Output.Rotation
+   - [ ] Context. Output.FocusPoint
+   - [ ] Context. Manager
+
+【注意事项】
+
+1. **不需要Regenerate**
+
+2. **UE_LOG已移除：**
+   原始PROMPT中的UE_LOG已移除，减少运行时日志。
+
+3. **配置字段简化：**
+   原始PROMPT检查`StateConfig.Module.Constraint.bEnsureTargetVisible`，
+   修改版简化为只检查bHasTarget（总是启用）。
+   如需配置开关，可自行添加。
+
+4. **测试建议：**
+   - 锁定目标后快速转动相机 → 目标应被拉回
+   - 目标快速移动出屏 → 相机应平滑跟随
+   - 确认0.1秒延迟有效
+   - 确认权重渐进平滑
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 3. 7. 5 完成报告
+================================================================================
+
+【修改内容】
+- 文件：CameraModule_Constraint. cpp
+- 修改位置：C04模块
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ 构造函数：初始化2个成员变量
+- ✅ ShouldActivate：有目标时激活
+- ✅ Compute：可见性检测+权重渐进调整
+- ✅ IsPointVisible：屏幕投影检测
+- ✅ CalculateVisibilityAdjustment：部分校正计算
+
+【编译结果】
+- 编译状态：[成功/失败]
+
+【最终状态】
+✅ C04完成，目标可见性保证
+
+================================================================================
+```
+
+【🎉 Phase 3 模块系统完成庆祝】
+
+C04完成后，Constraint模块进度：
+- [x] ✅ 3.7.1:   CameraModule_Constraint.h
+- [x] ✅ 3.7.2:  C01 - Pitch Clamp
+- [x] ✅ 3.7.3: C02 - Distance Clamp
+- [x] ✅ 3.7.4: C03 - FOV Clamp
+- [x] ✅ 3.7.5: C04 - Visibility Ensure
+
+**Constraint模块完成度：4/4 (100%)** 🎊
+
+**Phase 3进度：43/43模块 = 100%** 🎊🎊🎊
+
+**下一步：** Sub-Step 3.7.6 系统集成与验证
+
+================================================================================

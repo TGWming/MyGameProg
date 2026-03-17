@@ -1,0 +1,452 @@
+================================================================================
+任务：创建CameraStage_ModifierApply.cpp - Stage 4骨架实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+实现Stage 4的骨架，完整修改器执行将在Phase 4完成。
+
+【当前进度】
+Phase 2 Step 2.3 Sub-Step 2.3.4 (共190个Sub-Step中的第46个)
+
+前置完成：
+- Phase 1 全部完成 ✅
+- Sub-Step 2.1. 1-2.1.3:  Pipeline骨架 ✅
+- Sub-Step 2.2.1-2.2.4: Stage 1-2 ✅
+- Sub-Step 2.3.1-2.3.2: Stage 3 (ModuleCompute) ✅
+- Sub-Step 2.3.3: CameraStage_ModifierApply.h ✅
+
+【任务目标】
+创建文件：Source/[ProjectName]/Camera/Pipeline/CameraStage_ModifierApply.cpp
+实现Stage 4骨架。
+
+**这是一个. cpp文件，添加后需要重新Generate Visual Studio project files。**
+**这是骨架实现，完整修改器系统在Phase 4完成。**
+**这是第一个可跳过的Stage，默认情况下ShouldExecute()返回false。**
+
+【具体要求】
+
+1. 文件路径：Source/[ProjectName]/Camera/Pipeline/CameraStage_ModifierApply.cpp
+
+2. 完整文件内容：
+
+```cpp
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#include "CameraStage_ModifierApply.h"
+#include "Camera/Core/SoulsCameraManager.h"
+#include "Camera/Core/SoulsCameraRuntimeTypes.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogCameraStage_Modifier, Log, All);
+
+//========================================
+// Constructor 构造函数
+//========================================
+
+UCameraStage_ModifierApply:: UCameraStage_ModifierApply()
+    : ModifierManager(nullptr)
+    , ModifiersUpdatedCount(0)
+    , ModifiersAppliedCount(0)
+    , TotalModifierTimeMs(0.0f)
+    , PlaceholderActiveModifierCount(0)
+{
+}
+
+//========================================
+// ICameraStage Interface 接口实现
+//========================================
+
+bool UCameraStage_ModifierApply:: ShouldExecute(const FStageExecutionContext& Context) const
+{
+    // Skip if no modifiers are active
+    // This stage is optional and can be skipped for performance
+    const bool bHasModifiers = HasActiveModifiers();
+    
+    UE_LOG(LogCameraStage_Modifier, VeryVerbose, TEXT("ShouldExecute:  HasActiveModifiers=%s"),
+        bHasModifiers ? TEXT("Yes") : TEXT("No"));
+    
+    return bHasModifiers;
+}
+
+EStageResult UCameraStage_ModifierApply::Execute(FStageExecutionContext& Context)
+{
+    // Reset statistics
+    ModifiersUpdatedCount = 0;
+    ModifiersAppliedCount = 0;
+    TotalModifierTimeMs = 0.0f;
+
+    // Clear previous modifier outputs
+    Context. ModifierOutputs. Empty();
+
+    const double StartTime = FPlatformTime:: Seconds();
+
+    // Update modifier lifecycles (blend in/out, duration tracking)
+    UpdateModifierLifecycles(Context);
+
+    // Apply modifier effects and collect outputs
+    ApplyModifierEffects(Context);
+
+    TotalModifierTimeMs = static_cast<float>((FPlatformTime::Seconds() - StartTime) * 1000.0);
+
+    UE_LOG(LogCameraStage_Modifier, Verbose, TEXT("Execute: Updated %d, Applied %d modifiers in %. 2fms"),
+        ModifiersUpdatedCount, ModifiersAppliedCount, TotalModifierTimeMs);
+
+    return EStageResult::Success;
+}
+
+void UCameraStage_ModifierApply:: OnPreExecute(const FStageExecutionContext& Context)
+{
+    UE_LOG(LogCameraStage_Modifier, VeryVerbose, TEXT("Stage 4 ModifierApply: PreExecute"));
+}
+
+void UCameraStage_ModifierApply::OnPostExecute(const FStageExecutionContext& Context, EStageResult Result)
+{
+    UE_LOG(LogCameraStage_Modifier, VeryVerbose, TEXT("Stage 4 ModifierApply:  PostExecute - Outputs: %d"),
+        Context.ModifierOutputs. Num());
+}
+
+//========================================
+// Modifier Manager Reference 修改器管理器引用
+//========================================
+
+void UCameraStage_ModifierApply:: SetModifierManager(UCameraModifierManager* InManager)
+{
+    ModifierManager = InManager;
+    
+    if (ModifierManager)
+    {
+        UE_LOG(LogCameraStage_Modifier, Log, TEXT("Modifier manager set successfully"));
+    }
+}
+
+bool UCameraStage_ModifierApply:: HasActiveModifiers() const
+{
+    // Phase 4: Will check ModifierManager for active modifiers
+    // For now, use placeholder count
+    
+    if (ModifierManager)
+    {
+        // TODO Phase 4: return ModifierManager->HasActiveModifiers();
+    }
+    
+    // Placeholder:  return false (no modifiers active by default)
+    return PlaceholderActiveModifierCount > 0;
+}
+
+int32 UCameraStage_ModifierApply::GetActiveModifierCount() const
+{
+    // Phase 4: Will get count from ModifierManager
+    // For now, use placeholder count
+    
+    if (ModifierManager)
+    {
+        // TODO Phase 4: return ModifierManager->GetActiveModifierCount();
+    }
+    
+    return PlaceholderActiveModifierCount;
+}
+
+//========================================
+// Modifier Lifecycle 修改器生命周期
+//========================================
+
+void UCameraStage_ModifierApply::UpdateModifierLifecycles(FStageExecutionContext& Context)
+{
+    // ModifierManager will be implemented in Phase 4
+    // This method updates all modifier states (BlendingIn -> Active -> BlendingOut -> Inactive)
+    
+    if (! ModifierManager)
+    {
+        // Placeholder: No modifiers to update
+        UE_LOG(LogCameraStage_Modifier, VeryVerbose, TEXT("UpdateModifierLifecycles: No modifier manager (placeholder)"));
+        return;
+    }
+
+    // TODO Phase 4: 
+    // TArray<UCameraModifierBase*> AllModifiers;
+    // ModifierManager->GetAllModifiers(AllModifiers);
+    // 
+    // for (UCameraModifierBase* Modifier :  AllModifiers)
+    // {
+    //     UpdateSingleModifierLifecycle(Modifier, Context. DeltaTime);
+    //     ModifiersUpdatedCount++;
+    // }
+}
+
+void UCameraStage_ModifierApply::UpdateSingleModifierLifecycle(UCameraModifierBase* Modifier, float DeltaTime)
+{
+    // Will be implemented in Phase 4
+    // This method updates a single modifier's lifecycle state
+    
+    if (!Modifier)
+    {
+        return;
+    }
+
+    // TODO Phase 4:
+    // Modifier->UpdateLifecycle(DeltaTime);
+    // - Update blend weight based on state (BlendingIn/BlendingOut)
+    // - Update elapsed time
+    // - Transition states when appropriate
+    
+    ModifiersUpdatedCount++;
+}
+
+//========================================
+// Modifier Execution 修改器执行
+//========================================
+
+void UCameraStage_ModifierApply::ApplyModifierEffects(FStageExecutionContext& Context)
+{
+    // ModifierManager will be implemented in Phase 4
+    // For now, execute placeholder methods by category
+    
+    if (!ModifierManager)
+    {
+        // Placeholder: Execute placeholder methods (they won't add outputs)
+        ApplyShakeModifiers(Context);
+        ApplyReactionModifiers(Context);
+        ApplyCinematicModifiers(Context);
+        ApplyZoomModifiers(Context);
+        ApplyEffectModifiers(Context);
+        ApplySpecialModifiers(Context);
+        return;
+    }
+
+    // TODO Phase 4:
+    // TArray<UCameraModifierBase*> ActiveModifiers;
+    // ModifierManager->GetActiveModifiers(ActiveModifiers);
+    // 
+    // for (UCameraModifierBase* Modifier : ActiveModifiers)
+    // {
+    //     ExecuteSingleModifier(Context, Modifier);
+    // }
+}
+
+bool UCameraStage_ModifierApply:: ExecuteSingleModifier(FStageExecutionContext& Context, UCameraModifierBase* Modifier)
+{
+    // Will be implemented in Phase 4
+    // This method executes a single modifier and collects its output
+    
+    if (!Modifier)
+    {
+        return false;
+    }
+
+    // TODO Phase 4:
+    // FModifierOutput Output;
+    // if (Modifier->Compute(Context, Output))
+    // {
+    //     Context. ModifierOutputs. Add(Output);
+    //     ModifiersAppliedCount++;
+    //     return true;
+    // }
+    
+    return false;
+}
+
+//========================================
+// Placeholder Methods 占位方法
+//========================================
+
+void UCameraStage_ModifierApply::ApplyShakeModifiers(FStageExecutionContext& Context)
+{
+    // Placeholder:  Shake modifiers (S01-S05)
+    // Will add camera position/rotation shake in Phase 4
+    
+    UE_LOG(LogCameraStage_Modifier, VeryVerbose, TEXT("ApplyShakeModifiers: Placeholder (Phase 4)"));
+    
+    // Example of what Phase 4 will produce:
+    // FModifierOutput ShakeOutput;
+    // ShakeOutput. ModifierType = ECameraModifierType:: Shake;
+    // ShakeOutput. State = EModifierState::Active;
+    // ShakeOutput.CurrentWeight = 1.0f;
+    // ShakeOutput. PositionEffect = FVector(RandomShakeX, RandomShakeY, RandomShakeZ);
+    // ShakeOutput. RotationEffect = FRotator(RandomPitch, RandomYaw, RandomRoll);
+    // Context.ModifierOutputs.Add(ShakeOutput);
+}
+
+void UCameraStage_ModifierApply::ApplyReactionModifiers(FStageExecutionContext& Context)
+{
+    // Placeholder: Reaction modifiers (R01-R06)
+    // Will add parry/stagger/knockback reactions in Phase 4
+    
+    UE_LOG(LogCameraStage_Modifier, VeryVerbose, TEXT("ApplyReactionModifiers: Placeholder (Phase 4)"));
+}
+
+void UCameraStage_ModifierApply::ApplyCinematicModifiers(FStageExecutionContext& Context)
+{
+    // Placeholder: Cinematic modifiers (C01-C05)
+    // Will add execution/backstab/boss intro camera overrides in Phase 4
+    
+    UE_LOG(LogCameraStage_Modifier, VeryVerbose, TEXT("ApplyCinematicModifiers:  Placeholder (Phase 4)"));
+    
+    // Cinematic modifiers can completely override camera with bOverrideCamera = true
+}
+
+void UCameraStage_ModifierApply::ApplyZoomModifiers(FStageExecutionContext& Context)
+{
+    // Placeholder: Zoom modifiers (Z01-Z04)
+    // Will add FOV/distance pulses for impact moments in Phase 4
+    
+    UE_LOG(LogCameraStage_Modifier, VeryVerbose, TEXT("ApplyZoomModifiers: Placeholder (Phase 4)"));
+}
+
+void UCameraStage_ModifierApply::ApplyEffectModifiers(FStageExecutionContext& Context)
+{
+    // Placeholder: Effect modifiers (E01-E03)
+    // Will add post-process effects (vignette, color tint, saturation) in Phase 4
+    
+    UE_LOG(LogCameraStage_Modifier, VeryVerbose, TEXT("ApplyEffectModifiers:  Placeholder (Phase 4)"));
+}
+
+void UCameraStage_ModifierApply::ApplySpecialModifiers(FStageExecutionContext& Context)
+{
+    // Placeholder:  Special modifiers (X01-X03)
+    // Will add slow-motion, hit-stop, death cam in Phase 4
+    
+    UE_LOG(LogCameraStage_Modifier, VeryVerbose, TEXT("ApplySpecialModifiers: Placeholder (Phase 4)"));
+    
+    // Special modifiers can affect time dilation
+    // Example: SlowMotion modifier sets TimeDilationEffect = 0.3f
+}
+```
+
+3. 代码风格：
+   - 使用专用日志类别 `LogCameraStage_Modifier`
+   - 初始化. h中声明的所有成员变量
+   - 骨架实现，默认无激活修改器
+   - 实现所有6个占位方法并添加示例注释
+   - ShouldExecute()返回false（无激活修改器时跳过）
+   - 注释说明Phase 4的完整实现
+   - 中英文注释分组
+
+【验证标准】
+- 编译通过
+- Stage可执行，默认跳过（HasActiveModifiers()返回false）
+- 日志输出正确
+
+【注意事项】
+- 使用ECameraModifierType和EModifierState（来自SoulsCameraRuntimeTypes.h）
+- **这是骨架实现，Phase 4将替换为真正的修改器执行**
+- **默认情况下ShouldExecute()返回false，Stage被跳过**
+- **这是. cpp文件，添加后需要重新Generate Visual Studio project files**
+
+【输出要求】
+输出完整的CameraStage_ModifierApply.cpp文件代码。
+
+================================================================================
+                        上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+```
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：Sub-Step 2.3.4 创建CameraStage_ModifierApply. cpp - Stage 4骨架实现
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断，例如：完成到ApplyReactionModifiers，未完成ApplyCinematicModifiers]
+
+【已完成内容】
+- 构造函数
+- ICameraStage接口实现
+- Modifier Manager引用方法
+- Modifier Lifecycle方法
+- [列出已完成的占位方法]
+
+【未完成内容】
+- [列出剩余占位方法]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存到CameraStage_ModifierApply.cpp，然后开启新对话。
+
+【编译注意】
+添加. cpp文件后需要：
+1. 右键. uproject → Generate Visual Studio project files
+2. 重新打开. sln
+
+================================================================================
+                    继续任务 - 新对话PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Phase 2 Step 2.3 Sub-Step 2.3.4 续接任务。
+完成CameraStage_ModifierApply.cpp骨架实现。
+
+【前置完成】
+- Phase 1 全部完成 ✅
+- Sub-Step 2.1.1-2.1.3: Pipeline骨架 ✅
+- Sub-Step 2.2.1-2.2.4: Stage 1-2 ✅
+- Sub-Step 2.3.1-2.3.2: Stage 3 ✅
+- Sub-Step 2.3.3: CameraStage_ModifierApply.h ✅
+- Sub-Step 2.3.4 部分完成：
+  - [列出已完成的方法] ✅
+
+【续接任务】
+继续完成CameraStage_ModifierApply.cpp：
+- [列出剩余方法]
+
+【目标文件】
+Source/[ProjectName]/Camera/Pipeline/CameraStage_ModifierApply.cpp
+
+【方法清单】
+- 构造函数
+- ShouldExecute() / Execute() / OnPreExecute() / OnPostExecute()
+- SetModifierManager() / HasActiveModifiers() / GetActiveModifierCount()
+- UpdateModifierLifecycles() / UpdateSingleModifierLifecycle()
+- ApplyModifierEffects() / ExecuteSingleModifier()
+- ApplyShakeModifiers() - 占位
+- ApplyReactionModifiers() - 占位
+- ApplyCinematicModifiers() - 占位
+- ApplyZoomModifiers() - 占位
+- ApplyEffectModifiers() - 占位
+- ApplySpecialModifiers() - 占位
+
+【重要说明】
+- 这是骨架实现，完整修改器系统在Phase 4实现
+- 默认ShouldExecute()返回false（无激活修改器）
+- 这是第一个可跳过的Stage
+
+【编译注意】
+添加.cpp文件后需要：
+1. 右键. uproject → Generate Visual Studio project files
+2. 重新打开.sln
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================
+```
+
+【交接信息要求】
+1. 交接PROMPT必须是**完全自包含**的
+2. 明确标注目标文件和前置依赖
+3. 包含完整方法清单
+4. 标明这是骨架实现且默认被跳过
+5. **强调这是. cpp文件，需要Generate**
+
+================================================================================

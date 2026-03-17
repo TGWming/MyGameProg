@@ -1,0 +1,192 @@
+Sub-Step 5.3.5 Prompt
+
+================================================================================
+任务：在CameraCollision_Response.cpp中添加Res04 Hybrid实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Res04结合拉近和滑动两种响应方式。
+
+【当前进度】
+Phase 5 Step 5.3 Sub-Step 5.3.5 (共190个Sub-Step中的第162个)
+前置完成：5.3.4 Res03实现
+这是Step 5.3的最后一个Sub-Step。
+
+【任务目标】
+在CameraCollision_Response. cpp中添加Res04实现。
+
+【具体要求】
+
+在Res03实现之后添加：
+
+//========================================
+// Res04: Hybrid
+//========================================
+
+UCameraCollision_Res04_Hybrid::UCameraCollision_Res04_Hybrid()
+    : PullInWeight(0.7f)
+    , MaxHybridSlide(50.0f)
+    , ResponseSpeed(400.0f)
+    , CurrentPullIn(0.0f)
+    , CurrentSlide(FVector::ZeroVector)
+{
+}
+
+bool UCameraCollision_Res04_Hybrid::ShouldExecute(const FStageExecutionContext& Context, const FCameraStateConfig& StateConfig) const
+{
+    // Execute when collision is detected and hybrid response is preferred
+    return bIsEnabled && StateConfig.Collision.Response.bEnableHybrid;
+}
+
+bool UCameraCollision_Res04_Hybrid::Execute(
+    const FStageExecutionContext& Context,
+    const FCameraStateConfig& StateConfig,
+    const FCollisionDetectionResult& DetectionResult,
+    FCollisionResponseOutput& OutResponse)
+{
+    if (!DetectionResult. bCollisionDetected)
+    {
+        // Decay both adjustments when no collision
+        bool bStillActive = false;
+
+        if (FMath::Abs(CurrentPullIn) > 0.1f)
+        {
+            CurrentPullIn = FMath::FInterpTo(CurrentPullIn, 0.0f, Context.DeltaTime, ResponseSpeed / 100.0f);
+            bStillActive = true;
+        }
+        else
+        {
+            CurrentPullIn = 0.0f;
+        }
+
+        if (! CurrentSlide.IsNearlyZero())
+        {
+            float DecaySpeed = ResponseSpeed;
+            FVector DecayAmount = CurrentSlide.GetSafeNormal() * DecaySpeed * Context.DeltaTime;
+            
+            if (DecayAmount.Size() >= CurrentSlide.Size())
+            {
+                CurrentSlide = FVector:: ZeroVector;
+            }
+            else
+            {
+                CurrentSlide -= DecayAmount;
+                bStillActive = true;
+            }
+        }
+
+        if (bStillActive)
+        {
+            OutResponse.StrategyType = GetStrategyType();
+            OutResponse. DistanceAdjustment = -CurrentPullIn;
+            OutResponse. PositionAdjustment = CurrentSlide;
+            OutResponse. Weight = 0.5f;
+            OutResponse.Priority = GetPriority();
+        }
+
+        bIsActive = bStillActive;
+        return bStillActive;
+    }
+
+    bIsActive = true;
+
+    // Calculate total adjustment needed
+    float TotalAdjustment = DetectionResult.AdjustmentAmount;
+
+    // Split between pull-in and slide based on weight
+    float TargetPullIn = TotalAdjustment * PullInWeight;
+    float SlideAmount = TotalAdjustment * (1.0f - PullInWeight);
+    SlideAmount = FMath::Min(SlideAmount, MaxHybridSlide);
+
+    // Calculate slide direction
+    FVector CollisionNormal = DetectionResult. CollisionNormal;
+    FVector CameraDirection = -Context. Output.Rotation.Vector();
+
+    // Prefer horizontal slide
+    FVector SlideDirection = FVector::CrossProduct(CollisionNormal, FVector:: UpVector);
+    if (SlideDirection.IsNearlyZero())
+    {
+        SlideDirection = FVector::CrossProduct(CollisionNormal, CameraDirection);
+    }
+    SlideDirection.Normalize();
+
+    // Determine slide direction consistency (prefer same direction as previous frame)
+    if (FVector::DotProduct(SlideDirection, CurrentSlide) < 0.0f && ! CurrentSlide.IsNearlyZero())
+    {
+        SlideDirection = -SlideDirection;
+    }
+
+    FVector TargetSlide = SlideDirection * SlideAmount;
+
+    // Validate slide position
+    FVector FocusPoint = Context.Output. FocusPoint;
+    FVector TestPosition = DetectionResult. SafeLocation + TargetSlide;
+
+    FCollisionQueryParams Params;
+    Params.AddIgnoredActor(Context.InputContext.CharacterActor.Get());
+
+    FHitResult TestHit;
+    bool bSlideBlocked = LineTrace(FocusPoint, TestPosition, TestHit, Params);
+
+    if (bSlideBlocked)
+    {
+        // Reduce slide, increase pull-in
+        TargetSlide *= 0.5f;
+        TargetPullIn += SlideAmount * 0.25f;
+    }
+
+    // Interpolate to targets
+    float MaxChangeThisFrame = ResponseSpeed * Context.DeltaTime;
+
+    // Pull-in interpolation
+    float PullInDelta = TargetPullIn - CurrentPullIn;
+    if (FMath::Abs(PullInDelta) > MaxChangeThisFrame)
+    {
+        CurrentPullIn += FMath::Sign(PullInDelta) * MaxChangeThisFrame;
+    }
+    else
+    {
+        CurrentPullIn = TargetPullIn;
+    }
+
+    // Slide interpolation
+    FVector SlideDelta = TargetSlide - CurrentSlide;
+    if (SlideDelta.Size() > MaxChangeThisFrame)
+    {
+        CurrentSlide += SlideDelta.GetSafeNormal() * MaxChangeThisFrame;
+    }
+    else
+    {
+        CurrentSlide = TargetSlide;
+    }
+
+    // Build response
+    OutResponse.StrategyType = GetStrategyType();
+    OutResponse.DistanceAdjustment = -CurrentPullIn;
+    OutResponse.PositionAdjustment = CurrentSlide;
+    OutResponse.Weight = 1.0f;
+    OutResponse.Priority = GetPriority();
+    OutResponse.bOverride = false;
+
+    UE_LOG(LogTemp, Verbose, TEXT("Res04 Hybrid: PullIn:  %.2f, Slide: (%.2f, %.2f, %.2f)"),
+        CurrentPullIn, CurrentSlide. X, CurrentSlide.Y, CurrentSlide.Z);
+
+    return true;
+}
+
+【Step 5.3 完成验证】
+Response策略（Res01-Res04）全部实现：
+- Res01 PullIn:  拉近响应
+- Res02 Slide: 滑动响应
+- Res03 Rotate:  旋转响应
+- Res04 Hybrid: 混合响应
+
+【验证标准】
+- 编译通过
+- 所有4个Response策略可工作
+- 碰撞响应平滑自然
+
+【输出要求】
+输出Res04的完整实现代码。
+================================================================================

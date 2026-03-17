@@ -1,0 +1,876 @@
+Sub-Step 4.1.1 Prompt
+
+================================================================================
+任务：创建CameraModifierBase. h - 修改器抽象基类声明
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+CameraModifierBase是所有26个相机修改器的抽象基类。
+修改器是事件触发的临时效果，如相机抖动、战斗反馈、过场效果等。
+
+【模块与修改器的区别】
+```
+模块 (Module) - Phase 3已完成：
+├─ 状态驱动（State-based）
+├─ 持续计算相机参数
+├─ 由当前游戏状态决定激活
+└─ 例：跟随角色、锁定目标、距离调整
+
+修改器 (Modifier) - Phase 4开始：
+├─ 事件触发（Event-triggered）
+├─ 临时效果，有生命周期
+├─ 由游戏事件触发
+└─ 例：受击震动、处决镜头、慢动作
+```
+
+【当前进度】
+Phase 4 Step 4. 1 Sub-Step 4.1.1 (共190个Sub-Step中的第108个)
+前置完成：Phase 3 全部完成（39个模块）✅
+
+【任务目标】
+创建文件：Source/[ProjectName]/Public/Camera/Modifiers/CameraModifierBase.h
+定义修改器抽象基类。
+
+【⚠️ 重要提醒】
+
+1. **必须Regenerate：**
+   本Sub-Step创建新的.  h文件和新的目录。
+   创建文件后：
+   - 保存所有文件
+   - 右键. uproject → Generate Visual Studio project files
+   - 重新加载解决方案
+   - 然后编译
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   - 将 `MYPROJECT_API` 替换为实际项目的API宏
+
+4. **枚举依赖检查：**
+   确认以下枚举已在CameraStateEnums.h中定义：
+   - ECameraModifierType（26个修改器类型）
+   - EModifierState（修改器状态：Inactive, BlendIn, Active, BlendOut）
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Public/Camera/Modifiers/CameraModifierBase.h
+
+2. **目录创建：**
+   如果 `Modifiers` 目录不存在，需要先创建：
+   ```
+   Source/[ProjectName]/Public/Camera/Modifiers/
+   Source/[ProjectName]/Private/Camera/Modifiers/
+   ```
+
+3. **完整文件内容：**
+
+```cpp
+// Copyright Epic Games, Inc.  All Rights Reserved. 
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "UObject/NoExportTypes. h"
+#include "Camera/Data/CameraStateEnums.h"
+#include "Camera/Core/SoulsCameraRuntimeTypes.h"
+#include "Camera/Core/SoulsCameraConfig.h"
+#include "CameraModifierBase.generated. h"
+
+// Forward declarations
+class USoulsCameraManager;
+struct FStageExecutionContext;
+
+/**
+ * EModifierCategory - Modifier category for organization
+ * 
+ * Categories help organize the 26 modifiers into logical groups: 
+ * - Shake:  Camera shake effects from various sources
+ * - Reaction: Combat feedback and hit reactions
+ * - Cinematic: Cutscene and special kill cameras
+ * - Zoom: FOV and distance pulse effects
+ * - Effect: Post-process visual effects
+ * - Special: Time manipulation and death cameras
+ */
+UENUM(BlueprintType)
+enum class EModifierCategory : uint8
+{
+	Shake       UMETA(DisplayName = "Shake"),       // S01-S05:  Camera shake effects
+	Reaction    UMETA(DisplayName = "Reaction"),    // R01-R06: Combat feedback reactions
+	Cinematic   UMETA(DisplayName = "Cinematic"),   // C01-C05: Cutscene camera overrides
+	Zoom        UMETA(DisplayName = "Zoom"),        // Z01-Z04: FOV/distance pulses
+	Effect      UMETA(DisplayName = "Effect"),      // E01-E03: Post-process effects
+	Special     UMETA(DisplayName = "Special")      // X01-X03: Slow-mo, hit-stop, death cam
+};
+
+/**
+ * EModifierState - Lifecycle state of a modifier
+ * 
+ * Modifier Lifecycle: 
+ * Inactive -> (Trigger) -> BlendIn -> Active -> (Stop) -> BlendOut -> Inactive
+ *                              ↑                              |
+ *                              └──────── (Re-Trigger) ────────┘
+ */
+UENUM(BlueprintType)
+enum class EModifierState : uint8
+{
+	Inactive    UMETA(DisplayName = "Inactive"),    // Not active, waiting for trigger
+	BlendIn     UMETA(DisplayName = "Blend In"),    // Blending in (weight 0 -> 1)
+	Active      UMETA(DisplayName = "Active"),      // Fully active (weight = 1)
+	BlendOut    UMETA(DisplayName = "Blend Out")    // Blending out (weight 1 -> 0)
+};
+
+/**
+ * FModifierTriggerData - Data passed when activating a modifier
+ * 
+ * Contains all the information needed to configure a modifier when triggered. 
+ * Some fields are optional and only used by specific modifier types. 
+ */
+USTRUCT(BlueprintType)
+struct MYPROJECT_API FModifierTriggerData
+{
+	GENERATED_BODY()
+
+	//========================================
+	// Core Parameters
+	//========================================
+
+	/** Intensity multiplier (0-1 typical, can exceed 1 for stronger effects) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Trigger")
+	float Intensity;
+
+	/** Optional duration override in seconds (0 = use modifier's default) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Trigger")
+	float DurationOverride;
+
+	//========================================
+	// Spatial Parameters (for directional effects)
+	//========================================
+
+	/** Source location for directional effects (e.g., impact point) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Trigger|Spatial")
+	FVector SourceLocation;
+
+	/** Direction of the effect (e.g., hit direction) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Trigger|Spatial")
+	FVector SourceDirection;
+
+	//========================================
+	// Actor References
+	//========================================
+
+	/** Source actor that caused this trigger (e.g., attacker) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Trigger|Actors")
+	TWeakObjectPtr<AActor> SourceActor;
+
+	/** Target actor affected by this trigger (e.g., victim) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Trigger|Actors")
+	TWeakObjectPtr<AActor> TargetActor;
+
+	//========================================
+	// Custom Data
+	//========================================
+
+	/** Custom tag for specific modifier behaviors */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Trigger|Custom")
+	FName CustomTag;
+
+	/** Custom float parameter for modifier-specific use */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Trigger|Custom")
+	float CustomFloat;
+
+	//========================================
+	// Constructor & Factory Methods
+	//========================================
+
+	FModifierTriggerData()
+		: Intensity(1.0f)
+		, DurationOverride(0.0f)
+		, SourceLocation(FVector::ZeroVector)
+		, SourceDirection(FVector::ForwardVector)
+		, SourceActor(nullptr)
+		, TargetActor(nullptr)
+		, CustomTag(NAME_None)
+		, CustomFloat(0.0f)
+	{}
+
+	/** Create simple trigger with just intensity */
+	static FModifierTriggerData MakeSimple(float InIntensity = 1.0f)
+	{
+		FModifierTriggerData Data;
+		Data. Intensity = FMath::Max(0.0f, InIntensity);
+		return Data;
+	}
+
+	/** Create trigger with intensity and duration */
+	static FModifierTriggerData MakeWithDuration(float InIntensity, float InDuration)
+	{
+		FModifierTriggerData Data;
+		Data.Intensity = FMath:: Max(0.0f, InIntensity);
+		Data.DurationOverride = FMath::Max(0.0f, InDuration);
+		return Data;
+	}
+
+	/** Create directional trigger (for impact effects) */
+	static FModifierTriggerData MakeDirectional(float InIntensity, const FVector& InLocation, const FVector& InDirection)
+	{
+		FModifierTriggerData Data;
+		Data.Intensity = FMath::Max(0.0f, InIntensity);
+		Data. SourceLocation = InLocation;
+		Data. SourceDirection = InDirection. GetSafeNormal();
+		return Data;
+	}
+};
+
+/**
+ * FModifierOutput - Output data from a modifier
+ * 
+ * Similar to FModuleOutput but specific to modifiers. 
+ * Contains all the camera adjustments this modifier wants to apply.
+ */
+USTRUCT(BlueprintType)
+struct MYPROJECT_API FModifierOutput
+{
+	GENERATED_BODY()
+
+	//========================================
+	// Transform Outputs
+	//========================================
+
+	/** Position offset to apply */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Output")
+	FVector PositionOffset;
+
+	/** Rotation offset to apply */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Output")
+	FRotator RotationOffset;
+
+	/** Distance offset to apply (additive) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Output")
+	float DistanceOffset;
+
+	/** FOV offset to apply (additive) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Output")
+	float FOVOffset;
+
+	//========================================
+	// Post-Process Outputs
+	//========================================
+
+	/** Vignette intensity (0 = none, 1 = full) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Output|PostProcess")
+	float VignetteIntensity;
+
+	/** Color tint to apply */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Output|PostProcess")
+	FLinearColor ColorTint;
+
+	/** Saturation multiplier (1 = normal, 0 = grayscale) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Output|PostProcess")
+	float Saturation;
+
+	//========================================
+	// Time Manipulation
+	//========================================
+
+	/** Time dilation multiplier (1 = normal, < 1 = slow mo, > 1 = fast) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Output|Time")
+	float TimeDilation;
+
+	//========================================
+	// Flags
+	//========================================
+
+	/** Does this output have valid position data? */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Output|Flags")
+	bool bHasPositionOffset;
+
+	/** Does this output have valid rotation data? */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Output|Flags")
+	bool bHasRotationOffset;
+
+	/** Does this output have valid distance data? */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Output|Flags")
+	bool bHasDistanceOffset;
+
+	/** Does this output have valid FOV data? */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Output|Flags")
+	bool bHasFOVOffset;
+
+	/** Does this output have post-process effects? */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Output|Flags")
+	bool bHasPostProcess;
+
+	/** Does this output have time dilation? */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Output|Flags")
+	bool bHasTimeDilation;
+
+	//========================================
+	// Blending
+	//========================================
+
+	/** Weight for blending (0-1) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Output|Blend")
+	float Weight;
+
+	/** Priority for conflict resolution */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Output|Blend")
+	int32 Priority;
+
+	//========================================
+	// Constructor
+	//========================================
+
+	FModifierOutput()
+		: PositionOffset(FVector::ZeroVector)
+		, RotationOffset(FRotator::ZeroRotator)
+		, DistanceOffset(0.0f)
+		, FOVOffset(0.0f)
+		, VignetteIntensity(0.0f)
+		, ColorTint(FLinearColor::White)
+		, Saturation(1.0f)
+		, TimeDilation(1.0f)
+		, bHasPositionOffset(false)
+		, bHasRotationOffset(false)
+		, bHasDistanceOffset(false)
+		, bHasFOVOffset(false)
+		, bHasPostProcess(false)
+		, bHasTimeDilation(false)
+		, Weight(1.0f)
+		, Priority(100)
+	{}
+
+	/** Reset all values to defaults */
+	void Reset()
+	{
+		*this = FModifierOutput();
+	}
+};
+
+/**
+ * UCameraModifierBase - Abstract base class for all camera modifiers
+ * 
+ * Camera modifiers are event-triggered temporary effects that overlay
+ * on top of the base camera behavior.  Unlike modules (which are state-based),
+ * modifiers have a lifecycle:  Trigger -> BlendIn -> Active -> BlendOut -> Inactive
+ * 
+ * Modifier Categories (26 total):
+ * - Shake (S01-S05): Camera shake from hits, attacks, landing, environment
+ * - Reaction (R01-R06): Combat feedback like parry, stagger, knockback
+ * - Cinematic (C01-C05): Execution, backstab, riposte, boss intro cameras
+ * - Zoom (Z01-Z04): FOV pulses for impact, charge release, skills
+ * - Effect (E01-E03): Post-process effects like low health, status ailments
+ * - Special (X01-X03): Slow motion, hit stop, death camera
+ * 
+ * Key Differences from Modules:
+ * - Modules:  State-based, always computing based on game state
+ * - Modifiers: Event-triggered, temporary effects with lifecycle
+ * 
+ * Lifecycle:
+ * 1. Inactive:  Waiting for Trigger()
+ * 2. BlendIn: Weight increasing from 0 to 1
+ * 3. Active: Full effect, weight = 1
+ * 4. BlendOut: Weight decreasing from 1 to 0
+ * 5. Back to Inactive
+ */
+UCLASS(Abstract, BlueprintType, Blueprintable)
+class MYPROJECT_API UCameraModifierBase : public UObject
+{
+	GENERATED_BODY()
+
+public:
+	/** Constructor */
+	UCameraModifierBase();
+
+	//========================================
+	// Modifier Identity
+	//========================================
+
+	/** Get the modifier type enum value */
+	UFUNCTION(BlueprintPure, Category = "Camera|Modifier")
+	virtual ECameraModifierType GetModifierType() const PURE_VIRTUAL(UCameraModifierBase:: GetModifierType, return ECameraModifierType::None;);
+
+	/** Get the modifier category */
+	UFUNCTION(BlueprintPure, Category = "Camera|Modifier")
+	virtual EModifierCategory GetModifierCategory() const PURE_VIRTUAL(UCameraModifierBase:: GetModifierCategory, return EModifierCategory:: Shake;);
+
+	/** Get human-readable modifier name */
+	UFUNCTION(BlueprintPure, Category = "Camera|Modifier")
+	virtual FName GetModifierName() const;
+
+	/** Get modifier description */
+	UFUNCTION(BlueprintPure, Category = "Camera|Modifier")
+	virtual FString GetModifierDescription() const;
+
+	//========================================
+	// Lifecycle Control
+	//========================================
+
+	/**
+	 * Trigger/activate this modifier
+	 * @param InTriggerData Configuration data for this activation
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Camera|Modifier")
+	virtual void Trigger(const FModifierTriggerData& InTriggerData);
+
+	/**
+	 * Stop this modifier
+	 * @param bImmediate If true, skip blend out and go directly to Inactive
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Camera|Modifier")
+	virtual void Stop(bool bImmediate = false);
+
+	/**
+	 * Update modifier state (called each frame by ModifierManager)
+	 * @param DeltaTime Time since last update
+	 * @param Context Current camera execution context
+	 */
+	virtual void Update(float DeltaTime, const FStageExecutionContext& Context);
+
+	//========================================
+	// State Queries
+	//========================================
+
+	/** Get current modifier state */
+	UFUNCTION(BlueprintPure, Category = "Camera|Modifier")
+	EModifierState GetState() const { return CurrentState; }
+
+	/** Check if modifier is currently active (any state except Inactive) */
+	UFUNCTION(BlueprintPure, Category = "Camera|Modifier")
+	bool IsActive() const { return CurrentState != EModifierState::Inactive; }
+
+	/** Check if modifier is in the Active phase (fully blended in) */
+	UFUNCTION(BlueprintPure, Category = "Camera|Modifier")
+	bool IsFullyActive() const { return CurrentState == EModifierState::Active; }
+
+	/** Check if modifier is blending (in or out) */
+	UFUNCTION(BlueprintPure, Category = "Camera|Modifier")
+	bool IsBlending() const { return CurrentState == EModifierState::BlendIn || CurrentState == EModifierState::BlendOut; }
+
+	//========================================
+	// Output
+	//========================================
+
+	/**
+	 * Get current modifier output
+	 * @param Context Current camera execution context
+	 * @param OutOutput Output structure to fill
+	 * @return True if modifier has valid output
+	 */
+	virtual bool GetOutput(const FStageExecutionContext& Context, FModifierOutput& OutOutput);
+
+	/** Get current blend weight (0-1) */
+	UFUNCTION(BlueprintPure, Category = "Camera|Modifier")
+	float GetCurrentWeight() const { return CurrentWeight; }
+
+	/** Get current intensity (from trigger data, scaled by weight) */
+	UFUNCTION(BlueprintPure, Category = "Camera|Modifier")
+	float GetEffectiveIntensity() const { return CurrentIntensity * CurrentWeight; }
+
+	//========================================
+	// Configuration (Override in derived classes)
+	//========================================
+
+	/** Get default duration in seconds (can be overridden by trigger data) */
+	UFUNCTION(BlueprintPure, Category = "Camera|Modifier|Config")
+	virtual float GetDefaultDuration() const { return 1.0f; }
+
+	/** Get blend in time in seconds */
+	UFUNCTION(BlueprintPure, Category = "Camera|Modifier|Config")
+	virtual float GetBlendInTime() const { return 0.1f; }
+
+	/** Get blend out time in seconds */
+	UFUNCTION(BlueprintPure, Category = "Camera|Modifier|Config")
+	virtual float GetBlendOutTime() const { return 0.2f; }
+
+	/** Can this modifier stack with itself? (multiple instances) */
+	UFUNCTION(BlueprintPure, Category = "Camera|Modifier|Config")
+	virtual bool CanStack() const { return false; }
+
+	/** Should this modifier override camera completely? (for cinematics) */
+	UFUNCTION(BlueprintPure, Category = "Camera|Modifier|Config")
+	virtual bool IsOverrideModifier() const { return false; }
+
+	/** Get priority (higher = processed later, can override others) */
+	UFUNCTION(BlueprintPure, Category = "Camera|Modifier|Config")
+	virtual int32 GetPriority() const { return 100; }
+
+	/** Can this modifier be interrupted by the same type?  */
+	UFUNCTION(BlueprintPure, Category = "Camera|Modifier|Config")
+	virtual bool CanBeInterrupted() const { return true; }
+
+protected:
+	//========================================
+	// Virtual Callbacks for Derived Classes
+	//========================================
+
+	/** Called when modifier is triggered - setup initial state */
+	virtual void OnTriggered(const FModifierTriggerData& InTriggerData);
+
+	/** Called when modifier enters Active state (blend in complete) */
+	virtual void OnActivated();
+
+	/** Called when modifier begins blend out */
+	virtual void OnDeactivating();
+
+	/** Called when modifier becomes fully inactive */
+	virtual void OnDeactivated();
+
+	/**
+	 * Compute the actual effect values - MUST override in derived classes
+	 * This is where the modifier calculates its camera adjustments
+	 * @param DeltaTime Time since last update
+	 * @param Context Current camera execution context
+	 */
+	virtual void ComputeEffect(float DeltaTime, const FStageExecutionContext& Context);
+
+	//========================================
+	// Helper Methods
+	//========================================
+
+	/** Calculate blend weight based on current state and timing */
+	float CalculateBlendWeight() const;
+
+	/** Get time remaining in current phase */
+	float GetTimeRemaining() const;
+
+	/** Transition to a new state */
+	void TransitionToState(EModifierState NewState);
+
+	/** Create base output with current settings */
+	FModifierOutput CreateBaseOutput() const;
+
+	//========================================
+	// State Variables
+	//========================================
+
+	/** Current modifier state */
+	UPROPERTY(BlueprintReadOnly, Category = "State")
+	EModifierState CurrentState;
+
+	/** Current blend weight (0-1) */
+	UPROPERTY(BlueprintReadOnly, Category = "State")
+	float CurrentWeight;
+
+	/** Time spent in current state */
+	UPROPERTY(BlueprintReadOnly, Category = "State")
+	float StateTime;
+
+	/** Total time this modifier has been active (across all states) */
+	UPROPERTY(BlueprintReadOnly, Category = "State")
+	float TotalActiveTime;
+
+	/** Active duration for this trigger (from trigger data or default) */
+	UPROPERTY(BlueprintReadOnly, Category = "State")
+	float ActiveDuration;
+
+	/** Current intensity (from trigger data) */
+	UPROPERTY(BlueprintReadOnly, Category = "State")
+	float CurrentIntensity;
+
+	/** Stored trigger data for this activation */
+	UPROPERTY(BlueprintReadOnly, Category = "State")
+	FModifierTriggerData TriggerData;
+
+	//========================================
+	// Effect Values (set by derived classes in ComputeEffect)
+	//========================================
+
+	/** Position offset effect */
+	UPROPERTY(BlueprintReadOnly, Category = "Effect")
+	FVector PositionEffect;
+
+	/** Rotation offset effect */
+	UPROPERTY(BlueprintReadOnly, Category = "Effect")
+	FRotator RotationEffect;
+
+	/** Distance offset effect */
+	UPROPERTY(BlueprintReadOnly, Category = "Effect")
+	float DistanceEffect;
+
+	/** FOV offset effect */
+	UPROPERTY(BlueprintReadOnly, Category = "Effect")
+	float FOVEffect;
+
+	/** Vignette intensity effect (0-1) */
+	UPROPERTY(BlueprintReadOnly, Category = "Effect")
+	float VignetteEffect;
+
+	/** Color tint effect */
+	UPROPERTY(BlueprintReadOnly, Category = "Effect")
+	FLinearColor ColorTintEffect;
+
+	/** Saturation effect (1 = normal) */
+	UPROPERTY(BlueprintReadOnly, Category = "Effect")
+	float SaturationEffect;
+
+	/** Time dilation effect (1 = normal) */
+	UPROPERTY(BlueprintReadOnly, Category = "Effect")
+	float TimeDilationEffect;
+
+	//========================================
+	// Reference to Manager
+	//========================================
+
+	/** Reference to camera manager (set when added to ModifierManager) */
+	UPROPERTY()
+	USoulsCameraManager* CameraManager;
+
+	/** Allow ModifierManager to set the camera manager reference */
+	friend class UCameraModifierManager;
+};
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 每个枚举值都有UMETA和注释
+   - 每个结构体字段都有分类
+   - 类文档注释详细说明生命周期
+   - 所有注释使用英文
+
+2. **格式：**
+   - 使用Tab缩进
+   - 清晰的区块分隔
+   - UPROPERTY分类清晰
+
+3. **设计原则：**
+   - 抽象基类使用PURE_VIRTUAL
+   - 派生类回调使用virtual
+   - 状态管理封装在基类
+
+【技术说明】
+
+### 1. 修改器生命周期
+
+```
+              Trigger()
+                  ↓
+    ┌─────────────────────────────┐
+    │   Inactive → BlendIn → Active → BlendOut → Inactive
+    │                ↑                    ↑
+    │                └── Re-Trigger ──────┘
+    │                     (if CanBeInterrupted)
+    └─────────────────────────────┘
+
+状态时间：
+- BlendIn: GetBlendInTime() 秒
+- Active: ActiveDuration 秒
+- BlendOut: GetBlendOutTime() 秒
+
+权重变化：
+- BlendIn: 0 → 1
+- Active: 1
+- BlendOut:  1 → 0
+```
+
+### 2. 修改器类别分布
+
+```
+26个修改器分布：
+
+Shake (5个):
+├─ S01: Hit_Light
+├─ S02: Hit_Heavy
+├─ S03: Attack_Swing
+├─ S04: Landing_Impact
+└─ S05: Environment_Rumble
+
+Reaction (6个):
+├─ R01: Parry_Success
+├─ R02: Parry_Perfect
+├─ R03: Stagger
+├─ R04: Knockback
+├─ R05: Guard_Break
+└─ R06: Poise_Break
+
+Cinematic (5个):
+├─ C01: Execution
+├─ C02: Backstab
+├─ C03: Riposte
+├─ C04: Boss_Intro
+└─ C05: Boss_Death
+
+Zoom (4个):
+├─ Z01: Impact_Pulse
+├─ Z02: Charge_Release
+├─ Z03: Skill_Activation
+└─ Z04: Critical_Hit
+
+Effect (3个):
+├─ E01: Low_Health
+├─ E02: Status_Poison
+└─ E03: Status_Bleed
+
+Special (3个):
+├─ X01: Slow_Motion
+├─ X02: Hit_Stop
+└─ X03: Death_Camera
+```
+
+### 3. FModifierOutput vs FModuleOutput
+
+| 特性 | FModuleOutput | FModifierOutput |
+|------|--------------|-----------------|
+| 来源 | 模块计算 | 修改器效果 |
+| 生命周期 | 每帧计算 | 触发后持续 |
+| 后处理 | 无 | 有（Vignette等） |
+| 时间控制 | 无 | 有（TimeDilation） |
+| 权重 | 由BlendPolicy决定 | 由生命周期决定 |
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 目录创建完成
+   - [ ] Regenerate执行
+   - [ ] 编译通过（0 errors）
+   - [ ] 文件编码UTF-8 Without BOM
+   - [ ] 所有注释英文
+
+2. **代码完整性：**
+   - [ ] EModifierCategory枚举定义（6个值）
+   - [ ] EModifierState枚举定义（4个值）
+   - [ ] FModifierTriggerData结构完整
+   - [ ] FModifierOutput结构完整
+   - [ ] UCameraModifierBase类完整
+
+3. **抽象类验证：**
+   - [ ] UCLASS标记为Abstract
+   - [ ] GetModifierType()为PURE_VIRTUAL
+   - [ ] GetModifierCategory()为PURE_VIRTUAL
+
+4. **枚举依赖检查：**
+   确认CameraStateEnums.h中已有：
+   - [ ] ECameraModifierType枚举（26个修改器类型 + None）
+
+**⚠️ 如果ECameraModifierType不存在，需要先添加。**
+
+【注意事项】
+
+1. **目录创建：**
+   首次创建Modifiers目录，需要手动创建：
+   - Public/Camera/Modifiers/
+   - Private/Camera/Modifiers/
+
+2. **API宏替换：**
+   ```cpp
+   class MYPROJECT_API UCameraModifierBase ... 
+   ```
+
+3. **前向声明：**
+   如果FStageExecutionContext在SoulsCameraRuntimeTypes.h中，
+   确保include顺序正确。
+
+4. **ECameraModifierType依赖：**
+   如果CameraStateEnums. h中没有ECameraModifierType，
+   需要先添加（见附录）。
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 4. 1.1 完成报告
+================================================================================
+
+【创建的目录】
+- Public/Camera/Modifiers/
+- Private/Camera/Modifiers/
+
+【创建的文件】
+- 文件：CameraModifierBase. h
+- 路径：Source/[ProjectName]/Public/Camera/Modifiers/
+- 代码行数：约XXX行
+
+【定义的内容】
+- ✅ EModifierCategory枚举（6个值）
+- ✅ EModifierState枚举（4个值）
+- ✅ FModifierTriggerData结构
+- ✅ FModifierOutput结构
+- ✅ UCameraModifierBase抽象类
+
+【编译结果】
+- Regenerate：[已执行]
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【依赖检查】
+- ECameraModifierType：[存在/需添加]
+
+【最终状态】
+✅ Phase 4修改器基类创建完成
+
+================================================================================
+```
+
+【附录：ECameraModifierType枚举】
+
+如果CameraStateEnums. h中没有ECameraModifierType，需要添加：
+
+```cpp
+/**
+ * ECameraModifierType - All camera modifier types
+ */
+UENUM(BlueprintType)
+enum class ECameraModifierType :  uint8
+{
+	None = 0                        UMETA(DisplayName = "None"),
+	
+	// Shake Modifiers (S01-S05)
+	Modifier_S01_Hit_Light          UMETA(DisplayName = "S01 Hit Light"),
+	Modifier_S02_Hit_Heavy          UMETA(DisplayName = "S02 Hit Heavy"),
+	Modifier_S03_Attack_Swing       UMETA(DisplayName = "S03 Attack Swing"),
+	Modifier_S04_Landing_Impact     UMETA(DisplayName = "S04 Landing Impact"),
+	Modifier_S05_Environment_Rumble UMETA(DisplayName = "S05 Environment Rumble"),
+	
+	// Reaction Modifiers (R01-R06)
+	Modifier_R01_Parry_Success      UMETA(DisplayName = "R01 Parry Success"),
+	Modifier_R02_Parry_Perfect      UMETA(DisplayName = "R02 Parry Perfect"),
+	Modifier_R03_Stagger            UMETA(DisplayName = "R03 Stagger"),
+	Modifier_R04_Knockback          UMETA(DisplayName = "R04 Knockback"),
+	Modifier_R05_Guard_Break        UMETA(DisplayName = "R05 Guard Break"),
+	Modifier_R06_Poise_Break        UMETA(DisplayName = "R06 Poise Break"),
+	
+	// Cinematic Modifiers (C01-C05)
+	Modifier_C01_Execution          UMETA(DisplayName = "C01 Execution"),
+	Modifier_C02_Backstab           UMETA(DisplayName = "C02 Backstab"),
+	Modifier_C03_Riposte            UMETA(DisplayName = "C03 Riposte"),
+	Modifier_C04_Boss_Intro         UMETA(DisplayName = "C04 Boss Intro"),
+	Modifier_C05_Boss_Death         UMETA(DisplayName = "C05 Boss Death"),
+	
+	// Zoom Modifiers (Z01-Z04)
+	Modifier_Z01_Impact_Pulse       UMETA(DisplayName = "Z01 Impact Pulse"),
+	Modifier_Z02_Charge_Release     UMETA(DisplayName = "Z02 Charge Release"),
+	Modifier_Z03_Skill_Activation   UMETA(DisplayName = "Z03 Skill Activation"),
+	Modifier_Z04_Critical_Hit       UMETA(DisplayName = "Z04 Critical Hit"),
+	
+	// Effect Modifiers (E01-E03)
+	Modifier_E01_Low_Health         UMETA(DisplayName = "E01 Low Health"),
+	Modifier_E02_Status_Poison      UMETA(DisplayName = "E02 Status Poison"),
+	Modifier_E03_Status_Bleed       UMETA(DisplayName = "E03 Status Bleed"),
+	
+	// Special Modifiers (X01-X03)
+	Modifier_X01_Slow_Motion        UMETA(DisplayName = "X01 Slow Motion"),
+	Modifier_X02_Hit_Stop           UMETA(DisplayName = "X02 Hit Stop"),
+	Modifier_X03_Death_Camera       UMETA(DisplayName = "X03 Death Camera"),
+	
+	MAX                             UMETA(Hidden)
+};
+```
+
+【后续步骤】
+
+CameraModifierBase.h完成后：
+- [ ] ⏳ 4.1.2: CameraModifierBase.cpp（下一步）
+- [ ] ⏳ 4.1.3: CameraModifierManager.h
+- [ ] ⏳ 4.1.4: CameraModifierManager.cpp
+- [ ] ⏳ 4.2:  Shake修改器（S01-S05）
+- [ ] ⏳ ... 
+
+**Phase 4进度：0/26修改器 = 0%（基础设施阶段）**
+
+================================================================================

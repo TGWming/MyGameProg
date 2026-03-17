@@ -1,0 +1,571 @@
+Sub-Step 6.1.2 Prompt
+
+================================================================================
+任务：验证并更新SoulsCameraConfig. h - 确保碰撞配置结构体完整
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Phase 5完成后，需要验证配置结构体是否包含所有碰撞系统需要的配置。
+
+【当前进度】
+Phase 6 Step 6. 1 Sub-Step 6.1.2 (共190个Sub-Step中的第176个)
+前置完成：6.1.1 枚举验证完成
+
+【任务目标】
+验证并更新文件：`Source/MyProject/Public/Camera/Core/SoulsCameraConfig.h`
+确保碰撞相关配置结构体完整，与Phase 5实现的20个碰撞策略匹配。
+
+【⚠️ 重要说明】
+
+1. **本Sub-Step是验证和补充，不是重写**
+   - 首先检查现有配置结构体
+   - 只添加缺失的部分
+   - 保留已有的正确配置
+
+2. **碰撞策略数量与配置对应：**
+   - Detection: 4个策略 (D01-D04)
+   - Response: 5个策略 (RS01-RS05)
+   - Occlusion: 4个策略 (OC01-OC04)
+   - Recovery: 3个策略 (RC01-RC03)
+   - Special: 4个策略 (SP01-SP04)
+
+3. **不需要ECameraRecoveryMode枚举**
+   - Recovery策略是独立的类，不是模式枚举
+   - 配置中使用bool开关控制启用哪个策略
+
+【具体要求】
+
+---
+
+## 第一步：验证现有配置结构
+
+检查 `SoulsCameraConfig. h` 中是否存在以下碰撞相关配置结构体：
+
+- [ ] `FCollisionDetectionConfig`
+- [ ] `FCollisionResponseConfig`
+- [ ] `FCollisionOcclusionConfig`
+- [ ] `FCollisionRecoveryConfig`
+- [ ] `FCollisionSpecialConfig`
+- [ ] `FCollisionConfig` (包含以上所有子配置)
+
+---
+
+## 第二步：验证或添加 FCollisionDetectionConfig
+
+**对应策略：D01-D04**
+
+```cpp
+/**
+ * FCollisionDetectionConfig
+ * Configuration for collision detection strategies (D01-D04)
+ */
+USTRUCT(BlueprintType)
+struct MYPROJECT_API FCollisionDetectionConfig
+{
+    GENERATED_BODY()
+
+    FCollisionDetectionConfig()
+        : CameraProbeRadius(12.0f)
+        , MinCameraDistance(50.0f)
+        , CollisionPadding(10.0f)
+        , bEnableD01_SingleRay(false)
+        , bEnableD02_SphereSweep(true)
+        , bEnableD03_MultiRay(false)
+        , bEnableD04_MultiSphereSweep(false)
+        , MultiRayCount(5)
+        , PredictionTime(0.1f)
+    {}
+
+    /** Radius for sphere sweep detection (D02, D04) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection", meta = (ClampMin = "1.0", ClampMax = "50. 0"))
+    float CameraProbeRadius;
+
+    /** Minimum allowed camera distance */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection", meta = (ClampMin = "10.0", ClampMax = "200.0"))
+    float MinCameraDistance;
+
+    /** Extra padding from collision surfaces */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection", meta = (ClampMin = "0.0", ClampMax = "50.0"))
+    float CollisionPadding;
+
+    /** Enable D01: Single Ray detection */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection|Strategies")
+    bool bEnableD01_SingleRay;
+
+    /** Enable D02: Sphere Sweep detection (default) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection|Strategies")
+    bool bEnableD02_SphereSweep;
+
+    /** Enable D03: Multi Ray detection */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection|Strategies")
+    bool bEnableD03_MultiRay;
+
+    /** Enable D04: Multi Sphere Sweep detection */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection|Strategies")
+    bool bEnableD04_MultiSphereSweep;
+
+    /** Number of rays for multi-ray detection (D03) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection", meta = (ClampMin = "3", ClampMax = "12", EditCondition = "bEnableD03_MultiRay"))
+    int32 MultiRayCount;
+
+    /** Time ahead to predict camera position (D04) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detection", meta = (ClampMin = "0.0", ClampMax = "0.5"))
+    float PredictionTime;
+};
+```
+
+---
+
+## 第三步：验证或添加 FCollisionResponseConfig
+
+**对应策略：RS01-RS05**
+
+```cpp
+/**
+ * FCollisionResponseConfig
+ * Configuration for collision response strategies (RS01-RS05)
+ */
+USTRUCT(BlueprintType)
+struct MYPROJECT_API FCollisionResponseConfig
+{
+    GENERATED_BODY()
+
+    FCollisionResponseConfig()
+        : bEnableRS01_PullIn(true)
+        , bEnableRS02_Slide(false)
+        , bEnableRS03_Orbit(false)
+        , bEnableRS04_FOVCompensate(false)
+        , bEnableRS05_InstantSnap(false)
+        , PullInSpeed(500.0f)
+        , PullInAcceleration(2000.0f)
+        , SlideSpeed(300.0f)
+        , OrbitSpeed(90.0f)
+        , MaxFOVCompensation(15.0f)
+        , SoftCollisionDistance(100.0f)
+        , bUseInstantPullIn(false)
+    {}
+
+    /** Enable RS01: Pull In response (default) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Response|Strategies")
+    bool bEnableRS01_PullIn;
+
+    /** Enable RS02: Slide response */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Response|Strategies")
+    bool bEnableRS02_Slide;
+
+    /** Enable RS03: Orbit response */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Response|Strategies")
+    bool bEnableRS03_Orbit;
+
+    /** Enable RS04: FOV Compensate response */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Response|Strategies")
+    bool bEnableRS04_FOVCompensate;
+
+    /** Enable RS05: Instant Snap response */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Response|Strategies")
+    bool bEnableRS05_InstantSnap;
+
+    /** Speed of pull-in movement (RS01) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Response", meta = (ClampMin = "100.0", ClampMax = "2000.0"))
+    float PullInSpeed;
+
+    /** Acceleration of pull-in movement (RS01) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Response", meta = (ClampMin = "500.0", ClampMax = "5000.0"))
+    float PullInAcceleration;
+
+    /** Speed of slide movement (RS02) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Response", meta = (ClampMin = "50.0", ClampMax = "1000.0"))
+    float SlideSpeed;
+
+    /** Speed of orbit rotation in degrees/sec (RS03) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Response", meta = (ClampMin = "30.0", ClampMax = "180.0"))
+    float OrbitSpeed;
+
+    /** Maximum FOV increase for compensation (RS04) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Response", meta = (ClampMin = "0.0", ClampMax = "30.0"))
+    float MaxFOVCompensation;
+
+    /** Distance at which soft collision begins */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Response", meta = (ClampMin = "50.0", ClampMax = "300.0"))
+    float SoftCollisionDistance;
+
+    /** Use instant pull-in without interpolation (RS05) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Response")
+    bool bUseInstantPullIn;
+};
+```
+
+---
+
+## 第四步：验证或添加 FCollisionOcclusionConfig
+
+**对应策略：OC01-OC04**
+
+```cpp
+/**
+ * FCollisionOcclusionConfig
+ * Configuration for occlusion handling strategies (OC01-OC04)
+ */
+USTRUCT(BlueprintType)
+struct MYPROJECT_API FCollisionOcclusionConfig
+{
+    GENERATED_BODY()
+
+    FCollisionOcclusionConfig()
+        : bEnableOC01_FadeOut(true)
+        , bEnableOC02_Hide(false)
+        , bEnableOC03_PullInFurther(false)
+        , bEnableOC04_DitherFade(false)
+        , FadeStartDistance(150.0f)
+        , FadeEndDistance(50.0f)
+        , TargetFadeOpacity(0.3f)
+        , FadeSpeed(8.0f)
+        , bCheckCharacterOcclusion(true)
+        , bCheckTargetOcclusion(true)
+        , OcclusionCheckInterval(0.05f)
+        , HideDelay(0.1f)
+        , AdditionalPullInDistance(50.0f)
+    {}
+
+    /** Enable OC01: Fade Out occlusion (default) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Occlusion|Strategies")
+    bool bEnableOC01_FadeOut;
+
+    /** Enable OC02: Hide occlusion */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Occlusion|Strategies")
+    bool bEnableOC02_Hide;
+
+    /** Enable OC03: Pull In Further occlusion */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Occlusion|Strategies")
+    bool bEnableOC03_PullInFurther;
+
+    /** Enable OC04: Dither Fade occlusion */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Occlusion|Strategies")
+    bool bEnableOC04_DitherFade;
+
+    /** Distance at which fade begins (OC01, OC04) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Occlusion", meta = (ClampMin = "50.0", ClampMax = "300.0"))
+    float FadeStartDistance;
+
+    /** Distance at which fade is complete (OC01, OC04) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Occlusion", meta = (ClampMin = "10.0", ClampMax = "150.0"))
+    float FadeEndDistance;
+
+    /** Target opacity when fully faded (OC01, OC04) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Occlusion", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float TargetFadeOpacity;
+
+    /** Speed of fade transition */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Occlusion", meta = (ClampMin = "1.0", ClampMax = "20.0"))
+    float FadeSpeed;
+
+    /** Check if character is occluded */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Occlusion")
+    bool bCheckCharacterOcclusion;
+
+    /** Check if lock-on target is occluded */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Occlusion")
+    bool bCheckTargetOcclusion;
+
+    /** Interval between occlusion checks (seconds) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Occlusion", meta = (ClampMin = "0.01", ClampMax = "0.2"))
+    float OcclusionCheckInterval;
+
+    /** Delay before hiding occluding objects (OC02) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Occlusion", meta = (ClampMin = "0.0", ClampMax = "0.5"))
+    float HideDelay;
+
+    /** Additional distance to pull in when occluded (OC03) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Occlusion", meta = (ClampMin = "10.0", ClampMax = "150.0"))
+    float AdditionalPullInDistance;
+};
+```
+
+---
+
+## 第五步：验证或添加 FCollisionRecoveryConfig
+
+**对应策略：RC01-RC03**
+
+```cpp
+/**
+ * FCollisionRecoveryConfig
+ * Configuration for collision recovery strategies (RC01-RC03)
+ */
+USTRUCT(BlueprintType)
+struct MYPROJECT_API FCollisionRecoveryConfig
+{
+    GENERATED_BODY()
+
+    FCollisionRecoveryConfig()
+        : bEnableRC01_DelayedRecovery(true)
+        , bEnableRC02_SmoothRecovery(false)
+        , bEnableRC03_StepRecovery(false)
+        , RecoveryDelay(0.2f)
+        , RecoverySpeed(200.0f)
+        , RecoveryAcceleration(500.0f)
+        , StepDistance(20.0f)
+        , StepInterval(0.1f)
+        , bVerifyRecoveryPath(true)
+    {}
+
+    /** Enable RC01: Delayed Recovery (default) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Recovery|Strategies")
+    bool bEnableRC01_DelayedRecovery;
+
+    /** Enable RC02: Smooth Recovery */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Recovery|Strategies")
+    bool bEnableRC02_SmoothRecovery;
+
+    /** Enable RC03: Step Recovery */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Recovery|Strategies")
+    bool bEnableRC03_StepRecovery;
+
+    /** Delay before recovery begins (RC01) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Recovery", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float RecoveryDelay;
+
+    /** Speed of recovery movement */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Recovery", meta = (ClampMin = "50.0", ClampMax = "1000.0"))
+    float RecoverySpeed;
+
+    /** Acceleration during recovery */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Recovery", meta = (ClampMin = "100.0", ClampMax = "2000.0"))
+    float RecoveryAcceleration;
+
+    /** Distance per step (RC03) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Recovery", meta = (ClampMin = "5.0", ClampMax = "50.0"))
+    float StepDistance;
+
+    /** Time between steps (RC03) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Recovery", meta = (ClampMin = "0.05", ClampMax = "0.5"))
+    float StepInterval;
+
+    /** Verify path is clear before recovering */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Recovery")
+    bool bVerifyRecoveryPath;
+};
+```
+
+---
+
+## 第六步：验证或添加 FCollisionSpecialConfig
+
+**对应策略：SP01-SP04**
+
+```cpp
+/**
+ * FCollisionSpecialConfig
+ * Configuration for special collision strategies (SP01-SP04)
+ */
+USTRUCT(BlueprintType)
+struct MYPROJECT_API FCollisionSpecialConfig
+{
+    GENERATED_BODY()
+
+    FCollisionSpecialConfig()
+        : bEnableSP01_TightSpace(true)
+        , bEnableSP02_LowCeiling(true)
+        , bEnableSP03_CliffEdge(true)
+        , bEnableSP04_CornerCase(true)
+        , TightSpaceThreshold(100.0f)
+        , TightSpaceFOVBonus(15.0f)
+        , LowCeilingThreshold(150.0f)
+        , MaxPitchAdjustment(20.0f)
+        , CliffHeightThreshold(200.0f)
+        , EdgePullbackDistance(50.0f)
+        , CornerCheckDistance(100.0f)
+        , MaxCornerEscapeDistance(50.0f)
+    {}
+
+    /** Enable SP01: Tight Space handling */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special|Strategies")
+    bool bEnableSP01_TightSpace;
+
+    /** Enable SP02: Low Ceiling handling */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special|Strategies")
+    bool bEnableSP02_LowCeiling;
+
+    /** Enable SP03: Cliff Edge handling */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special|Strategies")
+    bool bEnableSP03_CliffEdge;
+
+    /** Enable SP04: Corner Case handling */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special|Strategies")
+    bool bEnableSP04_CornerCase;
+
+    /** Distance threshold for tight space detection (SP01) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special", meta = (ClampMin = "50.0", ClampMax = "200.0"))
+    float TightSpaceThreshold;
+
+    /** FOV increase in tight spaces (SP01) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special", meta = (ClampMin = "0.0", ClampMax = "30.0"))
+    float TightSpaceFOVBonus;
+
+    /** Minimum overhead clearance for low ceiling (SP02) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special", meta = (ClampMin = "50.0", ClampMax = "300.0"))
+    float LowCeilingThreshold;
+
+    /** Maximum pitch adjustment for low ceiling (SP02) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special", meta = (ClampMin = "0.0", ClampMax = "45.0"))
+    float MaxPitchAdjustment;
+
+    /** Height difference for cliff detection (SP03) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special", meta = (ClampMin = "50.0", ClampMax = "500.0"))
+    float CliffHeightThreshold;
+
+    /** Distance to pull back from edge (SP03) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special", meta = (ClampMin = "0.0", ClampMax = "100.0"))
+    float EdgePullbackDistance;
+
+    /** Distance to check for corner walls (SP04) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special", meta = (ClampMin = "50.0", ClampMax = "200.0"))
+    float CornerCheckDistance;
+
+    /** Maximum escape distance from corner (SP04) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special", meta = (ClampMin = "10.0", ClampMax = "100.0"))
+    float MaxCornerEscapeDistance;
+};
+```
+
+---
+
+## 第七步：验证或添加 FCollisionConfig（主配置）
+
+```cpp
+/**
+ * FCollisionConfig
+ * Master collision configuration containing all sub-configs
+ */
+USTRUCT(BlueprintType)
+struct MYPROJECT_API FCollisionConfig
+{
+    GENERATED_BODY()
+
+    /** Detection configuration (D01-D04) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Collision")
+    FCollisionDetectionConfig Detection;
+
+    /** Response configuration (RS01-RS05) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Collision")
+    FCollisionResponseConfig Response;
+
+    /** Occlusion configuration (OC01-OC04) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Collision")
+    FCollisionOcclusionConfig Occlusion;
+
+    /** Recovery configuration (RC01-RC03) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Collision")
+    FCollisionRecoveryConfig Recovery;
+
+    /** Special configuration (SP01-SP04) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Collision")
+    FCollisionSpecialConfig Special;
+
+    /** Enable collision system */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Collision")
+    bool bEnableCollision = true;
+
+    /** Draw debug visualization */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Collision|Debug")
+    bool bDrawDebug = false;
+
+    /** Debug draw duration */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Collision|Debug", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float DebugDrawDuration = 0.0f;
+};
+```
+
+---
+
+## 第八步：确保FCameraStateConfig包含FCollisionConfig
+
+```cpp
+USTRUCT(BlueprintType)
+struct MYPROJECT_API FCameraStateConfig
+{
+    GENERATED_BODY()
+
+    // ... 其他现有成员保持不变 ... 
+
+    /** Collision configuration for this state */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Collision")
+    FCollisionConfig Collision;
+};
+```
+
+---
+
+【验证标准】
+
+1. **配置完整性：**
+   - [ ] FCollisionDetectionConfig 包含 D01-D04 开关
+   - [ ] FCollisionResponseConfig 包含 RS01-RS05 开关
+   - [ ] FCollisionOcclusionConfig 包含 OC01-OC04 开关
+   - [ ] FCollisionRecoveryConfig 包含 RC01-RC03 开关
+   - [ ] FCollisionSpecialConfig 包含 SP01-SP04 开关
+   - [ ] FCollisionConfig 包含所有子配置
+
+2. **编译验证：**
+   - [ ] 编译通过（0 errors）
+   - [ ] 无类型未定义错误
+
+---
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 6.1.2 完成报告
+================================================================================
+
+【验证结果】
+
+文件位置：
+Source/MyProject/Public/Camera/Core/SoulsCameraConfig.h
+
+【配置结构体状态】
+
+FCollisionDetectionConfig:
+- 状态：[✅ 存在且完整 / ⚠️ 需要更新 / ❌ 不存在]
+- D01-D04开关：[✅ / ❌]
+
+FCollisionResponseConfig:
+- 状态：[✅ 存在且完整 / ⚠️ 需要更新 / ❌ 不存在]
+- RS01-RS05开关：[✅ / ❌]
+
+FCollisionOcclusionConfig: 
+- 状态：[✅ 存在且完整 / ⚠️ 需要更新 / ❌ 不存在]
+- OC01-OC04开关：[✅ / ❌]
+
+FCollisionRecoveryConfig: 
+- 状态：[✅ 存在且完整 / ⚠️ 需要更新 / ❌ 不存在]
+- RC01-RC03开关：[✅ / ❌]
+
+FCollisionSpecialConfig:
+- 状态：[✅ 存在且完整 / ⚠️ 需要更新 / ❌ 不存在]
+- SP01-SP04开关：[✅ / ❌]
+
+FCollisionConfig:
+- 状态：[✅ 存在且完整 / ⚠️ 需要更新 / ❌ 不存在]
+- 包含所有子配置：[✅ / ❌]
+
+FCameraStateConfig. Collision:
+- 状态：[✅ 存在 / ❌ 不存在]
+
+【更新内容】
+[如果有更新，列出添加/修改的内容]
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【最终状态】
+✅ 所有碰撞配置结构体完整
+
+================================================================================
+```
+
+================================================================================

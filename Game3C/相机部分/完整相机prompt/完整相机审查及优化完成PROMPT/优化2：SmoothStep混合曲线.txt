@@ -1,0 +1,118 @@
+优化2：SmoothStep混合曲线
+
+================================================================================
+任务：修改器混合曲线优化（线性→SmoothStep）
+================================================================================
+
+【背景】
+当前CameraModifierBase的CalculateBlendWeight()使用线性插值计算混合权重，
+导致修改器效果的开始和结束略显生硬。改为SmoothStep可使过渡更自然平滑。
+
+【修改范围】
+仅修改1个文件：CameraModifierBase.cpp
+
+【具体修改】
+
+## CameraModifierBase. cpp
+
+找到CalculateBlendWeight()函数或计算权重的相关代码，修改如下：
+
+### 修改前（线性插值）：
+```cpp
+float UCameraModifierBase:: CalculateBlendWeight() const
+{
+    switch (CurrentState)
+    {
+        case EModifierState::BlendingIn:
+        {
+            float Alpha = StateTime / GetBlendInTime();
+            return FMath::Clamp(Alpha, 0.0f, 1.0f);
+        }
+        
+        case EModifierState::Active:
+            return 1.0f;
+            
+        case EModifierState:: BlendingOut: 
+        {
+            float Alpha = StateTime / GetBlendOutTime();
+            return FMath:: Clamp(1.0f - Alpha, 0.0f, 1.0f);
+        }
+        
+        default: 
+            return 0.0f;
+    }
+}
+```
+
+### 修改后（SmoothStep）：
+```cpp
+float UCameraModifierBase:: CalculateBlendWeight() const
+{
+    switch (CurrentState)
+    {
+        case EModifierState::BlendingIn:
+        {
+            float RawAlpha = StateTime / GetBlendInTime();
+            float ClampedAlpha = FMath:: Clamp(RawAlpha, 0.0f, 1.0f);
+            // 使用SmoothStep使过渡更平滑
+            return FMath::SmoothStep(0.0f, 1.0f, ClampedAlpha);
+        }
+        
+        case EModifierState::Active: 
+            return 1.0f;
+            
+        case EModifierState::BlendingOut: 
+        {
+            float RawAlpha = StateTime / GetBlendOutTime();
+            float ClampedAlpha = FMath::Clamp(RawAlpha, 0.0f, 1.0f);
+            // 使用SmoothStep使过渡更平滑
+            return FMath::SmoothStep(0.0f, 1.0f, 1.0f - ClampedAlpha);
+        }
+        
+        default: 
+            return 0.0f;
+    }
+}
+```
+
+### 关于FMath::SmoothStep
+
+如果项目使用的UE4版本没有FMath::SmoothStep，可以手动实现：
+
+```cpp
+// 在文件顶部或类内添加辅助函数
+float SmoothStepValue(float Edge0, float Edge1, float X)
+{
+    float T = FMath::Clamp((X - Edge0) / (Edge1 - Edge0), 0.0f, 1.0f);
+    return T * T * (3.0f - 2.0f * T);
+}
+
+// 然后使用：
+return SmoothStepValue(0.0f, 1.0f, ClampedAlpha);
+```
+
+【效果对比】
+```
+线性插值：      0% ──────────────────→ 100%
+                   （匀速，开始结束突兀）
+
+SmoothStep：    0% ─╮              ╭─→ 100%
+                    ╰──────────────╯
+                   （慢→快→慢，自然过渡）
+```
+
+【验证要求】
+1. 编译通过，无错误无警告
+2. 所有26个修改器的混合过渡更平滑
+3. 触发震动效果，观察开始和结束是否更自然
+4. 触发低血量效果，观察渐入是否更平滑
+5. 功能无变化，仅视觉感受更好
+
+【输出要求】
+完成后请报告：
+1. 修改的具体代码位置
+2. 使用的SmoothStep实现方式
+3. 编译结果
+4. 建议的测试场景
+
+================================================================================

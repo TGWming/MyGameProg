@@ -1,0 +1,538 @@
+在我的UE4.27工程中创建相机系统完整参数数据表的C++结构体代码。
+
+## 任务要求
+
+### 任务1：创建 CameraCompletedParameterEnums.h
+路径：Source/[YourProject]/Public/Camera/Data/CameraCompletedParameterEnums.h
+
+创建必要的枚举类型：
+- EParameterGroup - 参数主分组枚举（StateBase, Module, Modifier, Collision, Global）
+- EParameterSubGroup - 参数子分组枚举（Identity, Distance, FOV, Rotation, Offset, Lag, Transition, Collision, AutoCorrect, Flag, Hierarchy, Position, Constraint, Shake, Reaction, Cinematic, Zoom, Effect, Special, Detection, Response, Occlusion, Recovery, Limits, Smoothing, Debug, LockOn, Performance）
+- EParameterDataType - 数据类型枚举（Name, String, Int32, Float, Bool, BlendType, CollisionChannel, CurveFloat）
+
+### 任务2：创建 CameraCompletedParameterData.h
+路径：Source/[YourProject]/Public/Camera/Data/CameraCompletedParameterData.h
+
+创建一个继承自 FTableRowBase 的 USTRUCT，用于从CSV导入相机系统完整参数配置数据
+
+CSV文件结构如下（共122行数据）：
+- ParamID:  FString - 参数唯一标识符，格式如 "CompleteParameter_A01"（注意：此字段会自动成为RowName，结构体中可保留但导入后为空）
+- ParamName:  FName - 参数名称，作为程序引用标识符（如 StateName, BaseDistance）
+- ChineseName: FString - 中文显示名称
+- Group: FString - 主分组（StateBase, Module, Modifier, Collision, Global）
+- SubGroup: FString - 子分组（Identity, Distance, FOV, Rotation, Offset, Lag, Transition, Collision, AutoCorrect, Flag, Hierarchy, Position, Constraint, Shake, Reaction, Cinematic, Zoom, Effect, Special, Detection, Response, Occlusion, Recovery, Limits, Smoothing, Debug, LockOn, Performance）
+- DataType: FString - 数据类型（FName, FString, int32, float, bool, EBlendType, ECollisionChannel, UCurveFloat*）
+- DefaultValue: FString - 默认值（数值、字符串、布尔、枚举、指针等）
+- MinValue: FString - 最小值（"-"表示无限制）
+- MaxValue: FString - 最大值（"-"表示无限制）
+- Unit: FString - 单位（如 "cm", "degree", "1/s", "s", "Hz", "-"）
+- Description: FString - 参数描述
+- RelatedTo: FString - 关联项（如 "All", "Explore", "LockOn/Boss", "P01/P02"）
+
+结构体命名为 `FCameraCompletedParameterRow`
+
+添加必要的UPROPERTY宏，确保：
+- 所有属性可在编辑器中编辑（EditAnywhere）
+- 所有属性可在蓝图中读取（BlueprintReadWrite）
+- 添加Category分组便于编辑器查看
+
+**重要：结构体中不要包含任何UFUNCTION函数，只保留UPROPERTY属性和构造函数**
+
+### 任务3：创建 CameraCompletedParameterHelpers.h
+路径：Source/[YourProject]/Public/Camera/Data/CameraCompletedParameterHelpers.h
+
+创建 UCameraCompletedParameterHelpers 类，继承自 UBlueprintFunctionLibrary
+
+所有函数标记为 UFUNCTION(BlueprintPure, Category = "Camera|CompletedParameter")
+所有函数为静态函数
+
+需要实现的函数：
+```cpp
+// 值解析函数
+static float GetDefaultValueAsFloat(const FCameraCompletedParameterRow& Row);
+static int32 GetDefaultValueAsInt(const FCameraCompletedParameterRow& Row);
+static bool GetDefaultValueAsBool(const FCameraCompletedParameterRow& Row);
+static FName GetDefaultValueAsName(const FCameraCompletedParameterRow& Row);
+static FString GetDefaultValueAsString(const FCameraCompletedParameterRow& Row);
+
+// 限制检查函数
+static bool HasMinLimit(const FCameraCompletedParameterRow& Row);
+static bool HasMaxLimit(const FCameraCompletedParameterRow& Row);
+static float GetMinValueAsFloat(const FCameraCompletedParameterRow& Row);
+static float GetMaxValueAsFloat(const FCameraCompletedParameterRow& Row);
+
+// 数组解析函数
+static TArray<FString> GetRelatedToArray(const FCameraCompletedParameterRow& Row);
+
+// 类型检查函数
+static bool IsFloatType(const FCameraCompletedParameterRow& Row);
+static bool IsIntType(const FCameraCompletedParameterRow& Row);
+static bool IsBoolType(const FCameraCompletedParameterRow& Row);
+static bool IsNameType(const FCameraCompletedParameterRow& Row);
+static bool IsStringType(const FCameraCompletedParameterRow& Row);
+static bool IsEnumType(const FCameraCompletedParameterRow& Row);
+static bool IsPointerType(const FCameraCompletedParameterRow& Row);
+
+// 分组检查函数
+static bool IsStateBaseGroup(const FCameraCompletedParameterRow& Row);
+static bool IsModuleGroup(const FCameraCompletedParameterRow& Row);
+static bool IsModifierGroup(const FCameraCompletedParameterRow& Row);
+static bool IsCollisionGroup(const FCameraCompletedParameterRow& Row);
+static bool IsGlobalGroup(const FCameraCompletedParameterRow& Row);
+
+// 枚举转换函数
+static EParameterGroup StringToGroup(const FString& GroupString);
+static FString GroupToString(EParameterGroup Group);
+static EParameterSubGroup StringToSubGroup(const FString& SubGroupString);
+static FString SubGroupToString(EParameterSubGroup SubGroup);
+static EParameterDataType StringToDataType(const FString& DataTypeString);
+static FString DataTypeToString(EParameterDataType DataType);
+
+// 中文显示名称
+static FString GetGroupDisplayName(EParameterGroup Group);
+static FString GetSubGroupDisplayName(EParameterSubGroup SubGroup);
+static FString GetDataTypeDisplayName(EParameterDataType DataType);
+```
+
+### 任务4：创建 CameraCompletedParameterHelpers.cpp
+路径：Source/[YourProject]/Private/Camera/Data/CameraCompletedParameterHelpers.cpp
+
+实现头文件中声明的所有静态函数
+
+## 函数实现逻辑参考
+
+### GetDefaultValueAsFloat
+```cpp
+if (Row.DefaultValue.IsEmpty() || Row.DefaultValue == TEXT("-") || Row.DefaultValue == TEXT("nullptr"))
+{
+    return 0.0f;
+}
+return FCString::Atof(*Row.DefaultValue);
+```
+
+### GetDefaultValueAsInt
+```cpp
+if (Row.DefaultValue.IsEmpty() || Row.DefaultValue == TEXT("-") || Row.DefaultValue == TEXT("nullptr"))
+{
+    return 0;
+}
+return FCString::Atoi(*Row.DefaultValue);
+```
+
+### GetDefaultValueAsBool
+```cpp
+return Row.DefaultValue. Equals(TEXT("true"), ESearchCase:: IgnoreCase);
+```
+
+### GetDefaultValueAsName
+```cpp
+if (Row.DefaultValue.IsEmpty() || Row.DefaultValue == TEXT("-") || Row.DefaultValue == TEXT("nullptr"))
+{
+    return NAME_None;
+}
+return FName(*Row.DefaultValue);
+```
+
+### GetDefaultValueAsString
+```cpp
+return Row.DefaultValue;
+```
+
+### HasMinLimit
+```cpp
+return ! Row.MinValue.IsEmpty() && Row.MinValue != TEXT("-");
+```
+
+### HasMaxLimit
+```cpp
+return !Row.MaxValue.IsEmpty() && Row.MaxValue != TEXT("-");
+```
+
+### GetMinValueAsFloat
+```cpp
+if (!HasMinLimit(Row))
+{
+    return TNumericLimits<float>:: Lowest();
+}
+return FCString::Atof(*Row. MinValue);
+```
+
+### GetMaxValueAsFloat
+```cpp
+if (!HasMaxLimit(Row))
+{
+    return TNumericLimits<float>::Max();
+}
+return FCString:: Atof(*Row.MaxValue);
+```
+
+### GetRelatedToArray
+```cpp
+TArray<FString> Result;
+
+if (Row.RelatedTo. IsEmpty() || Row.RelatedTo == TEXT("-"))
+{
+    return Result;
+}
+
+Row.RelatedTo.ParseIntoArray(Result, TEXT("/"), true);
+
+for (FString& Str : Result)
+{
+    Str = Str.TrimStartAndEnd();
+}
+
+return Result;
+```
+
+### IsFloatType
+```cpp
+return Row.DataType. Equals(TEXT("float"), ESearchCase::IgnoreCase);
+```
+
+### IsIntType
+```cpp
+return Row.DataType. Equals(TEXT("int32"), ESearchCase::IgnoreCase) ||
+       Row.DataType. Equals(TEXT("int"), ESearchCase::IgnoreCase);
+```
+
+### IsBoolType
+```cpp
+return Row.DataType.Equals(TEXT("bool"), ESearchCase::IgnoreCase);
+```
+
+### IsNameType
+```cpp
+return Row.DataType.Equals(TEXT("FName"), ESearchCase::IgnoreCase);
+```
+
+### IsStringType
+```cpp
+return Row.DataType.Equals(TEXT("FString"), ESearchCase::IgnoreCase);
+```
+
+### IsEnumType
+```cpp
+return Row.DataType.StartsWith(TEXT("E"), ESearchCase::CaseSensitive) ||
+       Row.DataType. Contains(TEXT("Blend"), ESearchCase::IgnoreCase) ||
+       Row.DataType. Contains(TEXT("Channel"), ESearchCase::IgnoreCase);
+```
+
+### IsPointerType
+```cpp
+return Row.DataType.Contains(TEXT("*"), ESearchCase::IgnoreCase) ||
+       Row.DataType. StartsWith(TEXT("U"), ESearchCase::CaseSensitive) ||
+       Row.DefaultValue. Equals(TEXT("nullptr"), ESearchCase::IgnoreCase);
+```
+
+### IsStateBaseGroup
+```cpp
+return Row.Group.Equals(TEXT("StateBase"), ESearchCase::IgnoreCase);
+```
+
+### IsModuleGroup
+```cpp
+return Row.Group.Equals(TEXT("Module"), ESearchCase::IgnoreCase);
+```
+
+### IsModifierGroup
+```cpp
+return Row.Group.Equals(TEXT("Modifier"), ESearchCase::IgnoreCase);
+```
+
+### IsCollisionGroup
+```cpp
+return Row.Group.Equals(TEXT("Collision"), ESearchCase::IgnoreCase);
+```
+
+### IsGlobalGroup
+```cpp
+return Row.Group.Equals(TEXT("Global"), ESearchCase::IgnoreCase);
+```
+
+### StringToGroup
+```cpp
+FString TrimmedString = GroupString.TrimStartAndEnd();
+if (TrimmedString. Equals(TEXT("StateBase"), ESearchCase::IgnoreCase))
+    return EParameterGroup::StateBase;
+else if (TrimmedString.Equals(TEXT("Module"), ESearchCase::IgnoreCase))
+    return EParameterGroup::Module;
+else if (TrimmedString.Equals(TEXT("Modifier"), ESearchCase::IgnoreCase))
+    return EParameterGroup::Modifier;
+else if (TrimmedString.Equals(TEXT("Collision"), ESearchCase::IgnoreCase))
+    return EParameterGroup::Collision;
+else if (TrimmedString. Equals(TEXT("Global"), ESearchCase::IgnoreCase))
+    return EParameterGroup::Global;
+return EParameterGroup::StateBase;
+```
+
+### GroupToString
+```cpp
+switch (Group)
+{
+case EParameterGroup::StateBase:   return TEXT("StateBase");
+case EParameterGroup::Module:     return TEXT("Module");
+case EParameterGroup::Modifier:   return TEXT("Modifier");
+case EParameterGroup::Collision:   return TEXT("Collision");
+case EParameterGroup::Global:      return TEXT("Global");
+default:  return TEXT("StateBase");
+}
+```
+
+### StringToSubGroup
+```cpp
+FString TrimmedString = SubGroupString.TrimStartAndEnd();
+if (TrimmedString. Equals(TEXT("Identity"), ESearchCase::IgnoreCase))
+    return EParameterSubGroup::Identity;
+else if (TrimmedString.Equals(TEXT("Distance"), ESearchCase::IgnoreCase))
+    return EParameterSubGroup::Distance;
+else if (TrimmedString. Equals(TEXT("FOV"), ESearchCase::IgnoreCase))
+    return EParameterSubGroup::FOV;
+else if (TrimmedString.Equals(TEXT("Rotation"), ESearchCase::IgnoreCase))
+    return EParameterSubGroup:: Rotation;
+else if (TrimmedString.Equals(TEXT("Offset"), ESearchCase::IgnoreCase))
+    return EParameterSubGroup::Offset;
+else if (TrimmedString.Equals(TEXT("Lag"), ESearchCase::IgnoreCase))
+    return EParameterSubGroup::Lag;
+else if (TrimmedString. Equals(TEXT("Transition"), ESearchCase::IgnoreCase))
+    return EParameterSubGroup::Transition;
+else if (TrimmedString.Equals(TEXT("Collision"), ESearchCase::IgnoreCase))
+    return EParameterSubGroup:: Collision;
+else if (TrimmedString.Equals(TEXT("AutoCorrect"), ESearchCase::IgnoreCase))
+    return EParameterSubGroup::AutoCorrect;
+else if (TrimmedString.Equals(TEXT("Flag"), ESearchCase::IgnoreCase))
+    return EParameterSubGroup::Flag;
+else if (TrimmedString. Equals(TEXT("Hierarchy"), ESearchCase::IgnoreCase))
+    return EParameterSubGroup::Hierarchy;
+else if (TrimmedString.Equals(TEXT("Position"), ESearchCase::IgnoreCase))
+    return EParameterSubGroup::Position;
+else if (TrimmedString.Equals(TEXT("Constraint"), ESearchCase::IgnoreCase))
+    return EParameterSubGroup::Constraint;
+else if (TrimmedString. Equals(TEXT("Shake"), ESearchCase::IgnoreCase))
+    return EParameterSubGroup::Shake;
+else if (TrimmedString.Equals(TEXT("Reaction"), ESearchCase::IgnoreCase))
+    return EParameterSubGroup:: Reaction;
+else if (TrimmedString.Equals(TEXT("Cinematic"), ESearchCase::IgnoreCase))
+    return EParameterSubGroup:: Cinematic;
+else if (TrimmedString.Equals(TEXT("Zoom"), ESearchCase::IgnoreCase))
+    return EParameterSubGroup::Zoom;
+else if (TrimmedString.Equals(TEXT("Effect"), ESearchCase::IgnoreCase))
+    return EParameterSubGroup::Effect;
+else if (TrimmedString.Equals(TEXT("Special"), ESearchCase::IgnoreCase))
+    return EParameterSubGroup::Special;
+else if (TrimmedString.Equals(TEXT("Detection"), ESearchCase::IgnoreCase))
+    return EParameterSubGroup::Detection;
+else if (TrimmedString.Equals(TEXT("Response"), ESearchCase::IgnoreCase))
+    return EParameterSubGroup::Response;
+else if (TrimmedString.Equals(TEXT("Occlusion"), ESearchCase::IgnoreCase))
+    return EParameterSubGroup::Occlusion;
+else if (TrimmedString.Equals(TEXT("Recovery"), ESearchCase::IgnoreCase))
+    return EParameterSubGroup::Recovery;
+else if (TrimmedString. Equals(TEXT("Limits"), ESearchCase::IgnoreCase))
+    return EParameterSubGroup::Limits;
+else if (TrimmedString.Equals(TEXT("Smoothing"), ESearchCase::IgnoreCase))
+    return EParameterSubGroup::Smoothing;
+else if (TrimmedString.Equals(TEXT("Debug"), ESearchCase::IgnoreCase))
+    return EParameterSubGroup::Debug;
+else if (TrimmedString.Equals(TEXT("LockOn"), ESearchCase::IgnoreCase))
+    return EParameterSubGroup::LockOn;
+else if (TrimmedString.Equals(TEXT("Performance"), ESearchCase::IgnoreCase))
+    return EParameterSubGroup::Performance;
+return EParameterSubGroup::Identity;
+```
+
+### SubGroupToString
+```cpp
+switch (SubGroup)
+{
+case EParameterSubGroup::Identity:    return TEXT("Identity");
+case EParameterSubGroup::Distance:    return TEXT("Distance");
+case EParameterSubGroup::FOV:          return TEXT("FOV");
+case EParameterSubGroup:: Rotation:    return TEXT("Rotation");
+case EParameterSubGroup::Offset:      return TEXT("Offset");
+case EParameterSubGroup::Lag:         return TEXT("Lag");
+case EParameterSubGroup::Transition:   return TEXT("Transition");
+case EParameterSubGroup:: Collision:   return TEXT("Collision");
+case EParameterSubGroup::AutoCorrect: return TEXT("AutoCorrect");
+case EParameterSubGroup::Flag:        return TEXT("Flag");
+case EParameterSubGroup::Hierarchy:   return TEXT("Hierarchy");
+case EParameterSubGroup::Position:     return TEXT("Position");
+case EParameterSubGroup::Constraint:  return TEXT("Constraint");
+case EParameterSubGroup:: Shake:       return TEXT("Shake");
+case EParameterSubGroup::Reaction:    return TEXT("Reaction");
+case EParameterSubGroup::Cinematic:    return TEXT("Cinematic");
+case EParameterSubGroup:: Zoom:        return TEXT("Zoom");
+case EParameterSubGroup::Effect:      return TEXT("Effect");
+case EParameterSubGroup::Special:     return TEXT("Special");
+case EParameterSubGroup::Detection:   return TEXT("Detection");
+case EParameterSubGroup::Response:    return TEXT("Response");
+case EParameterSubGroup::Occlusion:   return TEXT("Occlusion");
+case EParameterSubGroup:: Recovery:    return TEXT("Recovery");
+case EParameterSubGroup:: Limits:      return TEXT("Limits");
+case EParameterSubGroup::Smoothing:   return TEXT("Smoothing");
+case EParameterSubGroup::Debug:        return TEXT("Debug");
+case EParameterSubGroup::LockOn:      return TEXT("LockOn");
+case EParameterSubGroup::Performance: return TEXT("Performance");
+default: return TEXT("Identity");
+}
+```
+
+### StringToDataType
+```cpp
+FString TrimmedString = DataTypeString.TrimStartAndEnd();
+if (TrimmedString. Equals(TEXT("FName"), ESearchCase::IgnoreCase))
+    return EParameterDataType::Name;
+else if (TrimmedString.Equals(TEXT("FString"), ESearchCase::IgnoreCase))
+    return EParameterDataType::String;
+else if (TrimmedString. Equals(TEXT("int32"), ESearchCase::IgnoreCase) ||
+         TrimmedString. Equals(TEXT("int"), ESearchCase::IgnoreCase))
+    return EParameterDataType::Int32;
+else if (TrimmedString.Equals(TEXT("float"), ESearchCase::IgnoreCase))
+    return EParameterDataType::Float;
+else if (TrimmedString.Equals(TEXT("bool"), ESearchCase::IgnoreCase))
+    return EParameterDataType::Bool;
+else if (TrimmedString.Contains(TEXT("EBlendType"), ESearchCase::IgnoreCase))
+    return EParameterDataType::BlendType;
+else if (TrimmedString.Contains(TEXT("ECollisionChannel"), ESearchCase::IgnoreCase))
+    return EParameterDataType::CollisionChannel;
+else if (TrimmedString.Contains(TEXT("UCurveFloat"), ESearchCase::IgnoreCase) ||
+         TrimmedString. Contains(TEXT("*"), ESearchCase::IgnoreCase))
+    return EParameterDataType::CurveFloat;
+return EParameterDataType::Float;
+```
+
+### DataTypeToString
+```cpp
+switch (DataType)
+{
+case EParameterDataType::Name:             return TEXT("FName");
+case EParameterDataType::String:            return TEXT("FString");
+case EParameterDataType::Int32:            return TEXT("int32");
+case EParameterDataType::Float:            return TEXT("float");
+case EParameterDataType::Bool:             return TEXT("bool");
+case EParameterDataType::BlendType:        return TEXT("EBlendType");
+case EParameterDataType::CollisionChannel: return TEXT("ECollisionChannel");
+case EParameterDataType::CurveFloat:       return TEXT("UCurveFloat*");
+default: return TEXT("float");
+}
+```
+
+### GetGroupDisplayName
+```cpp
+switch (Group)
+{
+case EParameterGroup::StateBase:  return TEXT("状态基础");
+case EParameterGroup::Module:     return TEXT("模块");
+case EParameterGroup::Modifier:   return TEXT("修改器");
+case EParameterGroup::Collision:  return TEXT("碰撞");
+case EParameterGroup::Global:     return TEXT("全局");
+default: return TEXT("未知");
+}
+```
+
+### GetSubGroupDisplayName
+```cpp
+switch (SubGroup)
+{
+case EParameterSubGroup:: Identity:    return TEXT("标识");
+case EParameterSubGroup::Distance:    return TEXT("距离");
+case EParameterSubGroup::FOV:         return TEXT("视野");
+case EParameterSubGroup::Rotation:     return TEXT("旋转");
+case EParameterSubGroup:: Offset:      return TEXT("偏移");
+case EParameterSubGroup::Lag:         return TEXT("惯性");
+case EParameterSubGroup::Transition:  return TEXT("过渡");
+case EParameterSubGroup::Collision:   return TEXT("碰撞");
+case EParameterSubGroup::AutoCorrect: return TEXT("自动修正");
+case EParameterSubGroup::Flag:         return TEXT("标志");
+case EParameterSubGroup::Hierarchy:   return TEXT("层级");
+case EParameterSubGroup::Position:    return TEXT("位置");
+case EParameterSubGroup::Constraint:  return TEXT("约束");
+case EParameterSubGroup::Shake:       return TEXT("震动");
+case EParameterSubGroup::Reaction:    return TEXT("反应");
+case EParameterSubGroup::Cinematic:    return TEXT("过场");
+case EParameterSubGroup:: Zoom:        return TEXT("缩放");
+case EParameterSubGroup::Effect:      return TEXT("效果");
+case EParameterSubGroup::Special:     return TEXT("特殊");
+case EParameterSubGroup::Detection:   return TEXT("检测");
+case EParameterSubGroup::Response:    return TEXT("响应");
+case EParameterSubGroup::Occlusion:   return TEXT("遮挡");
+case EParameterSubGroup::Recovery:    return TEXT("恢复");
+case EParameterSubGroup::Limits:      return TEXT("限制");
+case EParameterSubGroup::Smoothing:   return TEXT("平滑");
+case EParameterSubGroup::Debug:        return TEXT("调试");
+case EParameterSubGroup::LockOn:      return TEXT("锁定");
+case EParameterSubGroup::Performance: return TEXT("性能");
+default: return TEXT("未知");
+}
+```
+
+### GetDataTypeDisplayName
+```cpp
+switch (DataType)
+{
+case EParameterDataType::Name:             return TEXT("名称");
+case EParameterDataType::String:           return TEXT("字符串");
+case EParameterDataType::Int32:            return TEXT("整数");
+case EParameterDataType::Float:             return TEXT("浮点数");
+case EParameterDataType::Bool:             return TEXT("布尔值");
+case EParameterDataType::BlendType:         return TEXT("混合类型");
+case EParameterDataType::CollisionChannel: return TEXT("碰撞通道");
+case EParameterDataType::CurveFloat:       return TEXT("浮点曲线");
+default: return TEXT("未知");
+}
+```
+
+## 特殊处理说明
+- ParamID前缀说明：
+  - A开头（A01-A34）：StateBase（状态基础）参数
+  - B开头（B01-B32）：Module（模块）参数
+  - C开头（C01-C58）：Modifier（修改器）参数
+  - D开头（D01-D30）：Collision（碰撞）参数
+  - E开头（E01-E22）：Global（全局）参数
+- DataType特殊类型：
+  - EBlendType：混合类型枚举，如"SmoothStep"
+  - ECollisionChannel：UE4引擎碰撞通道枚举，如"ECC_Camera"
+  - UCurveFloat*：曲线资产指针，如"nullptr"
+- MinValue/MaxValue为"-"时表示无限制
+- RelatedTo使用斜杠"/"分隔多个关联项
+
+## 示例数据参考
+```csv
+CompleteParameter_A01,StateName,状态名称,StateBase,Identity,FName,-,-,-,-,状态的唯一标识名,All
+CompleteParameter_A04,BaseDistance,基础距离,StateBase,Distance,float,400.0,100,1500,cm,该状态的基础相机距离,All
+CompleteParameter_A24,BlendType,混合类型,StateBase,Transition,EBlendType,SmoothStep,-,-,-,状态切换的混合曲线类型,All
+CompleteParameter_A25,bEnableCollision,启用碰撞检测,StateBase,Collision,bool,true,-,-,-,是否启用相机碰撞检测,All
+CompleteParameter_B14,TargetSizeCurve,目标体型曲线,Module,Distance,UCurveFloat*,nullptr,-,-,-,目标体型调整距离曲线,D02
+CompleteParameter_C01,ShakeFrequency_Light,轻击震动频率,Modifier,Shake,float,25.0,10. 0,50.0,Hz,轻击震动的频率,S01
+CompleteParameter_D04,CollisionChannel,碰撞通道,Collision,Detection,ECollisionChannel,ECC_Camera,-,-,-,相机碰撞检测通道,All
+CompleteParameter_E01,GlobalMinDistance,全局最小距离,Global,Limits,float,50.0,20.0,150.0,cm,相机距离绝对最小值,All
+CompleteParameter_E11,bEnableDebugDraw,启用调试绘制,Global,Debug,bool,false,-,-,-,是否启用相机调试可视化,Debug
+```
+
+## 文件结构
+```
+Source/[YourProject]/
+├── Public/
+│   └── Camera/
+│       └── Data/
+│           ├── CameraCompletedParameterData.h         (新建-结构体)
+│           ├── CameraCompletedParameterEnums.h        (新建-枚举)
+│           └── CameraCompletedParameterHelpers.h      (新建-辅助类)
+└── Private/
+    └── Camera/
+        └── Data/
+            └── CameraCompletedParameterHelpers.cpp    (新建-辅助类实现)
+```
+
+## UE4.27 兼容性要求
+1. 使用 GENERATED_BODY() 宏
+2. #include "XXX.generated.h" 必须是最后一个include
+3. 辅助类继承 UBlueprintFunctionLibrary
+4. 所有蓝图可调用函数使用 UFUNCTION(BlueprintPure, Category = "...")
+5. **USTRUCT结构体中不能包含UFUNCTION，只能有UPROPERTY和普通构造函数**
+
+## 完成后验证
+1. 编译项目确认无错误
+2. 确认FCameraCompletedParameterRow结构体中不包含任何UFUNCTION（只有UPROPERTY属性和构造函数）
+3. 确认UCameraCompletedParameterHelpers类包含所有32个静态辅助函数
+4. 确认枚举类型正确定义并可在蓝图中使用

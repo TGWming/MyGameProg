@@ -1,0 +1,477 @@
+Sub-Step 4.3.3 Prompt
+
+================================================================================
+任务：在CameraModifier_Reaction. cpp中添加R01-R03实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4. 27 C++项目。
+本Sub-Step实现前3个Reaction修改器：
+- R01: Parry - 格挡反馈
+- R02: PerfectParry - 完美格挡反馈
+- R03: Stagger - 硬直反馈
+
+【当前进度】
+Phase 4 Step 4.  3 Sub-Step 4.3.3 (共190个Sub-Step中的第121个)
+前置完成：4.3.2 ReactionBase实现 ✅
+
+【任务目标】
+在CameraModifier_Reaction. cpp中（ReactionBase实现之后）添加R01、R02、R03的完整实现。
+
+【⚠️ 重要提醒】
+
+1. **本Sub-Step是更新现有文件，不创建新文件**
+   因此**不需要Regenerate**，直接编译即可。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **在ReactionBase实现之后添加以下代码**
+
+【具体要求】
+
+**在CameraModifier_Reaction. cpp的ReactionBase实现之后添加：**
+
+```cpp
+//========================================
+// R01: Parry Reaction Implementation
+//========================================
+
+/**
+ * Constructor - Configure parry reaction parameters
+ * 
+ * Parry creates a satisfying "focus" effect: 
+ * - Camera pulls towards the parried enemy
+ * - Slight zoom in (distance reduction)
+ * - Slight FOV reduction for focus feel
+ */
+UCameraModifier_R01_Reaction_Parry::UCameraModifier_R01_Reaction_Parry()
+	: PullDistance(20.0f)
+	, ParryFOVReduction(4.0f)
+	, DistanceReduction(30.0f)
+{
+	// Configure base reaction settings
+	OffsetInterpSpeed = 20.0f;   // Fast pull
+	RecoveryInterpSpeed = 10.0f;  // Medium recovery
+	bApplyDistanceEffect = true;
+	bApplyFOVEffect = true;
+	bApplyRotationEffect = false;
+}
+
+void UCameraModifier_R01_Reaction_Parry:: OnTriggered(const FModifierTriggerData& InTriggerData)
+{
+	// Call parent
+	Super::OnTriggered(InTriggerData);
+	
+	// Scale effect based on intensity
+	float IntensityScale = FMath::Clamp(CurrentIntensity, 0.5f, 1.5f);
+	
+	// Calculate reaction direction (towards the parried enemy)
+	// Direction will be updated in ComputeEffect
+	
+	UE_LOG(LogTemp, Verbose, TEXT("R01 Parry:  Triggered with intensity %. 2f"), CurrentIntensity);
+}
+
+void UCameraModifier_R01_Reaction_Parry::ComputeEffect(float DeltaTime, const FStageExecutionContext& Context)
+{
+	// Get current direction to target
+	FVector Direction = GetReactionDirection(Context);
+	ReactionDirection = Direction;
+	
+	// Calculate normalized time for effect curve
+	float NormalizedTime = 0.0f;
+	if (ActiveDuration > 0.0f)
+	{
+		NormalizedTime = FMath::Clamp(TotalActiveTime / ActiveDuration, 0.0f, 1.0f);
+	}
+	
+	// Effect curve:  quick pull in, hold briefly, then release
+	float EffectCurve;
+	if (NormalizedTime < 0.2f)
+	{
+		// Quick pull in (0-20%)
+		EffectCurve = FMath::InterpEaseOut(0.0f, 1.0f, NormalizedTime / 0.2f, 2.0f);
+	}
+	else if (NormalizedTime < 0.5f)
+	{
+		// Hold at peak (20-50%)
+		EffectCurve = 1.0f;
+	}
+	else
+	{
+		// Smooth release (50-100%)
+		float ReleaseProgress = (NormalizedTime - 0.5f) / 0.5f;
+		EffectCurve = FMath::InterpEaseIn(1.0f, 0.0f, ReleaseProgress, 1.5f);
+	}
+	
+	// Apply pull effect
+	float ScaledPullDistance = PullDistance * EffectCurve * CurrentIntensity;
+	ApplyPullEffect(DeltaTime, Direction, 1.0f, ScaledPullDistance);
+	
+	// Apply FOV reduction
+	FOVEffect = -ParryFOVReduction * EffectCurve;
+	
+	// Override distance effect with our scaled version
+	DistanceEffect = -DistanceReduction * EffectCurve;
+	
+	// Call base to apply weight and interpolation
+	Super:: ComputeEffect(DeltaTime, Context);
+}
+
+
+//========================================
+// R02: Perfect Parry Reaction Implementation
+//========================================
+
+/**
+ * Constructor - Configure perfect parry reaction parameters
+ * 
+ * Perfect parry is an enhanced version of normal parry: 
+ * - Stronger camera pull
+ * - More noticeable zoom
+ * - Time dilation visual hint (not actual game time change)
+ * - Cannot be interrupted (completes fully)
+ */
+UCameraModifier_R02_Reaction_PerfectParry::UCameraModifier_R02_Reaction_PerfectParry()
+	: PullDistance(35.0f)
+	, PerfectParryFOVReduction(7.0f)
+	, DistanceReduction(50.0f)
+	, TimeDilationHint(0.3f)
+{
+	// Configure base reaction settings
+	OffsetInterpSpeed = 25.0f;    // Very fast pull
+	RecoveryInterpSpeed = 8.0f;   // Slower recovery (savor the moment)
+	bApplyDistanceEffect = true;
+	bApplyFOVEffect = true;
+	bApplyRotationEffect = false;
+}
+
+void UCameraModifier_R02_Reaction_PerfectParry::OnTriggered(const FModifierTriggerData& InTriggerData)
+{
+	// Call parent
+	Super::OnTriggered(InTriggerData);
+	
+	UE_LOG(LogTemp, Verbose, TEXT("R02 PerfectParry: Triggered with intensity %.2f"), CurrentIntensity);
+}
+
+void UCameraModifier_R02_Reaction_PerfectParry:: ComputeEffect(float DeltaTime, const FStageExecutionContext& Context)
+{
+	// Get current direction to target
+	FVector Direction = GetReactionDirection(Context);
+	ReactionDirection = Direction;
+	
+	// Calculate normalized time for effect curve
+	float NormalizedTime = 0.0f;
+	if (ActiveDuration > 0.0f)
+	{
+		NormalizedTime = FMath:: Clamp(TotalActiveTime / ActiveDuration, 0.0f, 1.0f);
+	}
+	
+	// Effect curve: very quick pull, longer hold, smooth release
+	float EffectCurve;
+	if (NormalizedTime < 0.15f)
+	{
+		// Very quick pull in (0-15%)
+		EffectCurve = FMath::InterpEaseOut(0.0f, 1.0f, NormalizedTime / 0.15f, 2.5f);
+	}
+	else if (NormalizedTime < 0.6f)
+	{
+		// Extended hold at peak (15-60%)
+		EffectCurve = 1.0f;
+	}
+	else
+	{
+		// Smooth release (60-100%)
+		float ReleaseProgress = (NormalizedTime - 0.6f) / 0.4f;
+		EffectCurve = FMath::InterpEaseInOut(1.0f, 0.0f, ReleaseProgress, 2.0f);
+	}
+	
+	// Apply stronger pull effect
+	float ScaledPullDistance = PullDistance * EffectCurve * CurrentIntensity;
+	ApplyPullEffect(DeltaTime, Direction, 1.2f, ScaledPullDistance);
+	
+	// Apply stronger FOV reduction
+	FOVEffect = -PerfectParryFOVReduction * EffectCurve;
+	
+	// Override distance effect
+	DistanceEffect = -DistanceReduction * EffectCurve;
+	
+	// Time dilation hint during hold phase (visual effect only)
+	if (NormalizedTime >= 0.1f && NormalizedTime < 0.5f)
+	{
+		TimeDilationEffect = 1.0f - (TimeDilationHint * EffectCurve);
+	}
+	else
+	{
+		TimeDilationEffect = 1.0f;
+	}
+	
+	// Subtle vignette during peak effect
+	VignetteEffect = 0.15f * EffectCurve;
+	
+	// Call base to apply weight and interpolation
+	Super:: ComputeEffect(DeltaTime, Context);
+}
+
+
+//========================================
+// R03: Stagger Reaction Implementation
+//========================================
+
+/**
+ * Constructor - Configure stagger reaction parameters
+ * 
+ * Stagger creates a disorienting effect: 
+ * - Camera wobbles/shakes
+ * - Slight push back from attacker
+ * - FOV increase for vulnerability feel
+ */
+UCameraModifier_R03_Reaction_Stagger::UCameraModifier_R03_Reaction_Stagger()
+	: WobbleIntensity(3.0f)
+	, WobbleFrequency(12.0f)
+	, PushDistance(15.0f)
+	, DisorientationFOVIncrease(5.0f)
+	, WobbleSeed(0.0f)
+{
+	// Configure base reaction settings
+	OffsetInterpSpeed = 18.0f;
+	RecoveryInterpSpeed = 6.0f;   // Slower recovery (dazed)
+	bApplyDistanceEffect = true;
+	bApplyFOVEffect = true;
+	bApplyRotationEffect = true;  // Enable rotation for wobble
+}
+
+void UCameraModifier_R03_Reaction_Stagger::OnTriggered(const FModifierTriggerData& InTriggerData)
+{
+	// Call parent
+	Super:: OnTriggered(InTriggerData);
+	
+	// Generate random seed for wobble variation
+	WobbleSeed = FMath::FRand() * 1000.0f;
+	
+	// Scale wobble based on intensity (heavier hits = more wobble)
+	float IntensityScale = FMath:: Clamp(CurrentIntensity, 0.5f, 2.0f);
+	WobbleIntensity = 3.0f * IntensityScale;
+	
+	UE_LOG(LogTemp, Verbose, TEXT("R03 Stagger:  Triggered with intensity %.2f"), CurrentIntensity);
+}
+
+void UCameraModifier_R03_Reaction_Stagger::ComputeEffect(float DeltaTime, const FStageExecutionContext& Context)
+{
+	// Get direction from attacker
+	FVector Direction = GetReactionDirection(Context);
+	ReactionDirection = Direction;
+	
+	// Calculate normalized time
+	float NormalizedTime = 0.0f;
+	if (ActiveDuration > 0.0f)
+	{
+		NormalizedTime = FMath::Clamp(TotalActiveTime / ActiveDuration, 0.0f, 1.0f);
+	}
+	
+	// Effect intensity curve: peak early, then decay
+	float EffectCurve;
+	if (NormalizedTime < 0.1f)
+	{
+		// Quick ramp up (0-10%)
+		EffectCurve = FMath:: InterpEaseOut(0.0f, 1.0f, NormalizedTime / 0.1f, 2.0f);
+	}
+	else
+	{
+		// Gradual decay (10-100%)
+		float DecayProgress = (NormalizedTime - 0.1f) / 0.9f;
+		EffectCurve = FMath:: InterpEaseIn(1.0f, 0.0f, DecayProgress, 1.5f);
+	}
+	
+	// Apply push effect (away from attacker)
+	float ScaledPushDistance = PushDistance * EffectCurve * CurrentIntensity;
+	ApplyPushEffect(DeltaTime, Direction, 1.0f, ScaledPushDistance);
+	
+	// Apply wobble effect
+	float ScaledWobbleIntensity = WobbleIntensity * EffectCurve;
+	ApplyWobbleEffect(DeltaTime, ScaledWobbleIntensity, WobbleFrequency);
+	
+	// Apply FOV increase (vulnerability/disorientation)
+	FOVEffect = DisorientationFOVIncrease * EffectCurve;
+	
+	// Slight distance increase
+	DistanceEffect = 10.0f * EffectCurve;
+	
+	// Call base to apply weight and interpolation
+	Super::ComputeEffect(DeltaTime, Context);
+}
+
+
+//========================================
+// R04-R06: Implementations in Sub-Step 4.3.4
+//========================================
+
+// R04: UCameraModifier_R04_Reaction_Knockback - Sub-Step 4.3.4
+// R05: UCameraModifier_R05_Reaction_Knockdown - Sub-Step 4.3.4
+// R06: UCameraModifier_R06_Reaction_GuardBreak - Sub-Step 4.3.4
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 每个类的构造函数说明效果设计意图
+   - 关键算法有注释说明
+   - 所有注释英文
+
+2. **格式：**
+   - Tab缩进
+   - 类之间用分隔线和空行分开
+   - 方法间空一行
+
+3. **效果曲线设计：**
+   - 使用`FMath::InterpEaseOut`快速达到峰值
+   - 使用`FMath::InterpEaseIn`平滑恢复
+   - 使用`FMath::InterpEaseInOut`平滑过渡
+
+【技术说明】
+
+### 1. R01 Parry效果时间线
+
+```
+0%────20%────50%────────100%
+│ Pull │ Hold │  Release  │
+
+Pull (0-20%): InterpEaseOut快速拉近
+Hold (20-50%): 保持峰值效果
+Release (50-100%): InterpEaseIn平滑释放
+```
+
+### 2. R02 PerfectParry增强
+
+| 参数 | R01 Parry | R02 PerfectParry |
+|------|-----------|------------------|
+| PullDistance | 20cm | 35cm |
+| FOVReduction | 4° | 7° |
+| DistanceReduction | 30cm | 50cm |
+| HoldPhase | 20-50% | 15-60% |
+| TimeDilation | 无 | 0.3 hint |
+| Vignette | 无 | 0.15 |
+
+### 3. R03 Stagger效果设计
+
+```cpp
+// Wobble使用正弦波组合
+ApplyWobbleEffect(DeltaTime, Intensity, Frequency)
+├─ Pitch = sin(Time * 1.0) * Intensity
+├─ Yaw = sin(Time * 0.7) * Intensity * 0.6
+└─ Roll = sin(Time * 1.3) * Intensity * 0.3
+
+// 效果曲线：快速峰值，逐渐衰减
+0%──10%──────────────100%
+│Peak│      Decay      │
+```
+
+### 4. 调用Super::ComputeEffect的重要性
+
+```cpp
+void R01:: ComputeEffect(...)
+{
+    // 1. 计算效果值（FOV, Distance, Offset等）
+    ... 
+    
+    // 2. 调用基类应用权重和插值
+    Super::ComputeEffect(DeltaTime, Context);
+    // 这会：
+    // - 应用CurrentWeight * CurrentIntensity
+    // - 更新插值
+    // - 处理恢复阶段
+}
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过（0 errors）
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] R01构造函数和OnTriggered和ComputeEffect
+   - [ ] R02构造函数和OnTriggered和ComputeEffect
+   - [ ] R03构造函数和OnTriggered和ComputeEffect
+   - [ ] 每个都正确调用Super方法
+   - [ ] 效果曲线实现正确
+
+3. **效果设计：**
+   - [ ] R01: 拉近+FOV减少+距离减少
+   - [ ] R02: 更强拉近+时间暗示+暗角
+   - [ ] R03: 推开+晃动+FOV增加
+
+【注意事项】
+
+1. **InterpEaseOut vs InterpEaseIn：**
+   - `InterpEaseOut`: 快速开始，慢慢结束（用于进入效果）
+   - `InterpEaseIn`: 慢慢开始，快速结束（用于退出效果）
+   - `InterpEaseInOut`: 两端都慢（用于平滑过渡）
+
+2. **调用顺序：**
+   ```cpp
+   // 先设置效果值
+   FOVEffect = -4.0f * EffectCurve;
+   DistanceEffect = -30.0f * EffectCurve;
+   
+   // 最后调用基类（会应用权重）
+   Super::ComputeEffect(DeltaTime, Context);
+   ```
+
+3. **WobbleSeed的作用：**
+   每次触发生成新的随机种子，确保晃动模式不重复。
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 4.3.3 完成报告
+================================================================================
+
+【更新的文件】
+- 文件：CameraModifier_Reaction.cpp
+- 添加位置：ReactionBase实现之后
+
+【实现的修改器】
+- ✅ R01: UCameraModifier_R01_Reaction_Parry
+  - 构造函数：PullDistance=20, FOVReduction=4
+  - OnTriggered：缩放效果
+  - ComputeEffect：拉近曲线+FOV+距离
+
+- ✅ R02: UCameraModifier_R02_Reaction_PerfectParry
+  - 构造函数：PullDistance=35, FOVReduction=7
+  - OnTriggered：记录日志
+  - ComputeEffect：强拉近+时间暗示+暗角
+
+- ✅ R03: UCameraModifier_R03_Reaction_Stagger
+  - 构造函数：WobbleIntensity=3, Frequency=12
+  - OnTriggered：生成随机种子
+  - ComputeEffect：推开+晃动+FOV增加
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【最终状态】
+✅ R01-R03实现完成
+
+================================================================================
+```
+
+【后续步骤】
+
+R01-R03完成后：
+- [x] ✅ 4.3.1:  CameraModifier_Reaction. h
+- [x] ✅ 4.3.2: CameraModifier_Reaction.cpp - ReactionBase
+- [x] ✅ 4.3.3: R01-R03实现
+- [ ] ⏳ 4.3.4: R04-R06实现（下一步）
+- [ ] ⏳ 4.3.5: 注册到ModifierManager
+
+**Reaction修改器进度：3/6 = 50%**
+
+================================================================================

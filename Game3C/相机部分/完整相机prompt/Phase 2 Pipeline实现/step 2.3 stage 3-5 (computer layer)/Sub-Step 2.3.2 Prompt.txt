@@ -1,0 +1,423 @@
+================================================================================
+任务：创建CameraStage_ModuleCompute.cpp - Stage 3骨架实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4. 27 C++项目。
+实现Stage 3的骨架，完整模块执行将在Phase 3完成。
+
+【当前进度】
+Phase 2 Step 2. 3 Sub-Step 2.3.2 (共190个Sub-Step中的第44个)
+
+前置完成：
+- Phase 1 全部完成 ✅
+- Sub-Step 2.1. 1-2.1.3:  Pipeline骨架 ✅
+- Sub-Step 2.2.1-2.2.4: Stage 1-2 ✅
+- Sub-Step 2.3.1: CameraStage_ModuleCompute. h ✅
+
+【任务目标】
+创建文件：Source/[ProjectName]/Camera/Pipeline/CameraStage_ModuleCompute.cpp
+实现Stage 3骨架。
+
+**这是一个. cpp文件，添加后需要重新Generate Visual Studio project files。**
+**这是骨架实现，完整模块系统在Phase 3完成。**
+
+【具体要求】
+
+1. 文件路径：Source/[ProjectName]/Camera/Pipeline/CameraStage_ModuleCompute.cpp
+
+2. 完整文件内容：
+
+```cpp
+// Copyright Epic Games, Inc.  All Rights Reserved. 
+
+#include "CameraStage_ModuleCompute.h"
+#include "Camera/Core/SoulsCameraManager.h"
+#include "Camera/Core/SoulsCameraRuntimeTypes.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogCameraStage_Module, Log, All);
+
+//========================================
+// Constructor 构造函数
+//========================================
+
+UCameraStage_ModuleCompute:: UCameraStage_ModuleCompute()
+    : ModuleRegistry(nullptr)
+    , ModulesExecutedCount(0)
+    , ModulesSkippedCount(0)
+    , TotalModuleTimeMs(0.0f)
+{
+}
+
+//========================================
+// ICameraStage Interface 接口实现
+//========================================
+
+EStageResult UCameraStage_ModuleCompute::Execute(FStageExecutionContext& Context)
+{
+    // Reset statistics
+    ModulesExecutedCount = 0;
+    ModulesSkippedCount = 0;
+    TotalModuleTimeMs = 0.0f;
+
+    // Clear previous module outputs
+    Context.ModuleOutputs.Empty();
+
+    // Execute modules
+    const double StartTime = FPlatformTime:: Seconds();
+    ExecuteModules(Context);
+    TotalModuleTimeMs = static_cast<float>((FPlatformTime::Seconds() - StartTime) * 1000.0);
+
+    UE_LOG(LogCameraStage_Module, Verbose, TEXT("Execute:  Generated %d module outputs in %.2fms"), 
+        Context.ModuleOutputs.Num(), TotalModuleTimeMs);
+
+    return EStageResult:: Success;
+}
+
+void UCameraStage_ModuleCompute::OnPreExecute(const FStageExecutionContext& Context)
+{
+    UE_LOG(LogCameraStage_Module, VeryVerbose, TEXT("Stage 3 ModuleCompute: PreExecute"));
+}
+
+void UCameraStage_ModuleCompute::OnPostExecute(const FStageExecutionContext& Context, EStageResult Result)
+{
+    UE_LOG(LogCameraStage_Module, VeryVerbose, TEXT("Stage 3 ModuleCompute: PostExecute - Executed: %d, Skipped: %d"),
+        ModulesExecutedCount, ModulesSkippedCount);
+}
+
+//========================================
+// Module Registry Reference 模块注册表引用
+//========================================
+
+void UCameraStage_ModuleCompute::SetModuleRegistry(UCameraModuleRegistry* InRegistry)
+{
+    ModuleRegistry = InRegistry;
+    
+    if (ModuleRegistry)
+    {
+        UE_LOG(LogCameraStage_Module, Log, TEXT("Module registry set successfully"));
+    }
+}
+
+//========================================
+// Module Execution 模块执行
+//========================================
+
+void UCameraStage_ModuleCompute:: ExecuteModules(FStageExecutionContext& Context)
+{
+    // ModuleRegistry will be fully implemented in Phase 3
+    // For now, create placeholder outputs based on state config
+    
+    if (!Context.Manager)
+    {
+        UE_LOG(LogCameraStage_Module, Warning, TEXT("ExecuteModules: No manager reference"));
+        return;
+    }
+
+    // Execute placeholder modules by category
+    ExecutePositionModules(Context);
+    ExecuteRotationModules(Context);
+    ExecuteDistanceModules(Context);
+    ExecuteFOVModules(Context);
+    ExecuteOffsetModules(Context);
+    ExecuteConstraintModules(Context);
+
+    // TODO Phase 3: Replace with actual module registry execution
+    // if (ModuleRegistry)
+    // {
+    //     TArray<UCameraModuleBase*> ActiveModules;
+    //     ModuleRegistry->GetActiveModules(Context. InputContext, ActiveModules);
+    //     
+    //     for (UCameraModuleBase* Module : ActiveModules)
+    //     {
+    //         ExecuteSingleModule(Context, Module);
+    //     }
+    // }
+}
+
+void UCameraStage_ModuleCompute:: ExecuteModuleCategory(FStageExecutionContext& Context, ECameraModuleCategory Category)
+{
+    // Will be fully implemented in Phase 3
+    // This method will execute all active modules of a specific category
+    
+    UE_LOG(LogCameraStage_Module, VeryVerbose, TEXT("ExecuteModuleCategory: Category %d (placeholder)"), 
+        static_cast<int32>(Category));
+}
+
+bool UCameraStage_ModuleCompute:: ExecuteSingleModule(FStageExecutionContext& Context, UCameraModuleBase* Module)
+{
+    // Will be fully implemented in Phase 3
+    // This method will execute a single module and collect its output
+    
+    if (!Module)
+    {
+        return false;
+    }
+
+    // Placeholder: In Phase 3, this will call Module->Compute(Context, Output)
+    ModulesExecutedCount++;
+    return true;
+}
+
+//========================================
+// Placeholder Methods 占位方法
+//========================================
+
+void UCameraStage_ModuleCompute::ExecutePositionModules(FStageExecutionContext& Context)
+{
+    // Placeholder:  Create basic position output from state config
+    FModuleOutput PositionOutput;
+    PositionOutput.ModuleCategory = ECameraModuleCategory::CategoryPosition;
+    PositionOutput.Priority = 100;
+    PositionOutput.BlendPolicy = EBlendPolicy:: Override;
+    PositionOutput.Weight = 1.0f;
+    PositionOutput. PositionOffset = Context.Output.FocusPoint;
+    PositionOutput.bHasPositionOutput = true;
+    
+    Context.ModuleOutputs.Add(PositionOutput);
+    ModulesExecutedCount++;
+
+    UE_LOG(LogCameraStage_Module, VeryVerbose, TEXT("ExecutePositionModules:  Placeholder output added"));
+}
+
+void UCameraStage_ModuleCompute:: ExecuteRotationModules(FStageExecutionContext& Context)
+{
+    // Placeholder: Create basic rotation output
+    // In exploration mode, use player input; in lock-on mode, look at target
+    
+    FModuleOutput RotationOutput;
+    RotationOutput.ModuleCategory = ECameraModuleCategory::CategoryRotation;
+    RotationOutput.Priority = 100;
+    RotationOutput. BlendPolicy = EBlendPolicy::Override;
+    RotationOutput.Weight = 1.0f;
+
+    if (Context.InputContext. bHasTarget)
+    {
+        // Lock-on:  Calculate rotation to look at target
+        const FVector DirectionToTarget = Context.InputContext.GetDirectionToTarget();
+        if (! DirectionToTarget. IsNearlyZero())
+        {
+            RotationOutput. RotationOutput = DirectionToTarget. Rotation();
+        }
+        else
+        {
+            RotationOutput. RotationOutput = Context.Output.Rotation;
+        }
+    }
+    else
+    {
+        // Free exploration: Use current rotation (will be modified by player input)
+        RotationOutput. RotationOutput = Context.Output.Rotation;
+    }
+    
+    RotationOutput.bHasRotationOutput = true;
+    Context.ModuleOutputs.Add(RotationOutput);
+    ModulesExecutedCount++;
+
+    UE_LOG(LogCameraStage_Module, VeryVerbose, TEXT("ExecuteRotationModules: Placeholder output added (HasTarget: %s)"),
+        Context.InputContext.bHasTarget ? TEXT("Yes") : TEXT("No"));
+}
+
+void UCameraStage_ModuleCompute:: ExecuteDistanceModules(FStageExecutionContext& Context)
+{
+    // Placeholder: Create basic distance output from state config
+    FModuleOutput DistanceOutput;
+    DistanceOutput. ModuleCategory = ECameraModuleCategory:: CategoryDistance;
+    DistanceOutput. Priority = 100;
+    DistanceOutput.BlendPolicy = EBlendPolicy::Override;
+    DistanceOutput. Weight = 1.0f;
+    DistanceOutput. DistanceOutput = Context.Output. Distance;
+    DistanceOutput.bHasDistanceOutput = true;
+    DistanceOutput.bDistanceIsMultiplier = false;
+    
+    Context. ModuleOutputs. Add(DistanceOutput);
+    ModulesExecutedCount++;
+
+    UE_LOG(LogCameraStage_Module, VeryVerbose, TEXT("ExecuteDistanceModules: Placeholder output added (Distance: %.1f)"),
+        Context.Output.Distance);
+}
+
+void UCameraStage_ModuleCompute:: ExecuteFOVModules(FStageExecutionContext& Context)
+{
+    // Placeholder: Create basic FOV output from state config
+    FModuleOutput FOVOutput;
+    FOVOutput.ModuleCategory = ECameraModuleCategory::CategoryFOV;
+    FOVOutput.Priority = 100;
+    FOVOutput. BlendPolicy = EBlendPolicy::Override;
+    FOVOutput.Weight = 1.0f;
+    FOVOutput.FOVOutput = Context.Output.FOV;
+    FOVOutput.bHasFOVOutput = true;
+    
+    Context.ModuleOutputs.Add(FOVOutput);
+    ModulesExecutedCount++;
+
+    UE_LOG(LogCameraStage_Module, VeryVerbose, TEXT("ExecuteFOVModules:  Placeholder output added (FOV: %.1f)"),
+        Context.Output.FOV);
+}
+
+void UCameraStage_ModuleCompute:: ExecuteOffsetModules(FStageExecutionContext& Context)
+{
+    // Placeholder: Create basic offset output from state config
+    FModuleOutput OffsetOutput;
+    OffsetOutput.ModuleCategory = ECameraModuleCategory::CategoryOffset;
+    OffsetOutput.Priority = 100;
+    OffsetOutput.BlendPolicy = EBlendPolicy:: Override;
+    OffsetOutput.Weight = 1.0f;
+    OffsetOutput. SocketOffsetOutput = Context.Output.SocketOffset;
+    OffsetOutput.bHasSocketOffsetOutput = true;
+    
+    Context.ModuleOutputs.Add(OffsetOutput);
+    ModulesExecutedCount++;
+
+    UE_LOG(LogCameraStage_Module, VeryVerbose, TEXT("ExecuteOffsetModules:  Placeholder output added"));
+}
+
+void UCameraStage_ModuleCompute::ExecuteConstraintModules(FStageExecutionContext& Context)
+{
+    // Placeholder:  Constraint modules don't produce output directly
+    // They modify other outputs in Phase 3
+    // For now, just log that we would execute them
+    
+    UE_LOG(LogCameraStage_Module, VeryVerbose, TEXT("ExecuteConstraintModules:  Placeholder (will apply constraints in Phase 3)"));
+    
+    // No output added - constraints modify existing values
+    // ModulesExecutedCount++; // Don't count since no output produced
+}
+```
+
+3. 代码风格：
+   - 使用专用日志类别 `LogCameraStage_Module`
+   - 初始化. h中声明的所有成员变量
+   - 骨架实现使用占位输出
+   - 实现所有6个占位方法
+   - 使用ECameraModuleCategory（来自SoulsCameraRuntimeTypes.h）
+   - 注释说明Phase 3的完整实现
+   - 输出基本的模块数据供后续Stage使用
+   - 中英文注释分组
+
+【验证标准】
+- 编译通过
+- Stage可执行并产生基本输出
+- 日志输出正确
+
+【注意事项】
+- 使用ECameraModuleCategory而不是ECameraModuleType（与FModuleOutput一致）
+- 使用EBlendPolicy（来自SoulsCameraRuntimeTypes.h）
+- **这是骨架实现，Phase 3将替换为真正的模块执行**
+- **这是. cpp文件，添加后需要重新Generate Visual Studio project files**
+
+【输出要求】
+输出完整的CameraStage_ModuleCompute. cpp文件代码。
+
+================================================================================
+                        上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+```
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：Sub-Step 2.3.2 创建CameraStage_ModuleCompute.cpp - Stage 3骨架实现
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断，例如：完成到ExecuteRotationModules，未完成ExecuteDistanceModules]
+
+【已完成内容】
+- 构造函数
+- Execute方法
+- OnPreExecute/OnPostExecute
+- SetModuleRegistry
+- ExecuteModules/ExecuteModuleCategory/ExecuteSingleModule
+- [列出已完成的占位方法]
+
+【未完成内容】
+- [列出剩余占位方法]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存到CameraStage_ModuleCompute.cpp，然后开启新对话。
+
+【编译注意】
+添加. cpp文件后需要：
+1. 右键. uproject → Generate Visual Studio project files
+2. 重新打开. sln
+
+================================================================================
+                    继续任务 - 新对话PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Phase 2 Step 2.3 Sub-Step 2.3.2 续接任务。
+完成CameraStage_ModuleCompute.cpp骨架实现。
+
+【前置完成】
+- Phase 1 全部完成 ✅
+- Sub-Step 2.1.1-2.1.3: Pipeline骨架 ✅
+- Sub-Step 2.2.1-2.2.4: Stage 1-2 ✅
+- Sub-Step 2.3.1: CameraStage_ModuleCompute.h ✅
+- Sub-Step 2.3.2 部分完成：
+  - [列出已完成的方法] ✅
+
+【续接任务】
+继续完成CameraStage_ModuleCompute.cpp：
+- [列出剩余方法]
+
+【目标文件】
+Source/[ProjectName]/Camera/Pipeline/CameraStage_ModuleCompute.cpp
+
+【方法清单】
+- 构造函数
+- Execute() / OnPreExecute() / OnPostExecute()
+- SetModuleRegistry() / GetModuleRegistry()
+- ExecuteModules() / ExecuteModuleCategory() / ExecuteSingleModule()
+- ExecutePositionModules() - 占位
+- ExecuteRotationModules() - 占位
+- ExecuteDistanceModules() - 占位
+- ExecuteFOVModules() - 占位
+- ExecuteOffsetModules() - 占位
+- ExecuteConstraintModules() - 占位
+
+【重要说明】
+这是骨架实现，完整模块系统在Phase 3实现。
+
+【编译注意】
+添加.cpp文件后需要：
+1. 右键.uproject → Generate Visual Studio project files
+2. 重新打开. sln
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================
+```
+
+【交接信息要求】
+1. 交接PROMPT必须是**完全自包含**的
+2. 明确标注目标文件和前置依赖
+3. 包含完整方法清单
+4. 标明这是骨架实现
+5. **强调这是. cpp文件，需要Generate**
+
+================================================================================

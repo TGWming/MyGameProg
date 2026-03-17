@@ -1,0 +1,5 @@
+INFO:unpacker_file_handler:Beginning unpack.
+INFO:unpacker_file_handler:Existing used directories: []
+INFO:unpacker_file_handler:.exe check.
+INFO:unpacker_file_handler:.exe status: None
+INFO:unpacker_file_handler:No .exe found.

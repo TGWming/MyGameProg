@@ -1,0 +1,715 @@
+Sub-Step 5.5.  5 Prompt
+
+================================================================================
+任务：创建CameraCollision_Special.cpp - SpecialBase + SP01-SP02实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.       27 C++项目。
+- SpecialBase提供环境检测的通用功能
+- SP01处理狭窄空间
+- SP02处理低矮天花板
+
+【当前进度】
+Phase 5 Step 5.       5 Sub-Step 5.5. 5 (共190个Sub-Step中的第172个)
+前置完成：
+- 5.5.1:   CameraCollision_Recovery.h ✅
+- 5.5.2: RecoveryBase + RC01 ✅
+- 5.5.3: RC02 + RC03 ✅
+- 5.5.4: CameraCollision_Special.h ✅
+
+【任务目标】
+创建文件：Source/MyProject/Private/Camera/Collision/CameraCollision_Special.cpp
+本Sub-Step实现SpecialBase基类和SP01、SP02策略。
+
+【⚠️ 重要提醒】
+
+1. **本Sub-Step创建新文件**
+   创建后需要：
+   - 保存文件
+   - 右键. uproject → Generate Visual Studio project files
+   - 重新加载解决方案
+   - 编译
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **方法签名（与头文件一致）：**
+   - ShouldExecute:     1个参数
+   - Execute:  3个参数
+
+4. **Special策略特点：**
+   - 高优先级（140-155）
+   - 检测特殊环境条件
+   - 可能产生多种调整（FOV、Pitch、位置）
+
+【具体要求】
+
+**文件路径：** `Source/MyProject/Private/Camera/Collision/CameraCollision_Special.cpp`
+
+**完整文件内容：**
+
+```cpp
+// Copyright Epic Games, Inc.      All Rights Reserved.   
+
+#include "Camera/Collision/CameraCollision_Special.h"
+#include "Camera/Core/SoulsCameraManager.h"
+#include "Engine/World.h"
+#include "DrawDebugHelpers.h"
+
+/**
+ * CameraCollision_Special. cpp
+ * 
+ * This file contains the implementations of the Special base class
+ * and all 4 Special strategies (SP01-SP04).    
+ * 
+ * Special strategies handle unique environmental situations that require
+ * custom camera behavior beyond standard collision response.     
+ * 
+ * Implementation Structure:
+ * - SpecialBase:   Common environment detection functionality
+ * - SP01: TightSpace - Confined area handling
+ * - SP02: LowCeiling - Low overhead handling
+ * - SP03: CliffEdge - Edge/drop-off handling
+ * - SP04: CornerCase - Corner geometry handling
+ */
+
+
+//========================================
+// SpecialBase - Common Special Functionality
+//========================================
+
+UCameraCollision_SpecialBase::UCameraCollision_SpecialBase()
+    : BaseProbeDistance(150.0f)
+    , TransitionSpeed(5.0f)
+    , ActivationThreshold(0.1f)
+    , CurrentSpecialFactor(0.0f)
+    , bSpecialModeActive(false)
+    , TimeInSpecialMode(0.0f)
+    , CachedDeltaTime(0.0f)
+{
+    // Special strategies are enabled by default
+    bIsEnabled = true;
+    bCanBlend = true;  // Special strategies can blend
+}
+
+void UCameraCollision_SpecialBase::Update(float DeltaTime, const FStageExecutionContext& Context)
+{
+    Super::Update(DeltaTime, Context);
+    
+    // Cache delta time for use in Execute
+    CachedDeltaTime = DeltaTime;
+    
+    // Update time in special mode
+    if (bSpecialModeActive)
+    {
+        TimeInSpecialMode += DeltaTime;
+    }
+    else
+    {
+        TimeInSpecialMode = 0.0f;
+    }
+}
+
+void UCameraCollision_SpecialBase::Reset()
+{
+    Super::Reset();
+    
+    CurrentSpecialFactor = 0.0f;
+    bSpecialModeActive = false;
+    TimeInSpecialMode = 0.0f;
+    CachedDeltaTime = 0.0f;
+}
+
+int32 UCameraCollision_SpecialBase:: PerformEnvironmentProbe(
+    const FStageExecutionContext& Context,
+    float ProbeDistance,
+    TArray<FHitResult>& OutHits) const
+{
+    OutHits.Empty();
+    
+    FVector CameraLocation = GetCameraLocation(Context);
+    
+    // Define probe directions (6 cardinal + 8 diagonal = 14 total)
+    TArray<FVector> ProbeDirections;
+    
+    // Cardinal directions
+    ProbeDirections.Add(FVector:: ForwardVector);
+    ProbeDirections. Add(FVector:: BackwardVector);
+    ProbeDirections. Add(FVector:: RightVector);
+    ProbeDirections. Add(FVector:: LeftVector);
+    ProbeDirections.Add(FVector:: UpVector);
+    ProbeDirections. Add(FVector:: DownVector);
+    
+    // Diagonal directions (horizontal)
+    ProbeDirections.Add((FVector:: ForwardVector + FVector::RightVector).GetSafeNormal());
+    ProbeDirections.Add((FVector::ForwardVector + FVector:: LeftVector).GetSafeNormal());
+    ProbeDirections.Add((FVector::BackwardVector + FVector::RightVector).GetSafeNormal());
+    ProbeDirections.Add((FVector::BackwardVector + FVector:: LeftVector).GetSafeNormal());
+    
+    FCollisionQueryParams Params = GetDefaultTraceParams();
+    
+    int32 BlockedCount = 0;
+    
+    for (const FVector& Direction :  ProbeDirections)
+    {
+        FHitResult Hit;
+        if (IsDirectionBlocked(Context, Direction, ProbeDistance, Hit))
+        {
+            OutHits.Add(Hit);
+            BlockedCount++;
+        }
+    }
+    
+    return BlockedCount;
+}
+
+bool UCameraCollision_SpecialBase:: IsDirectionBlocked(
+    const FStageExecutionContext& Context,
+    const FVector& Direction,
+    float Distance,
+    FHitResult& OutHit) const
+{
+    FVector CameraLocation = GetCameraLocation(Context);
+    FVector EndLocation = CameraLocation + Direction * Distance;
+    
+    FCollisionQueryParams Params = GetDefaultTraceParams();
+    
+    return LineTrace(CameraLocation, EndLocation, OutHit, Params);
+}
+
+float UCameraCollision_SpecialBase:: GetClearanceInDirection(
+    const FStageExecutionContext& Context,
+    const FVector& Direction,
+    float MaxDistance) const
+{
+    FHitResult Hit;
+    if (IsDirectionBlocked(Context, Direction, MaxDistance, Hit))
+    {
+        return Hit.Distance;
+    }
+    return MaxDistance;
+}
+
+FVector UCameraCollision_SpecialBase::GetCameraLocation(const FStageExecutionContext& Context) const
+{
+    return Context.Output. FocusPoint - 
+           Context.Output. Rotation. Vector() * Context.Output. Distance;
+}
+
+float UCameraCollision_SpecialBase:: InterpolateSpecialFactor(
+    float Current,
+    float Target,
+    float DeltaTime,
+    float Speed) const
+{
+    return FMath::FInterpTo(Current, Target, DeltaTime, Speed);
+}
+
+
+//========================================
+// SP01: Tight Space Implementation
+//========================================
+
+/**
+ * Constructor - Configure tight space parameters
+ * 
+ * Tight space detection uses multi-directional probing: 
+ * - Checks multiple directions around camera
+ * - If enough directions are blocked, considers it tight
+ * - Applies FOV compensation and distance adjustment
+ */
+UCameraCollision_SP01_TightSpace::UCameraCollision_SP01_TightSpace()
+    : TightSpaceThreshold(100.0f)
+    , BlockedDirectionsThreshold(3)
+    , TightSpaceFOVBonus(15.0f)
+    , TightSpaceMinDistance(40.0f)
+    , bInTightSpace(false)
+    , TightSpaceFactor(0.0f)
+    , CurrentBlockedDirections(0)
+{
+    Priority = 150;
+    BaseProbeDistance = 100.0f;
+    TransitionSpeed = 4.0f;
+}
+
+bool UCameraCollision_SP01_TightSpace::ShouldExecute(const FStageExecutionContext& Context) const
+{
+    // Always execute to handle smooth transitions
+    return bIsEnabled;
+}
+
+bool UCameraCollision_SP01_TightSpace::Execute(
+    const FStageExecutionContext& Context,
+    const FCollisionDetectionResult& DetectionResult,
+    FCollisionResponseOutput& OutResponse)
+{
+    // Detect tight space
+    bool bCurrentlyTight = DetectTightSpace(Context);
+    
+    // Smooth transition
+    float TargetFactor = bCurrentlyTight ?    1.0f :  0.0f;
+    TightSpaceFactor = InterpolateSpecialFactor(TightSpaceFactor, TargetFactor, CachedDeltaTime, TransitionSpeed);
+    
+    // Update active state
+    bInTightSpace = (TightSpaceFactor > ActivationThreshold);
+    bSpecialModeActive = bInTightSpace;
+    CurrentSpecialFactor = TightSpaceFactor;
+    
+    if (! bInTightSpace)
+    {
+        SetActive(false);
+        return false;
+    }
+    
+    SetActive(true);
+    
+    // Build response with tight space adjustments
+    OutResponse.Reset();
+    OutResponse.StrategyType = GetStrategyType();
+    OutResponse.Category = GetStrategyCategory();
+    
+    // Increase FOV to maintain visibility in tight space
+    OutResponse.FOVAdjustment = TightSpaceFOVBonus * TightSpaceFactor;
+    
+    // Allow closer minimum distance in tight space
+    // This is informational - the collision system will use this
+    // No direct distance adjustment here, but we signal the factor
+    
+    OutResponse.Weight = TightSpaceFactor;
+    OutResponse.Priority = GetPriority();
+    OutResponse.bIsActive = true;
+    OutResponse.ActiveDuration = TimeInSpecialMode;
+    
+    UE_LOG(LogTemp, Verbose, TEXT("SP01 TightSpace: Factor=%.2f, BlockedDirs=%d, FOV+= %.1f"),
+        TightSpaceFactor, CurrentBlockedDirections, OutResponse.FOVAdjustment);
+    
+    return true;
+}
+
+void UCameraCollision_SP01_TightSpace::Update(float DeltaTime, const FStageExecutionContext& Context)
+{
+    Super::Update(DeltaTime, Context);
+}
+
+void UCameraCollision_SP01_TightSpace::Reset()
+{
+    Super::Reset();
+    
+    bInTightSpace = false;
+    TightSpaceFactor = 0.0f;
+    CurrentBlockedDirections = 0;
+}
+
+bool UCameraCollision_SP01_TightSpace::DetectTightSpace(const FStageExecutionContext& Context)
+{
+    FVector CameraLocation = GetCameraLocation(Context);
+    
+    // Define horizontal probe directions (ignore vertical for tight space)
+    TArray<FVector> ProbeDirections;
+    ProbeDirections.Add(FVector::ForwardVector);
+    ProbeDirections. Add(FVector:: BackwardVector);
+    ProbeDirections.Add(FVector::RightVector);
+    ProbeDirections.Add(FVector::LeftVector);
+    ProbeDirections.Add((FVector::ForwardVector + FVector:: RightVector).GetSafeNormal());
+    ProbeDirections.Add((FVector::ForwardVector + FVector:: LeftVector).GetSafeNormal());
+    ProbeDirections.Add((FVector::BackwardVector + FVector::RightVector).GetSafeNormal());
+    ProbeDirections.Add((FVector::BackwardVector + FVector::LeftVector).GetSafeNormal());
+    
+    CurrentBlockedDirections = 0;
+    
+    for (const FVector& Direction :  ProbeDirections)
+    {
+        float Clearance = GetClearanceInDirection(Context, Direction, TightSpaceThreshold);
+        if (Clearance < TightSpaceThreshold)
+        {
+            CurrentBlockedDirections++;
+        }
+    }
+    
+    // Consider tight space if enough directions are blocked
+    return CurrentBlockedDirections >= BlockedDirectionsThreshold;
+}
+
+
+//========================================
+// SP02: Low Ceiling Implementation
+//========================================
+
+/**
+ * Constructor - Configure low ceiling parameters
+ * 
+ * Low ceiling detection checks overhead clearance:
+ * - Traces upward from camera position
+ * - If clearance is below threshold, activates handling
+ * - Applies pitch adjustment and optional downward push
+ */
+UCameraCollision_SP02_LowCeiling:: UCameraCollision_SP02_LowCeiling()
+    : LowCeilingThreshold(150.0f)
+    , MaxPitchAdjustment(20.0f)
+    , bPushCameraDown(true)
+    , MaxDownwardPush(50.0f)
+    , CurrentOverheadClearance(1000.0f)
+    , LowCeilingFactor(0.0f)
+    , CurrentPitchAdjustment(0.0f)
+{
+    Priority = 145;
+    BaseProbeDistance = 200.0f;
+    TransitionSpeed = 5.0f;
+}
+
+bool UCameraCollision_SP02_LowCeiling::ShouldExecute(const FStageExecutionContext& Context) const
+{
+    return bIsEnabled;
+}
+
+bool UCameraCollision_SP02_LowCeiling::Execute(
+    const FStageExecutionContext& Context,
+    const FCollisionDetectionResult& DetectionResult,
+    FCollisionResponseOutput& OutResponse)
+{
+    // Check overhead clearance
+    CurrentOverheadClearance = GetClearanceInDirection(Context, FVector:: UpVector, BaseProbeDistance);
+    
+    // Determine if ceiling is low
+    bool bLowCeiling = (CurrentOverheadClearance < LowCeilingThreshold);
+    
+    // Calculate factor based on how low the ceiling is
+    float TargetFactor = 0.0f;
+    if (bLowCeiling)
+    {
+        // Factor increases as ceiling gets lower
+        TargetFactor = 1.0f - (CurrentOverheadClearance / LowCeilingThreshold);
+        TargetFactor = FMath:: Clamp(TargetFactor, 0.0f, 1.0f);
+    }
+    
+    // Smooth transition
+    LowCeilingFactor = InterpolateSpecialFactor(LowCeilingFactor, TargetFactor, CachedDeltaTime, TransitionSpeed);
+    
+    // Update active state
+    bSpecialModeActive = (LowCeilingFactor > ActivationThreshold);
+    CurrentSpecialFactor = LowCeilingFactor;
+    
+    if (!bSpecialModeActive)
+    {
+        CurrentPitchAdjustment = 0.0f;
+        SetActive(false);
+        return false;
+    }
+    
+    SetActive(true);
+    
+    // Build response with low ceiling adjustments
+    OutResponse. Reset();
+    OutResponse.StrategyType = GetStrategyType();
+    OutResponse.Category = GetStrategyCategory();
+    
+    // Apply pitch adjustment - tilt camera down when ceiling is low
+    float TargetPitch = -MaxPitchAdjustment * LowCeilingFactor;  // Negative = look down
+    CurrentPitchAdjustment = FMath::FInterpTo(CurrentPitchAdjustment, TargetPitch, CachedDeltaTime, TransitionSpeed);
+    OutResponse. RotationAdjustment. Pitch = CurrentPitchAdjustment;
+    
+    // Apply downward push if enabled
+    if (bPushCameraDown)
+    {
+        float PushAmount = MaxDownwardPush * LowCeilingFactor;
+        OutResponse.PositionAdjustment = FVector(0.0f, 0.0f, -PushAmount);
+    }
+    
+    OutResponse.Weight = LowCeilingFactor;
+    OutResponse.Priority = GetPriority();
+    OutResponse.bIsActive = true;
+    OutResponse. ActiveDuration = TimeInSpecialMode;
+    
+    UE_LOG(LogTemp, Verbose, TEXT("SP02 LowCeiling:  Clearance=%.1f, Factor=%.2f, Pitch=%.1f"),
+        CurrentOverheadClearance, LowCeilingFactor, CurrentPitchAdjustment);
+    
+    return true;
+}
+
+void UCameraCollision_SP02_LowCeiling::Update(float DeltaTime, const FStageExecutionContext& Context)
+{
+    Super::Update(DeltaTime, Context);
+}
+
+void UCameraCollision_SP02_LowCeiling::Reset()
+{
+    Super::Reset();
+    
+    CurrentOverheadClearance = 1000.0f;
+    LowCeilingFactor = 0.0f;
+    CurrentPitchAdjustment = 0.0f;
+}
+
+
+//========================================
+// SP03: Cliff Edge - Placeholder
+//========================================
+
+UCameraCollision_SP03_CliffEdge::UCameraCollision_SP03_CliffEdge()
+    : GroundCheckDistance(500.0f)
+    , CliffHeightThreshold(200.0f)
+    , EdgePullbackDistance(50.0f)
+    , EdgePitchAdjustment(10.0f)
+    , bNearEdge(false)
+    , EdgeFactor(0.0f)
+    , GroundHeightAtCamera(0.0f)
+    , GroundHeightAtCharacter(0.0f)
+{
+    Priority = 140;
+    BaseProbeDistance = 300.0f;
+    TransitionSpeed = 4.0f;
+}
+
+bool UCameraCollision_SP03_CliffEdge::ShouldExecute(const FStageExecutionContext& Context) const
+{
+    return bIsEnabled;
+}
+
+bool UCameraCollision_SP03_CliffEdge::Execute(
+    const FStageExecutionContext& Context,
+    const FCollisionDetectionResult& DetectionResult,
+    FCollisionResponseOutput& OutResponse)
+{
+    // Placeholder - will be implemented in Sub-Step 5.5.6
+    UE_LOG(LogTemp, VeryVerbose, TEXT("SP03 CliffEdge:  Placeholder execution"));
+    return false;
+}
+
+void UCameraCollision_SP03_CliffEdge::Update(float DeltaTime, const FStageExecutionContext& Context)
+{
+    Super::Update(DeltaTime, Context);
+}
+
+void UCameraCollision_SP03_CliffEdge::Reset()
+{
+    Super::Reset();
+    
+    bNearEdge = false;
+    EdgeFactor = 0.0f;
+    GroundHeightAtCamera = 0.0f;
+    GroundHeightAtCharacter = 0.0f;
+}
+
+bool UCameraCollision_SP03_CliffEdge::DetectCliffEdge(const FStageExecutionContext& Context)
+{
+    // Placeholder
+    return false;
+}
+
+float UCameraCollision_SP03_CliffEdge::GetGroundHeight(const FVector& Location) const
+{
+    // Placeholder
+    return 0.0f;
+}
+
+
+//========================================
+// SP04: Corner Case - Placeholder
+//========================================
+
+UCameraCollision_SP04_CornerCase::UCameraCollision_SP04_CornerCase()
+    : CornerAngleThreshold(90.0f)
+    , CornerCheckDistance(100.0f)
+    , MaxCornerEscapeDistance(50.0f)
+    , MaxCornerYawAdjustment(30.0f)
+    , bInCorner(false)
+    , CornerFactor(0.0f)
+    , CornerEscapeDirection(FVector::ZeroVector)
+    , WallNormal1(FVector::ZeroVector)
+    , WallNormal2(FVector:: ZeroVector)
+{
+    Priority = 155;
+    BaseProbeDistance = 100.0f;
+    TransitionSpeed = 6.0f;
+}
+
+bool UCameraCollision_SP04_CornerCase::ShouldExecute(const FStageExecutionContext& Context) const
+{
+    return bIsEnabled;
+}
+
+bool UCameraCollision_SP04_CornerCase::Execute(
+    const FStageExecutionContext& Context,
+    const FCollisionDetectionResult& DetectionResult,
+    FCollisionResponseOutput& OutResponse)
+{
+    // Placeholder - will be implemented in Sub-Step 5.5.6
+    UE_LOG(LogTemp, VeryVerbose, TEXT("SP04 CornerCase:  Placeholder execution"));
+    return false;
+}
+
+void UCameraCollision_SP04_CornerCase:: Update(float DeltaTime, const FStageExecutionContext& Context)
+{
+    Super::Update(DeltaTime, Context);
+}
+
+void UCameraCollision_SP04_CornerCase:: Reset()
+{
+    Super::Reset();
+    
+    bInCorner = false;
+    CornerFactor = 0.0f;
+    CornerEscapeDirection = FVector::ZeroVector;
+    WallNormal1 = FVector::ZeroVector;
+    WallNormal2 = FVector:: ZeroVector;
+}
+
+bool UCameraCollision_SP04_CornerCase::DetectCorner(const FStageExecutionContext& Context)
+{
+    // Placeholder
+    return false;
+}
+
+FVector UCameraCollision_SP04_CornerCase:: CalculateEscapeDirection() const
+{
+    // Placeholder
+    return FVector::ZeroVector;
+}
+```
+
+---
+
+【代码设计说明】
+
+### 1. SpecialBase辅助方法
+
+```cpp
+PerformEnvironmentProbe()      // 多方向探测（14个方向）
+IsDirectionBlocked()           // 单方向阻挡检测
+GetClearanceInDirection()      // 获取某方向净空距离
+GetCameraLocation()            // 获取相机位置
+InterpolateSpecialFactor()     // 平滑插值因子
+```
+
+### 2. SP01 TightSpace执行流程
+
+```
+Execute()
+├── 1. DetectTightSpace()
+│   ├── 定义8个水平方向
+│   ├── 检测每个方向净空
+│   └── 统计阻挡方向数
+├── 2. 平滑过渡TightSpaceFactor
+├── 3. 判断是否激活
+├── 4. 构建Response
+│   ├── FOVAdjustment = TightSpaceFOVBonus * Factor
+│   └── Weight = Factor
+└── 5. 返回
+```
+
+### 3. SP02 LowCeiling执行流程
+
+```
+Execute()
+├── 1. 检测头顶净空
+│   └── GetClearanceInDirection(UpVector)
+├── 2. 计算LowCeilingFactor
+│   └── 基于净空与阈值的比例
+├── 3. 平滑过渡
+├── 4. 判断是否激活
+├── 5. 构建Response
+│   ├── RotationAdjustment.Pitch = 负值（向下看）
+│   └── PositionAdjustment. Z = 负值（下压）
+└── 6. 返回
+```
+
+### 4. SP01 vs SP02 对比
+
+| 特性 | SP01 TightSpace | SP02 LowCeiling |
+|------|-----------------|-----------------|
+| 检测方向 | 8个水平方向 | 垂直向上 |
+| 调整类型 | FOV增加 | Pitch下调+位置下压 |
+| 优先级 | 150 | 145 |
+| 阈值 | 阻挡方向数 | 净空距离 |
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] Regenerate执行
+   - [ ] 编译通过（0 errors）
+   - [ ] 无链接错误
+
+2. **代码完整性：**
+   - [ ] SpecialBase构造函数和5个辅助方法
+   - [ ] SP01完整实现（含DetectTightSpace）
+   - [ ] SP02完整实现（含净空检测）
+   - [ ] SP03-SP04构造函数和placeholder
+
+3. **功能验证：**
+   - [ ] SP01可检测狭窄空间并调整FOV
+   - [ ] SP02可检测低天花板并调整Pitch
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 5.5.5 完成报告
+================================================================================
+
+【创建的文件】
+- 文件：CameraCollision_Special. cpp
+- 路径：Source/MyProject/Private/Camera/Collision/
+
+【实现的类】
+
+SpecialBase：
+- ✅ 构造函数
+- ✅ Update()
+- ✅ Reset()
+- ✅ PerformEnvironmentProbe()
+- ✅ IsDirectionBlocked()
+- ✅ GetClearanceInDirection()
+- ✅ GetCameraLocation()
+- ✅ InterpolateSpecialFactor()
+
+SP01 TightSpace：
+- ✅ 构造函数
+- ✅ ShouldExecute()
+- ✅ Execute() - 完整实现
+- ✅ Update()
+- ✅ Reset()
+- ✅ DetectTightSpace()
+
+SP02 LowCeiling：
+- ✅ 构造函数
+- ✅ ShouldExecute()
+- ✅ Execute() - 完整实现
+- ✅ Update()
+- ✅ Reset()
+
+SP03 CliffEdge：
+- ✅ 构造函数 + Reset()
+- ⏳ Execute() - Placeholder
+
+SP04 CornerCase：
+- ✅ 构造函数 + Reset()
+- ⏳ Execute() - Placeholder
+
+【编译结果】
+- Regenerate：[已执行]
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【最终状态】
+✅ SpecialBase + SP01 + SP02实现完成
+⏳ SP03-SP04待实现
+
+================================================================================
+```
+
+【后续步骤】
+
+5. 5.5完成后：
+- [x] ✅ 5.5.1:    CameraCollision_Recovery.h
+- [x] ✅ 5.5.2:  RecoveryBase + RC01
+- [x] ✅ 5.5.3: RC02 + RC03
+- [x] ✅ 5.5.4: CameraCollision_Special.h
+- [x] ✅ 5.5.5: SpecialBase + SP01-SP02（当前）
+- [ ] ⏳ 5.5.6: SP03-SP04 + 注册所有策略
+
+**Phase 5. 5进度：5/6**
+
+================================================================================

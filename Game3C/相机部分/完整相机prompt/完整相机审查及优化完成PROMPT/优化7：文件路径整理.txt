@@ -1,0 +1,105 @@
+优化7：文件路径整理
+
+================================================================================
+任务：SoulsCameraTestActor文件路径整理
+================================================================================
+
+【背景】
+SoulsCameraTestActor. cpp当前位置不符合UE4 Public/Private目录规范，
+需要移动到正确位置。
+
+【当前状态】
+```
+Source/MyProject/
+├── Public/
+│   └── Camera/
+│       └── Test/
+│           └── SoulsCameraTestActor.h    ✅ 正确位置
+│
+├── Camera/                               ❌ 不规范
+│   └── Test/
+│       └── SoulsCameraTestActor.cpp      ❌ 应该在Private下
+```
+
+【目标状态】
+```
+Source/MyProject/
+├── Public/
+│   └── Camera/
+│       └── Test/
+│           └── SoulsCameraTestActor.h    ✅
+│
+└── Private/                              ✅
+    └── Camera/
+        └── Test/
+            └── SoulsCameraTestActor. cpp  ✅ 正确位置
+```
+
+【操作步骤】
+
+## 步骤1：创建目标目录（如不存在）
+
+```
+Source/MyProject/Private/Camera/Test/
+```
+
+## 步骤2：移动文件
+
+将以下文件：
+```
+Source/MyProject/Camera/Test/SoulsCameraTestActor.cpp
+```
+
+移动到：
+```
+Source/MyProject/Private/Camera/Test/SoulsCameraTestActor.cpp
+```
+
+## 步骤3：检查并更新包含路径（如需要）
+
+确认SoulsCameraTestActor.cpp中的#include路径仍然正确：
+
+```cpp
+// 应该是相对于Public的路径，通常不需要修改
+#include "Camera/Test/SoulsCameraTestActor.h"
+```
+
+## 步骤4：更新项目文件（如使用CMake或手动管理）
+
+如果项目使用. Build. cs，通常不需要修改，UE4会自动扫描。
+
+如果使用CMake或其他构建系统，更新源文件列表。
+
+## 步骤5：删除旧目录（如为空）
+
+如果Source/MyProject/Camera/目录移动后为空，可以删除。
+
+## 步骤6：重新生成项目文件
+
+```
+右键. uproject → Generate Visual Studio project files
+```
+
+或使用命令行：
+```
+UnrealBuildTool. exe -projectfiles -project="YourProject.uproject" -game -engine
+```
+
+## 步骤7：重新编译验证
+
+编译项目，确保无错误。
+
+【验证要求】
+1. 文件位于Private/Camera/Test/目录下
+2. 编译通过，无错误
+3. SoulsCameraTestActor功能正常
+4. 验证功能（模块39/修改器26/碰撞20）仍然工作
+
+【输出要求】
+完成后请报告：
+1. 文件移动前后的路径
+2. 是否需要修改任何include路径
+3. 编译结果
+4. 任何遇到的问题
+
+================================================================================

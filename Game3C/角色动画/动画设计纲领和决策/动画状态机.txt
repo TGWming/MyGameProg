@@ -1,0 +1,493 @@
+
+类魂一般有几个情况 
+
+1. 正常探索移动: 
+
+1a IDLE 
+2b 前面移动-前跑
+3c 左边走路-右边走路
+4d 左前跑动-右前跑动
+5e 后移
+6f 跳
+
+2. 战斗
+
+========移动组
+2a IDLE 
+2b 前面移动-前跑
+2c 左边走路-右边走路
+2d 左前跑动-右前跑动
+2e 后移
+2f 跳
+
+=========战斗组
+2g 轻攻击一段砍
+2h 轻攻击二段砍
+2i 轻攻击三段砍
+2j 重击砍1
+2k 重击砍2
+2l 盾防
+2m 枪反
+2n 塞炸弹处决
+2o 冷兵器处决
+2p 跳劈（降落劈）
+2q 受击1
+2r 受击2
+2s 受击3
+2t 失衡
+2u 被处决
+2v debuff硬直
+2w 投掷
+2x 补血
+2y 上BUFF
+2z 闪避翻滚
+
+
+3. 探索特殊交互
+
+3a 开门 （演出，短暂禁止输入，随后恢复）
+3b 捡起东西 （演出，短暂禁止输入，随后恢复）
+3c 开箱子 （演出，短暂禁止输入，随后恢复）
+3d 开随身灯 （演出，短暂禁止输入，随后恢复）
+3e 换武器 
+3f 死亡坠落 （演出，短暂禁止输入，随后恢复）
+3g 出场起身 （演出，短暂禁止输入，随后恢复）
+
+4. 特殊交互
+
+4a 身穿进狭窄过道移动
+4b 身穿进狭窄过道（演出，短暂禁止输入，随后恢复）
+4c 攀爬翻越（演出，短暂禁止输入，随后恢复）
+4d 爬上楼梯 （演出，短暂禁止输入，随后恢复）
+4e 爬楼梯移动（演出，短暂禁止输入，随后恢复）
+4f 爬完楼梯攀上路面起立（演出，短暂禁止输入，随后恢复）
+4g 降落落地和起身（演出，短暂禁止输入，随后恢复）
+4h 坐电梯 （演出，短暂禁止输入，随后恢复）
+4i 关卡跳跃 （演出，短暂禁止输入，随后恢复）
+4j 休息台旁坐篝火（演出，短暂禁止输入，随后恢复）
+
+======================================================================================
+---
+
+# 类魂角色动画总表（Anim 类型 / BlendSpace / Montage 定位表）
+
+> **判定原则（贯穿全表）：**
+>
+> * 连续可控位移 → **BlendSpace / State**
+> * 离散行为 / 打断 / 演出 → **Anim Montage**
+
+---
+
+## 1️⃣ 正常探索移动（Exploration Locomotion）
+
+| 编号 | 动画内容   | 是否进 BlendSpace | BlendSpace / State 方式               | Anim 类型        |
+| -- | ------ | -------------- | ----------------------------------- | -------------- |
+| 1a | IDLE   | ❌              | 独立 Idle State                       | 普通 Anim        |
+| 2b | 前移动（走） | ✅              | Walk_BS（2D：Speed + Direction）       | BlendSpace     |
+| 2b | 前跑     | ✅              | Run_BS（1D 或 2D）                     | BlendSpace     |
+| 3c | 左走     | ✅              | Walk_BS（2D）                         | BlendSpace     |
+| 3c | 右走     | ✅              | Walk_BS（2D）                         | BlendSpace     |
+| 4d | 左前跑    | ✅              | Run_BS（2D，如有资源）                     | BlendSpace     |
+| 4d | 右前跑    | ✅              | Run_BS（2D）                          | BlendSpace     |
+| 5e | 后移     | ✅              | Walk_BS（2D，负 Direction）             | BlendSpace     |
+| 6f | 跳      | ❌              | **JumpStart → JumpLoop → JumpLand** | State Sequence |
+
+---
+
+## 2️⃣ 战斗（Combat）
+
+### 2️⃣A 战斗移动组（Combat Locomotion）
+
+| 编号 | 动画内容     | 是否进 BlendSpace | BlendSpace / State 方式                | Anim 类型        |
+| -- | -------- | -------------- | ------------------------------------ | -------------- |
+| 2a | 战斗 IDLE  | ❌              | Combat_Idle State                    | 普通 Anim        |
+| 2b | 前移动（战斗走） | ✅              | Combat_Walk_BS（2D）                   | BlendSpace     |
+| 2b | 前跑（战斗跑）  | ✅              | Combat_Run_BS（1D / 2D）               | BlendSpace     |
+| 2c | 左走       | ✅              | Combat_Walk_BS（2D）                   | BlendSpace     |
+| 2c | 右走       | ✅              | Combat_Walk_BS（2D）                   | BlendSpace     |
+| 2d | 左前跑      | ✅              | Combat_Run_BS（2D）                    | BlendSpace     |
+| 2d | 右前跑      | ✅              | Combat_Run_BS（2D）                    | BlendSpace     |
+| 2e | 后移       | ✅              | Combat_Walk_BS（2D）                   | BlendSpace     |
+| 2f | 跳        | ❌              | JumpStart → JumpLoop → JumpLand（战斗版） | State Sequence |
+
+---
+
+### 2️⃣B 战斗行为组（全部不进 BlendSpace）
+
+> ⚠️ **以下所有内容：一律 Anim Montage**
+
+| 编号 | 动画内容      | 是否进 BlendSpace | 推荐方式                            | Anim 类型 |
+| -- | --------- | -------------- | ------------------------------- | ------- |
+| 2g | 轻攻击一段     | ❌              | Combo Montage（Section 1）        | Montage |
+| 2h | 轻攻击二段     | ❌              | Combo Montage（Section 2）        | Montage |
+| 2i | 轻攻击三段     | ❌              | Combo Montage（Section 3）        | Montage |
+| 2j | 重击 1      | ❌              | HeavyAttack Montage             | Montage |
+| 2k | 重击 2      | ❌              | HeavyAttack Montage             | Montage |
+| 2l | 盾防        | ❌              | Loop / Hold Montage             | Montage |
+| 2m | 枪反        | ❌              | Parry Montage                   | Montage |
+| 2n | 塞炸弹处决     | ❌              | Execution Montage（Root Motion）  | Montage |
+| 2o | 冷兵器处决     | ❌              | Execution Montage（Root Motion）  | Montage |
+| 2p | 跳劈（降落劈）   | ❌              | JumpAttack Montage              | Montage |
+| 2q | 受击 1      | ❌              | HitReact Montage                | Montage |
+| 2r | 受击 2      | ❌              | HitReact Montage                | Montage |
+| 2s | 受击 3      | ❌              | HitReact Montage                | Montage |
+| 2t | 失衡        | ❌              | Stagger Montage                 | Montage |
+| 2u | 被处决       | ❌              | Death / Fatal Montage           | Montage |
+| 2v | Debuff 硬直 | ❌              | Status Stun Montage             | Montage |
+| 2w | 投掷        | ❌              | Throw Montage                   | Montage |
+| 2x | 补血        | ❌              | Heal Montage（锁输入）               | Montage |
+| 2y | 上 Buff    | ❌              | Buff Montage                    | Montage |
+| 2z | 闪避翻滚      | ❌              | Dodge Roll Montage（Root Motion） | Montage |
+
+---
+
+## 3️⃣ 探索特殊交互（Exploration Interaction）
+
+> **共同特征：演出 / 禁输入 / 必须打断 Locomotion**
+
+| 编号 | 动画内容 | 是否进 BlendSpace | 推荐方式                 | Anim 类型 |
+| -- | ---- | -------------- | -------------------- | ------- |
+| 3a | 开门   | ❌              | Interaction Montage  | Montage |
+| 3b | 捡起东西 | ❌              | Pickup Montage       | Montage |
+| 3c | 开箱子  | ❌              | Chest Montage        | Montage |
+| 3d | 开随身灯 | ❌              | Interaction Montage  | Montage |
+| 3e | 换武器  | ❌              | Equip Montage        | Montage |
+| 3f | 死亡坠落 | ❌              | Fall / Death Montage | Montage |
+| 3g | 出场起身 | ❌              | StandUp Montage      | Montage |
+
+---
+
+## 4️⃣ 特殊交互 / 地形行为
+
+### 4️⃣A 可控移动（少量 BlendSpace）
+
+| 编号 | 动画内容   | 是否进 BlendSpace | BlendSpace 方式      | Anim 类型    |
+| -- | ------ | -------------- | ------------------ | ---------- |
+| 4a | 狭窄过道移动 | ✅              | Narrow_Move_BS（1D） | BlendSpace |
+| 4e | 爬楼梯移动  | ✅              | Stair_Move_BS（1D）  | BlendSpace |
+
+---
+
+### 4️⃣B 演出型地形交互（全部 Montage）
+
+| 编号 | 动画内容      | 是否进 BlendSpace | 推荐方式                | Anim 类型 |
+| -- | --------- | -------------- | ------------------- | ------- |
+| 4b | 钻进狭窄过道    | ❌              | Squeeze Montage     | Montage |
+| 4c | 攀爬翻越      | ❌              | Climb Montage       | Montage |
+| 4d | 爬上楼梯（演出）  | ❌              | StairEnter Montage  | Montage |
+| 4f | 爬完楼梯起身    | ❌              | StairExit Montage   | Montage |
+| 4g | 降落落地 + 起身 | ❌              | LandRecover Montage | Montage |
+| 4h | 坐电梯       | ❌              | Elevator Montage    | Montage |
+| 4i | 关卡跳跃      | ❌              | LedgeJump Montage   | Montage |
+| 4j | 坐篝火       | ❌              | Bonfire Montage     | Montage |
+
+---
+
+# 总结一句（给你定心）
+
+* **BlendSpace 总量 ≈ 6–7 个**
+* **Montage 多，但逻辑全是“离散事件”**
+* **Jump 永远是：Start → Loop → Land**
+* **攻击 / 翻滚 / 处决 / 交互：一个都不进 BlendSpace**
+
+---
+
+好，下面这版是**严格按你刚才确认的那张表**，直接给你一个
+**「能落地、不返工、类魂标准」的 AnimBP State Machine 结构**。
+我不讲虚的，全是**结构 + 切换条件 + 打断规则**。
+
+---
+
+# 一、AnimBP 顶层总结构（先看全貌）
+
+这是**你 AnimBP 的“宪法”**：
+
+```
+AnimGraph
+├─ Base Locomotion (State Machine)
+│   ├─ Exploration Locomotion
+│   ├─ Combat Locomotion
+│   └─ Special Locomotion
+│
+├─ UpperBody / FullBody Slots
+│   ├─ Combat Slot
+│   ├─ Dodge Slot
+│   ├─ Interaction Slot
+│   └─ Execution Slot
+│
+└─ Additive / Overlay
+    ├─ Hit React
+    └─ Minor Additives
+```
+
+**一句话理解：**
+
+* **State Machine = 姿态 & 连续移动**
+* **Montage Slot = 行为 & 演出 & 打断**
+
+---
+
+# 二、Base Locomotion（总 State Machine）
+
+```
+Base_Locomotion_SM
+├─ Exploration_SM
+├─ Combat_SM
+└─ Special_SM
+```
+
+### 切换条件（非常重要）
+
+| 从 → 到                | 条件                          |
+| -------------------- | --------------------------- |
+| Exploration → Combat | bIsInCombat / bLockOn       |
+| Combat → Exploration | !bIsInCombat                |
+| 任意 → Special         | bInSpecialState（狭窄通道 / 楼梯等） |
+
+> ⚠️ **注意：**
+>
+> * 攻击 / 翻滚 / 处决 **不会切 State Machine**
+> * 它们只通过 Montage Slot 覆盖
+
+---
+
+# 三、Exploration Locomotion SM（探索移动）
+
+```
+Exploration_SM
+├─ Idle
+├─ Walk_BS
+├─ Run_BS
+└─ Jump_SM
+```
+
+---
+
+## 1️⃣ Exploration Idle
+
+* 动画：Idle
+* 条件：
+
+  * Speed == 0
+  * !bIsJumping
+
+---
+
+## 2️⃣ Walk_BS（2D）
+
+* 参数：
+
+  * Speed (0 ~ WalkSpeed)
+  * Direction (-180 ~ 180)
+
+* 进入条件：
+
+  * Speed > 0
+  * Speed ≤ WalkThreshold
+
+* 包含：
+
+  * 前 / 后 / 左 / 右 / 斜向
+
+---
+
+## 3️⃣ Run_BS（1D 或 2D）
+
+* 参数：
+
+  * Speed (RunSpeed)
+  * （可选 Direction）
+
+* 进入条件：
+
+  * Speed > RunThreshold
+  * !bIsJumping
+
+> ⚠️ **走 → 跑 = State 切换，不是 Blend**
+
+---
+
+## 4️⃣ Jump_SM（探索跳）
+
+```
+Jump_SM
+├─ JumpStart
+├─ JumpLoop
+└─ JumpLand
+```
+
+* JumpStart：
+
+  * 触发：bJumpPressed
+* JumpLoop：
+
+  * 条件：!bIsGrounded
+* JumpLand：
+
+  * 条件：bIsGrounded
+  * 播完 → 回 Idle / Walk / Run
+
+---
+
+# 四、Combat Locomotion SM（战斗移动）
+
+```
+Combat_SM
+├─ Combat_Idle
+├─ Combat_Walk_BS
+├─ Combat_Run_BS
+└─ Combat_Jump_SM
+```
+
+> **和探索 SM 完全平行，但动画资源不同**
+
+---
+
+## 1️⃣ Combat_Idle
+
+* 姿态更低
+* 可随时被攻击 / 防御 / 翻滚打断
+
+---
+
+## 2️⃣ Combat_Walk_BS（2D，核心）
+
+* 参数：
+
+  * Speed
+  * Direction（**锁定状态极重要**）
+
+* 包含：
+
+  * 前进
+  * 后撤
+  * 左右平移
+
+---
+
+## 3️⃣ Combat_Run_BS
+
+* 用于：
+
+  * 非锁定战斗
+  * 拉开距离
+
+---
+
+## 4️⃣ Combat_Jump_SM
+
+* 同 Exploration Jump
+* 动画资源为战斗版
+
+---
+
+# 五、Special Locomotion SM（特殊移动）
+
+```
+Special_SM
+├─ Narrow_Move_BS
+└─ Stair_Move_BS
+```
+
+### 进入条件
+
+* bInNarrowPath
+* bOnStairMove
+
+### 特点
+
+* **禁用 Combat / Exploration**
+* **只响应基础移动输入**
+
+---
+
+# 六、Montage Slot 体系（这是灵魂）
+
+## Slot 优先级（从高到低）
+
+```
+Execution Slot   （处决 / 被处决 / 死亡）
+Interaction Slot（开门 / 箱子 / 篝火）
+Dodge Slot      （翻滚 / 闪避）
+Combat Slot     （攻击 / 防御 / 枪反）
+UpperBody Slot  （轻覆盖，如持盾）
+```
+
+---
+
+## 各类 Montage 去向对照
+
+### ✔ Combat Slot
+
+* 轻攻击 1 / 2 / 3（Section Combo）
+* 重击 1 / 2
+* 枪反
+* 投掷
+* 跳劈
+* 上 Buff
+* 补血
+
+---
+
+### ✔ Dodge Slot
+
+* 闪避翻滚（Root Motion）
+
+---
+
+### ✔ Execution Slot
+
+* 塞炸弹处决
+* 冷兵器处决
+* 被处决
+* 死亡
+
+---
+
+### ✔ Interaction Slot
+
+* 开门
+* 捡东西
+* 开箱
+* 开灯
+* 换武器
+* 坠落
+* 起身
+* 电梯
+* 篝火
+
+---
+
+# 七、受击 / 失衡（关键但容易做错）
+
+### 推荐做法（稳）
+
+* **HitReact / Stagger 全是 Montage**
+* 走 Additive 或 FullBody
+* 根据伤害等级选不同 Slot 或 Section
+
+```
+if Damage < Threshold → HitReact
+if Damage ≥ Threshold → Stagger
+```
+
+---
+
+# 八、最重要的一句总结（你现在这个阶段一定要记住）
+
+> **State Machine 只负责“我现在怎么站、怎么走”
+> Montage 决定“我现在在干什么事”**
+
+你现在这套结构：
+
+* ✔ 支持 FromSoftware 那套“手感硬切”
+* ✔ 支持后期疯狂加武器 / Boss / 处决
+* ✔ PS4 性能和维护都安全
+
+---
+
+
+
+
+
+

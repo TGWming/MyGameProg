@@ -1,0 +1,1107 @@
+Sub-Step 5.1.4 Prompt
+
+================================================================================
+任务：创建CameraCollisionResolver.  cpp - 碰撞解析器类实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+实现碰撞解析器的核心功能（骨架版本，具体策略类在后续Step创建后注册）。
+
+【当前进度】
+Phase 5 Step 5. 1 Sub-Step 5.1.4 (共190个Sub-Step中的第152个)
+前置完成：
+- 5.1.1: CameraCollisionBase. h ✅
+- 5.1.2: CameraCollisionBase. cpp ✅
+- 5.1.3: CameraCollisionResolver.h ✅
+
+这是Step 5.1的最后一个Sub-Step！
+
+【任务目标】
+创建文件：Source/MyProject/Private/Camera/Collision/CameraCollisionResolver.cpp
+实现碰撞解析器（骨架版本）。
+
+【⚠️ 重要提醒】
+
+1. **本Sub-Step创建新文件**
+   创建后需要：
+   - 保存文件
+   - 右键. uproject → Generate Visual Studio project files
+   - 重新加载解决方案
+   - 编译
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **骨架版本说明：**
+   - CreateAllStrategies() 暂时为空，将在Step 5.2-5.5中逐步添加策略注册
+   - 基础框架必须完整可用
+
+4. **与头文件保持一致：**
+   - Initialize参数是 `USoulsCameraManager*`
+   - ResolveCollisions参数只有 `FStageExecutionContext&`
+   - 使用 FCollisionResolverConfig 和 FCollisionState
+
+【具体要求】
+
+**文件路径：** `Source/MyProject/Private/Camera/Collision/CameraCollisionResolver.cpp`
+
+**完整文件内容：**
+
+```cpp
+// Copyright Epic Games, Inc.   All Rights Reserved.  
+
+#include "Camera/Collision/CameraCollisionResolver. h"
+#include "Camera/Core/SoulsCameraManager. h"
+#include "Engine/World.h"
+#include "DrawDebugHelpers. h"
+
+/**
+ * CameraCollisionResolver. cpp
+ * 
+ * Implementation of the collision resolver that manages all 20 collision strategies. 
+ * 
+ * This is the skeleton version - strategies will be registered as they are created: 
+ * - Step 5.2: Detection Strategies (Det01-Det04)
+ * - Step 5.3: Response Strategies (Res01-Res04)
+ * - Step 5.4: Occlusion Strategies (Occ01-Occ04)
+ * - Step 5.5: Recovery + Special Strategies (Rec01-Rec04, Spc01-Spc04)
+ * 
+ * Execution Flow:
+ * 1. Detection Phase - Detect collisions using Det strategies
+ * 2. Response Phase - Calculate adjustments using Res strategies
+ * 3. Occlusion Phase - Handle view blocking using Occ strategies
+ * 4. Recovery Phase - Return to normal using Rec strategies
+ * 5. Special Phase - Handle special scenarios using Spc strategies
+ */
+
+// Strategy includes will be added as strategies are created
+// #include "Camera/Collision/CameraCollision_Detection.h"
+// #include "Camera/Collision/CameraCollision_Response.h"
+// #include "Camera/Collision/CameraCollision_Occlusion. h"
+// #include "Camera/Collision/CameraCollision_Recovery.h"
+// #include "Camera/Collision/CameraCollision_Special.h"
+
+
+//========================================
+// Constructor
+//========================================
+
+UCameraCollisionResolver::UCameraCollisionResolver()
+	: PreCollisionDistance(0.0f)
+	, PreCollisionPosition(FVector::ZeroVector)
+	, TimeSinceOcclusionCheck(0.0f)
+	, bIsInitialized(false)
+{
+}
+
+
+//========================================
+// Initialization
+//========================================
+
+void UCameraCollisionResolver::Initialize(USoulsCameraManager* InCameraManager)
+{
+	if (bIsInitialized)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("CameraCollisionResolver:  Already initialized"));
+		return;
+	}
+
+	CameraManager = InCameraManager;
+
+	// Reset state
+	CollisionState.Reset();
+	CurrentDetectionResult.Reset();
+	PreviousDetectionResult.Reset();
+
+	// Create all collision strategies
+	CreateAllStrategies(this);
+
+	bIsInitialized = true;
+
+	UE_LOG(LogTemp, Log, TEXT("CameraCollisionResolver:  Initialized with %d strategies"), 
+		RegisteredStrategies. Num());
+}
+
+void UCameraCollisionResolver:: Shutdown()
+{
+	// Clear all strategies
+	RegisteredStrategies. Empty();
+	
+	// Reset state
+	CollisionState.Reset();
+	CurrentDetectionResult.Reset();
+	
+	bIsInitialized = false;
+	
+	UE_LOG(LogTemp, Log, TEXT("CameraCollisionResolver:  Shutdown complete"));
+}
+
+
+//========================================
+// Strategy Registration
+//========================================
+
+bool UCameraCollisionResolver::RegisterStrategy(UCameraCollisionBase* Strategy)
+{
+	if (!Strategy)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("CameraCollisionResolver: Cannot register null strategy"));
+		return false;
+	}
+
+	ECameraCollisionType StrategyType = Strategy->GetStrategyType();
+
+	if (StrategyType == ECameraCollisionType::None)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("CameraCollisionResolver: Cannot register strategy with None type"));
+		return false;
+	}
+
+	if (RegisteredStrategies.Contains(StrategyType))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("CameraCollisionResolver: Strategy type %s already registered"),
+			*UEnum::GetValueAsString(StrategyType));
+		return false;
+	}
+
+	RegisteredStrategies.Add(StrategyType, Strategy);
+	
+	UE_LOG(LogTemp, Verbose, TEXT("CameraCollisionResolver:  Registered strategy %s [%s]"),
+		*Strategy->GetStrategyName().ToString(),
+		*UEnum::GetValueAsString(Strategy->GetStrategyCategory()));
+
+	return true;
+}
+
+bool UCameraCollisionResolver::UnregisterStrategy(ECameraCollisionType StrategyType)
+{
+	if (StrategyType == ECameraCollisionType:: None)
+	{
+		return false;
+	}
+
+	if (RegisteredStrategies.Contains(StrategyType))
+	{
+		RegisteredStrategies.Remove(StrategyType);
+		UE_LOG(LogTemp, Verbose, TEXT("CameraCollisionResolver: Unregistered strategy %s"),
+			*UEnum::GetValueAsString(StrategyType));
+		return true;
+	}
+	
+	return false;
+}
+
+UCameraCollisionBase* UCameraCollisionResolver::GetStrategy(ECameraCollisionType StrategyType) const
+{
+	UCameraCollisionBase* const* FoundStrategy = RegisteredStrategies.Find(StrategyType);
+	return FoundStrategy ? *FoundStrategy : nullptr;
+}
+
+TArray<UCameraCollisionBase*> UCameraCollisionResolver:: GetAllStrategies() const
+{
+	TArray<UCameraCollisionBase*> Result;
+	RegisteredStrategies. GenerateValueArray(Result);
+	return Result;
+}
+
+TArray<UCameraCollisionBase*> UCameraCollisionResolver:: GetStrategiesByCategory(ECollisionCategory Category) const
+{
+	TArray<UCameraCollisionBase*> Result;
+
+	for (const auto& Pair : RegisteredStrategies)
+	{
+		if (Pair. Value && Pair.Value->GetStrategyCategory() == Category)
+		{
+			Result. Add(Pair. Value);
+		}
+	}
+
+	// Sort by priority
+	Result.Sort([](const UCameraCollisionBase& A, const UCameraCollisionBase& B)
+	{
+		return A.GetPriority() > B.GetPriority();
+	});
+
+	return Result;
+}
+
+
+//========================================
+// Collision Resolution (Main Entry Point)
+//========================================
+
+void UCameraCollisionResolver::ResolveCollisions(FStageExecutionContext& Context)
+{
+	if (!bIsInitialized)
+	{
+		return;
+	}
+
+	// Store previous result for comparison
+	PreviousDetectionResult = CurrentDetectionResult;
+
+	// Phase 1: Detection
+	CurrentDetectionResult = PerformDetection(Context);
+
+	// Update collision state based on detection
+	UpdateCollisionState(Context. DeltaTime, CurrentDetectionResult);
+
+	// Collect all responses
+	TArray<FCollisionResponseOutput> AllResponses;
+
+	// Phase 2: Response (only if collision detected)
+	if (CurrentDetectionResult. bCollisionDetected)
+	{
+		ExecuteResponseStrategies(Context, CurrentDetectionResult, AllResponses);
+	}
+
+	// Phase 3: Occlusion
+	if (CurrentDetectionResult.HasOcclusion())
+	{
+		ExecuteOcclusionStrategies(Context, CurrentDetectionResult);
+	}
+
+	// Phase 4: Recovery (only if recovering)
+	if (CollisionState.bIsRecovering)
+	{
+		ExecuteRecoveryStrategies(Context, Context.DeltaTime);
+	}
+
+	// Phase 5: Special (check for special environments)
+	if (CurrentDetectionResult.IsInSpecialEnvironment())
+	{
+		ExecuteSpecialStrategies(Context, CurrentDetectionResult, AllResponses);
+	}
+
+	// Blend and apply all responses
+	if (AllResponses. Num() > 0)
+	{
+		FCollisionResponseOutput BlendedResponse;
+		BlendResponses(AllResponses, BlendedResponse);
+		ApplyResponse(Context, BlendedResponse);
+	}
+
+	// Debug visualization
+	if (Config. bDrawDebug)
+	{
+		UWorld* World = CameraManager. IsValid() ? CameraManager->GetWorld() : nullptr;
+		DrawDebug(World);
+	}
+
+	UE_LOG(LogTemp, VeryVerbose, TEXT("CollisionResolver: Colliding=%d, Recovering=%d, CharOccluded=%d, TargetOccluded=%d"),
+		CollisionState.bIsColliding,
+		CollisionState.bIsRecovering,
+		CollisionState.bCharacterOccluded,
+		CollisionState.bTargetOccluded);
+}
+
+void UCameraCollisionResolver::Update(float DeltaTime, const FStageExecutionContext& Context)
+{
+	if (! bIsInitialized)
+	{
+		return;
+	}
+
+	// Update all strategies
+	for (auto& Pair :  RegisteredStrategies)
+	{
+		if (Pair.Value)
+		{
+			Pair.Value->Update(DeltaTime, Context);
+		}
+	}
+
+	// Update occlusion check timer
+	TimeSinceOcclusionCheck += DeltaTime;
+
+	// Update recovery if active
+	if (CollisionState.bIsRecovering)
+	{
+		UpdateRecovery(DeltaTime);
+	}
+}
+
+
+//========================================
+// Detection
+//========================================
+
+FCollisionDetectionResult UCameraCollisionResolver::PerformDetection(const FStageExecutionContext& Context)
+{
+	FCollisionDetectionResult Result;
+	Result. Reset();
+
+	// Store desired values
+	Result. DesiredDistance = Context.Output.Distance;
+	Result. DesiredLocation = Context.Output. FocusPoint - 
+		Context.Output. Rotation.Vector() * Context.Output. Distance;
+
+	// Execute detection strategies
+	ExecuteDetectionStrategies(Context, Result);
+
+	// Check occlusion (at configured interval)
+	if (TimeSinceOcclusionCheck >= Config.OcclusionCheckInterval)
+	{
+		if (Config.bCheckCharacterOcclusion)
+		{
+			Result.bCharacterOccluded = IsCharacterOccluded(Context);
+		}
+		
+		if (Config.bCheckTargetOcclusion && Context.InputContext.bHasTarget)
+		{
+			Result.bTargetOccluded = IsTargetOccluded(Context);
+		}
+
+		TimeSinceOcclusionCheck = 0.0f;
+	}
+	else
+	{
+		// Use previous occlusion state
+		Result.bCharacterOccluded = CollisionState.bCharacterOccluded;
+		Result. bTargetOccluded = CollisionState.bTargetOccluded;
+	}
+
+	return Result;
+}
+
+bool UCameraCollisionResolver::IsCharacterOccluded(const FStageExecutionContext& Context) const
+{
+	UWorld* World = CameraManager.IsValid() ? CameraManager->GetWorld() : nullptr;
+	if (!World)
+	{
+		return false;
+	}
+
+	// Calculate camera location
+	FVector CameraLocation = Context.Output.FocusPoint - 
+		Context.Output.Rotation.Vector() * Context.Output.Distance;
+	
+	// Character location (look at torso, not feet)
+	FVector CharacterLocation = Context.InputContext.CharacterLocation;
+	CharacterLocation. Z += 100.0f;
+
+	// Setup trace params
+	FCollisionQueryParams Params;
+	Params.bTraceComplex = false;
+	
+	// Ignore the character
+	if (AActor* Owner = CameraManager.IsValid() ? CameraManager->GetOwner() : nullptr)
+	{
+		Params. AddIgnoredActor(Owner);
+	}
+
+	// Perform trace
+	FHitResult Hit;
+	bool bHit = World->LineTraceSingleByChannel(
+		Hit,
+		CameraLocation,
+		CharacterLocation,
+		ECC_Visibility,
+		Params
+	);
+
+	return bHit;
+}
+
+bool UCameraCollisionResolver::IsTargetOccluded(const FStageExecutionContext& Context) const
+{
+	if (!Context.InputContext.bHasTarget)
+	{
+		return false;
+	}
+
+	UWorld* World = CameraManager.IsValid() ? CameraManager->GetWorld() : nullptr;
+	if (!World)
+	{
+		return false;
+	}
+
+	// Calculate camera location
+	FVector CameraLocation = Context.Output.FocusPoint - 
+		Context.Output. Rotation.Vector() * Context.Output. Distance;
+	
+	// Target location (center of target)
+	FVector TargetLocation = Context.InputContext. TargetLocation;
+	TargetLocation.Z += 100.0f;  // Approximate center
+
+	// Setup trace params
+	FCollisionQueryParams Params;
+	Params. bTraceComplex = false;
+	
+	// Ignore both character and target
+	if (AActor* Owner = CameraManager.IsValid() ? CameraManager->GetOwner() : nullptr)
+	{
+		Params.AddIgnoredActor(Owner);
+	}
+	if (Context.InputContext. TargetActor. IsValid())
+	{
+		Params.AddIgnoredActor(Context. InputContext.TargetActor. Get());
+	}
+
+	// Perform trace
+	FHitResult Hit;
+	bool bHit = World->LineTraceSingleByChannel(
+		Hit,
+		CameraLocation,
+		TargetLocation,
+		ECC_Visibility,
+		Params
+	);
+
+	return bHit;
+}
+
+
+//========================================
+// Phase Execution
+//========================================
+
+void UCameraCollisionResolver::ExecuteDetectionStrategies(
+	const FStageExecutionContext& Context,
+	FCollisionDetectionResult& OutResult)
+{
+	TArray<UCameraCollisionBase*> DetectionStrategies = GetStrategiesByCategory(ECollisionCategory::Detection);
+
+	for (UCameraCollisionBase* Strategy : DetectionStrategies)
+	{
+		if (! Strategy || !Strategy->IsEnabled())
+		{
+			continue;
+		}
+
+		if (Strategy->ShouldExecute(Context))
+		{
+			FCollisionResponseOutput Response;
+			if (Strategy->Execute(Context, OutResult, Response))
+			{
+				Strategy->SetActive(true);
+				
+				// First detection that finds collision wins
+				if (OutResult.bCollisionDetected)
+				{
+					UE_LOG(LogTemp, Verbose, TEXT("CollisionResolver: Detection by %s - Distance=%.1f"),
+						*Strategy->GetStrategyName().ToString(),
+						OutResult. SafeDistance);
+					break;
+				}
+			}
+		}
+		else
+		{
+			Strategy->SetActive(false);
+		}
+	}
+}
+
+void UCameraCollisionResolver::ExecuteResponseStrategies(
+	const FStageExecutionContext& Context,
+	const FCollisionDetectionResult& DetectionResult,
+	TArray<FCollisionResponseOutput>& OutResponses)
+{
+	TArray<UCameraCollisionBase*> ResponseStrategies = GetStrategiesByCategory(ECollisionCategory:: Response);
+
+	for (UCameraCollisionBase* Strategy : ResponseStrategies)
+	{
+		if (!Strategy || !Strategy->IsEnabled())
+		{
+			continue;
+		}
+
+		if (Strategy->ShouldExecute(Context))
+		{
+			FCollisionResponseOutput Response;
+			if (Strategy->Execute(Context, DetectionResult, Response))
+			{
+				Strategy->SetActive(true);
+				OutResponses.Add(Response);
+				
+				UE_LOG(LogTemp, VeryVerbose, TEXT("CollisionResolver: Response from %s - DistAdj=%.1f"),
+					*Strategy->GetStrategyName().ToString(),
+					Response.DistanceAdjustment);
+			}
+		}
+		else
+		{
+			Strategy->SetActive(false);
+		}
+	}
+}
+
+void UCameraCollisionResolver::ExecuteOcclusionStrategies(
+	const FStageExecutionContext& Context,
+	FCollisionDetectionResult& DetectionResult)
+{
+	TArray<UCameraCollisionBase*> OcclusionStrategies = GetStrategiesByCategory(ECollisionCategory::Occlusion);
+
+	for (UCameraCollisionBase* Strategy : OcclusionStrategies)
+	{
+		if (!Strategy || !Strategy->IsEnabled())
+		{
+			continue;
+		}
+
+		if (Strategy->ShouldExecute(Context))
+		{
+			FCollisionResponseOutput Response;
+			if (Strategy->Execute(Context, DetectionResult, Response))
+			{
+				Strategy->SetActive(true);
+				
+				// Apply occlusion response immediately
+				// (occlusion handlers typically set actor visibility/materials)
+				
+				UE_LOG(LogTemp, VeryVerbose, TEXT("CollisionResolver: Occlusion handled by %s"),
+					*Strategy->GetStrategyName().ToString());
+			}
+		}
+		else
+		{
+			Strategy->SetActive(false);
+		}
+	}
+}
+
+void UCameraCollisionResolver::ExecuteRecoveryStrategies(
+	FStageExecutionContext& Context,
+	float DeltaTime)
+{
+	TArray<UCameraCollisionBase*> RecoveryStrategies = GetStrategiesByCategory(ECollisionCategory::Recovery);
+
+	for (UCameraCollisionBase* Strategy : RecoveryStrategies)
+	{
+		if (!Strategy || !Strategy->IsEnabled())
+		{
+			continue;
+		}
+
+		if (Strategy->ShouldExecute(Context))
+		{
+			// Pass empty detection result for recovery
+			FCollisionDetectionResult EmptyResult;
+			EmptyResult. DesiredDistance = PreCollisionDistance;
+			EmptyResult. DesiredLocation = PreCollisionPosition;
+
+			FCollisionResponseOutput Response;
+			if (Strategy->Execute(Context, EmptyResult, Response))
+			{
+				Strategy->SetActive(true);
+				
+				// Apply recovery response
+				ApplyResponse(Context, Response);
+				
+				UE_LOG(LogTemp, VeryVerbose, TEXT("CollisionResolver: Recovery by %s - Progress=%.2f"),
+					*Strategy->GetStrategyName().ToString(),
+					CollisionState.RecoveryProgress);
+			}
+		}
+		else
+		{
+			Strategy->SetActive(false);
+		}
+	}
+}
+
+void UCameraCollisionResolver::ExecuteSpecialStrategies(
+	const FStageExecutionContext& Context,
+	const FCollisionDetectionResult& DetectionResult,
+	TArray<FCollisionResponseOutput>& OutResponses)
+{
+	TArray<UCameraCollisionBase*> SpecialStrategies = GetStrategiesByCategory(ECollisionCategory:: Special);
+
+	for (UCameraCollisionBase* Strategy : SpecialStrategies)
+	{
+		if (!Strategy || !Strategy->IsEnabled())
+		{
+			continue;
+		}
+
+		if (Strategy->ShouldExecute(Context))
+		{
+			FCollisionResponseOutput Response;
+			if (Strategy->Execute(Context, DetectionResult, Response))
+			{
+				Strategy->SetActive(true);
+				OutResponses.Add(Response);
+				
+				UE_LOG(LogTemp, VeryVerbose, TEXT("CollisionResolver: Special handling by %s"),
+					*Strategy->GetStrategyName().ToString());
+			}
+		}
+		else
+		{
+			Strategy->SetActive(false);
+		}
+	}
+}
+
+
+//========================================
+// Response Processing
+//========================================
+
+void UCameraCollisionResolver::BlendResponses(
+	const TArray<FCollisionResponseOutput>& Responses,
+	FCollisionResponseOutput& OutBlended)
+{
+	if (Responses. Num() == 0)
+	{
+		return;
+	}
+
+	// Sort by priority (higher first)
+	TArray<FCollisionResponseOutput> SortedResponses = Responses;
+	SortedResponses. Sort([](const FCollisionResponseOutput& A, const FCollisionResponseOutput& B)
+	{
+		return A.Priority > B.Priority;
+	});
+
+	// Check for override responses
+	for (const FCollisionResponseOutput& Response : SortedResponses)
+	{
+		if (Response.bOverride)
+		{
+			OutBlended = Response;
+			return;
+		}
+	}
+
+	// Calculate total weight
+	float TotalWeight = 0.0f;
+	for (const FCollisionResponseOutput& Response : SortedResponses)
+	{
+		TotalWeight += Response. Weight;
+	}
+
+	if (TotalWeight <= 0.0f)
+	{
+		OutBlended = SortedResponses[0];
+		return;
+	}
+
+	// Weighted blend
+	OutBlended = FCollisionResponseOutput();
+	
+	for (const FCollisionResponseOutput& Response : SortedResponses)
+	{
+		float NormalizedWeight = Response.Weight / TotalWeight;
+		
+		OutBlended. PositionAdjustment += Response.PositionAdjustment * NormalizedWeight;
+		OutBlended. DistanceAdjustment += Response.DistanceAdjustment * NormalizedWeight;
+		OutBlended. RotationAdjustment. Pitch += Response.RotationAdjustment.Pitch * NormalizedWeight;
+		OutBlended. RotationAdjustment. Yaw += Response. RotationAdjustment.Yaw * NormalizedWeight;
+		OutBlended.RotationAdjustment.Roll += Response. RotationAdjustment.Roll * NormalizedWeight;
+		OutBlended.FOVAdjustment += Response.FOVAdjustment * NormalizedWeight;
+	}
+
+	// Use highest priority for blend time
+	OutBlended.BlendTime = SortedResponses[0].BlendTime;
+	OutBlended.Priority = SortedResponses[0].Priority;
+}
+
+void UCameraCollisionResolver:: ApplyResponse(
+	FStageExecutionContext& Context,
+	const FCollisionResponseOutput& Response)
+{
+	if (! Response.HasAdjustments())
+	{
+		return;
+	}
+
+	// Apply position adjustment
+	Context.Output.FocusPoint += Response.PositionAdjustment;
+
+	// Apply distance adjustment (negative = closer)
+	Context.Output.Distance = FMath::Max(
+		Config.MinDistanceFromTarget,
+		Context. Output.Distance + Response.DistanceAdjustment
+	);
+
+	// Apply rotation adjustment
+	Context.Output.Rotation.Pitch += Response.RotationAdjustment. Pitch;
+	Context.Output. Rotation.Yaw += Response.RotationAdjustment.Yaw;
+	Context.Output.Rotation.Roll += Response.RotationAdjustment.Roll;
+
+	// Apply FOV adjustment
+	Context.Output.FOV += Response.FOVAdjustment;
+
+	// Mark collision as active
+	Context.bCollisionAdjusted = true;
+}
+
+
+//========================================
+// State Management
+//========================================
+
+void UCameraCollisionResolver::UpdateCollisionState(float DeltaTime, const FCollisionDetectionResult& DetectionResult)
+{
+	bool bWasColliding = CollisionState. bIsColliding;
+
+	// Update collision state
+	CollisionState. bIsColliding = DetectionResult.bCollisionDetected;
+	CollisionState.bCharacterOccluded = DetectionResult. bCharacterOccluded;
+	CollisionState.bTargetOccluded = DetectionResult.bTargetOccluded;
+
+	if (CollisionState. bIsColliding)
+	{
+		// Colliding
+		CollisionState. CollisionTime += DeltaTime;
+		CollisionState.TimeSinceCollision = 0.0f;
+		CollisionState.bIsRecovering = false;
+		CollisionState.RecoveryProgress = 0.0f;
+		CollisionState.CurrentDistance = DetectionResult. SafeDistance;
+		CollisionState. DesiredDistance = DetectionResult.DesiredDistance;
+
+		// Store pre-collision state on first collision frame
+		if (! bWasColliding)
+		{
+			PreCollisionDistance = DetectionResult. DesiredDistance;
+			PreCollisionPosition = DetectionResult. DesiredLocation;
+			
+			UE_LOG(LogTemp, Verbose, TEXT("CollisionResolver:  Collision started, PreDistance=%.1f"),
+				PreCollisionDistance);
+		}
+	}
+	else
+	{
+		// Not colliding
+		CollisionState.CollisionTime = 0.0f;
+		CollisionState.TimeSinceCollision += DeltaTime;
+
+		// Start recovery if was colliding
+		if (bWasColliding && ! CollisionState.bIsRecovering)
+		{
+			BeginRecovery();
+		}
+	}
+}
+
+void UCameraCollisionResolver::BeginRecovery()
+{
+	CollisionState.bIsRecovering = true;
+	CollisionState.RecoveryProgress = 0.0f;
+	
+	UE_LOG(LogTemp, Verbose, TEXT("CollisionResolver: Recovery started"));
+}
+
+void UCameraCollisionResolver::UpdateRecovery(float DeltaTime)
+{
+	if (!CollisionState. bIsRecovering)
+	{
+		return;
+	}
+
+	// Apply recovery delay
+	if (CollisionState.TimeSinceCollision < Config.RecoveryDelay)
+	{
+		return;
+	}
+
+	// Update recovery progress
+	float RecoveryDelta = DeltaTime * Config.RecoverySpeed;
+	CollisionState.RecoveryProgress = FMath::Min(1.0f, CollisionState. RecoveryProgress + RecoveryDelta);
+
+	// Check if recovery complete
+	if (CollisionState.RecoveryProgress >= 1.0f)
+	{
+		CollisionState.bIsRecovering = false;
+		CollisionState.RecoveryProgress = 1.0f;
+		
+		UE_LOG(LogTemp, Verbose, TEXT("CollisionResolver:  Recovery complete"));
+	}
+}
+
+
+//========================================
+// Strategy Creation
+//========================================
+
+void UCameraCollisionResolver::CreateAllStrategies(UObject* Outer)
+{
+	UE_LOG(LogTemp, Log, TEXT("CameraCollisionResolver: CreateAllStrategies called"));
+
+	//========================================
+	// Detection Strategies (Det01-Det04) - Step 5. 2
+	//========================================
+	// TODO: Will be added after CameraCollision_Detection. h/. cpp are created
+	// RegisterStrategy(NewObject<UCameraCollision_Det01_LineTrace>(Outer));
+	// RegisterStrategy(NewObject<UCameraCollision_Det02_SphereTrace>(Outer));
+	// RegisterStrategy(NewObject<UCameraCollision_Det03_MultiRayTrace>(Outer));
+	// RegisterStrategy(NewObject<UCameraCollision_Det04_CapsuleTrace>(Outer));
+
+	//========================================
+	// Response Strategies (Res01-Res04) - Step 5.3
+	//========================================
+	// TODO: Will be added after CameraCollision_Response.h/.cpp are created
+	// RegisterStrategy(NewObject<UCameraCollision_Res01_PullIn>(Outer));
+	// RegisterStrategy(NewObject<UCameraCollision_Res02_Slide>(Outer));
+	// RegisterStrategy(NewObject<UCameraCollision_Res03_Rotate>(Outer));
+	// RegisterStrategy(NewObject<UCameraCollision_Res04_Hybrid>(Outer));
+
+	//========================================
+	// Occlusion Strategies (Occ01-Occ04) - Step 5.4
+	//========================================
+	// TODO:  Will be added after CameraCollision_Occlusion.h/.cpp are created
+	// RegisterStrategy(NewObject<UCameraCollision_Occ01_CharacterCheck>(Outer));
+	// RegisterStrategy(NewObject<UCameraCollision_Occ02_TargetCheck>(Outer));
+	// RegisterStrategy(NewObject<UCameraCollision_Occ03_Transparency>(Outer));
+	// RegisterStrategy(NewObject<UCameraCollision_Occ04_Outline>(Outer));
+
+	//========================================
+	// Recovery Strategies (Rec01-Rec04) - Step 5.5
+	//========================================
+	// TODO: Will be added after CameraCollision_Recovery.h/. cpp are created
+	// RegisterStrategy(NewObject<UCameraCollision_Rec01_Instant>(Outer));
+	// RegisterStrategy(NewObject<UCameraCollision_Rec02_Smooth>(Outer));
+	// RegisterStrategy(NewObject<UCameraCollision_Rec03_Delayed>(Outer));
+	// RegisterStrategy(NewObject<UCameraCollision_Rec04_Smart>(Outer));
+
+	//========================================
+	// Special Strategies (Spc01-Spc04) - Step 5.5
+	//========================================
+	// TODO:  Will be added after CameraCollision_Special.h/.cpp are created
+	// RegisterStrategy(NewObject<UCameraCollision_Spc01_TightSpace>(Outer));
+	// RegisterStrategy(NewObject<UCameraCollision_Spc02_Underwater>(Outer));
+	// RegisterStrategy(NewObject<UCameraCollision_Spc03_IndoorOutdoor>(Outer));
+	// RegisterStrategy(NewObject<UCameraCollision_Spc04_BossFight>(Outer));
+
+	UE_LOG(LogTemp, Log, TEXT("CameraCollisionResolver: Strategy creation placeholder complete"));
+	UE_LOG(LogTemp, Log, TEXT("  Registered:  %d strategies (will be 20 after all steps)"),
+		RegisteredStrategies.Num());
+}
+
+
+//========================================
+// Debug
+//========================================
+
+void UCameraCollisionResolver::DrawDebug(const UWorld* World) const
+{
+#if ENABLE_DRAW_DEBUG
+	if (!World || !Config.bDrawDebug)
+	{
+		return;
+	}
+
+	float Duration = Config.DebugDrawDuration;
+
+	// Draw collision state indicator
+	if (CollisionState.bIsColliding)
+	{
+		// Red indicator when colliding
+		DrawDebugSphere(World, CurrentDetectionResult.SafeLocation, 15.0f, 8, 
+			FColor::Red, false, Duration, 0, 2.0f);
+	}
+	else if (CollisionState. bIsRecovering)
+	{
+		// Yellow indicator when recovering
+		DrawDebugSphere(World, PreCollisionPosition, 10.0f, 8, 
+			FColor::Yellow, false, Duration, 0, 1.0f);
+	}
+
+	// Draw safe location
+	if (CurrentDetectionResult.bCollisionDetected)
+	{
+		DrawDebugLine(World,
+			CurrentDetectionResult. DesiredLocation,
+			CurrentDetectionResult.SafeLocation,
+			FColor:: Orange, false, Duration, 0, 1.0f);
+	}
+
+	// Draw collision normal
+	if (! CurrentDetectionResult. CollisionNormal.IsNearlyZero())
+	{
+		DrawDebugDirectionalArrow(World,
+			CurrentDetectionResult.HitResult.ImpactPoint,
+			CurrentDetectionResult.HitResult. ImpactPoint + CurrentDetectionResult.CollisionNormal * 50.0f,
+			20.0f, FColor::Blue, false, Duration, 0, 1.0f);
+	}
+#endif
+}
+```
+
+---
+
+【代码设计说明】
+
+### 1. 与头文件的对应关系
+
+```
+头文件声明                        → 实现位置
+─────────────────────────────────────────────────
+Initialize(USoulsCameraManager*)  → 第43行
+Shutdown()                        → 第66行
+ResolveCollisions(Context)        → 第137行
+Update(DeltaTime, Context)        → 第208行
+PerformDetection(Context)         → 第232行
+ExecuteDetectionStrategies()      → 第284行
+ExecuteResponseStrategies()       → 第319行
+ExecuteOcclusionStrategies()      → 第356行
+ExecuteRecoveryStrategies()       → 第389行
+ExecuteSpecialStrategies()        → 第430行
+BlendResponses()                  → 第469行
+ApplyResponse()                   → 第518行
+UpdateCollisionState()            → 第546行
+BeginRecovery()                   → 第595行
+UpdateRecovery()                  → 第602行
+CreateAllStrategies()             → 第628行
+DrawDebug()                       → 第688行
+```
+
+### 2. 五阶段执行流程
+
+```
+ResolveCollisions()
+│
+├─→ PerformDetection()
+│   └─→ ExecuteDetectionStrategies()
+│
+├─→ UpdateCollisionState()
+│
+├─→ if (Colliding)
+│   └─→ ExecuteResponseStrategies()
+│
+├─→ if (HasOcclusion)
+│   └─→ ExecuteOcclusionStrategies()
+│
+├─→ if (Recovering)
+│   └─→ ExecuteRecoveryStrategies()
+│
+├─→ if (SpecialEnvironment)
+│   └─→ ExecuteSpecialStrategies()
+│
+├─→ BlendResponses()
+│
+└─→ ApplyResponse()
+```
+
+### 3. 状态转换
+
+```
+Normal → Colliding:  检测到碰撞
+├── 保存 PreCollisionDistance/Position
+└── CollisionState.bIsColliding = true
+
+Colliding → Recovering: 碰撞结束
+├── BeginRecovery()
+└── CollisionState.bIsRecovering = true
+
+Recovering → Normal: 恢复完成
+└── RecoveryProgress >= 1.0
+```
+
+【Step 5.1 完成验证】
+
+```
+Step 5.1 碰撞系统基础框架：
+├── 5.1.1: CameraCollisionBase. h      ✅
+├── 5.1.2: CameraCollisionBase. cpp    ✅
+├── 5.1.3: CameraCollisionResolver.h  ✅
+└── 5.1.4: CameraCollisionResolver.cpp ✅ (当前)
+
+框架功能：
+├── 碰撞策略抽象基类
+├── 碰撞解析器管理器
+├── 五阶段执行流程
+├── 状态管理和恢复
+└── 调试可视化
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] Regenerate执行
+   - [ ] 编译通过（0 errors）
+   - [ ] 无链接错误
+
+2. **代码完整性：**
+   - [ ] 构造函数和初始化
+   - [ ] 策略注册管理
+   - [ ] 五阶段执行方法
+   - [ ] 响应混合和应用
+   - [ ] 状态管理
+   - [ ] 调试可视化
+
+3. **骨架验证：**
+   - [ ] CreateAllStrategies包含所有20个策略的TODO注释
+   - [ ] 框架可以在没有策略的情况下运行
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 5.1.4 完成报告
+================================================================================
+
+【创建的文件】
+- 文件：CameraCollisionResolver.cpp
+- 路径：Source/MyProject/Private/Camera/Collision/
+
+【实现的方法】
+初始化：
+- ✅ 构造函数
+- ✅ Initialize()
+- ✅ Shutdown()
+
+策略管理：
+- ✅ RegisterStrategy()
+- ✅ UnregisterStrategy()
+- ✅ GetStrategy()
+- ✅ GetAllStrategies()
+- ✅ GetStrategiesByCategory()
+
+主入口：
+- ✅ ResolveCollisions()
+- ✅ Update()
+- ✅ PerformDetection()
+
+五阶段执行：
+- ✅ ExecuteDetectionStrategies()
+- ✅ ExecuteResponseStrategies()
+- ✅ ExecuteOcclusionStrategies()
+- ✅ ExecuteRecoveryStrategies()
+- ✅ ExecuteSpecialStrategies()
+
+响应处理：
+- ✅ BlendResponses()
+- ✅ ApplyResponse()
+
+状态管理：
+- ✅ UpdateCollisionState()
+- ✅ BeginRecovery()
+- ✅ UpdateRecovery()
+
+辅助：
+- ✅ IsCharacterOccluded()
+- ✅ IsTargetOccluded()
+- ✅ CreateAllStrategies() (骨架)
+- ✅ DrawDebug()
+
+【编译结果】
+- Regenerate：[已执行]
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【最终状态】
+✅ Step 5.1 碰撞系统基础框架完成
+
+================================================================================
+```
+
+【后续步骤】
+
+Step 5.1完成后：
+- [x] ✅ Step 5.1: 碰撞系统基础框架（4个Sub-Step）
+- [ ] ⏳ Step 5.2: Detection策略（Det01-Det04）
+- [ ] ⏳ Step 5.3: Response策略（Res01-Res04）
+- [ ] ⏳ Step 5.4: Occlusion策略（Occ01-Occ04）
+- [ ] ⏳ Step 5.5: Recovery + Special策略（Rec01-Rec04, Spc01-Spc04）
+
+**Phase 5.1进度：4/4 = 100%**
+**Phase 5总进度：1/5 Steps**
+
+================================================================================

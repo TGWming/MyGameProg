@@ -1,0 +1,250 @@
+Sub-Step 4.2.5 Prompt
+
+================================================================================
+任务：注册Shake修改器到ModifierManager
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Shake修改器（S01-S05）已全部实现，现在需要注册到ModifierManager。
+
+【当前进度】
+Phase 4 Step 4.2 Sub-Step 4.2.5 (共190个Sub-Step中的第116个)
+前置完成：
+- 4.2.1:  CameraModifier_Shake.  h ✅
+- 4.2.2: CameraModifier_Shake. cpp (ShakeBase + S01-S05) ✅
+- 4.2.3-4.2.4: ⏭️ 已跳过（S01-S05在4.2.2中完成）
+
+【任务目标】
+更新文件：Source/[ProjectName]/Private/Camera/Modifiers/CameraModifierManager.cpp
+（或 Private/Camera/Core/CameraModifierManager.cpp）
+
+在CreateAllModifiers()函数中注册5个Shake修改器。
+
+【⚠️ 重要提醒】
+
+1. **本Sub-Step是更新现有文件，不创建新文件**
+   因此**不需要Regenerate**，直接编译即可。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **确认Include：**
+   确保文件顶部有Shake修改器的include。
+
+【具体要求】
+
+================================================================================
+第一部分：确认/添加Include
+================================================================================
+
+**在CameraModifierManager.cpp文件顶部，确认或添加：**
+
+```cpp
+// Shake Modifiers (Phase 4.2)
+#include "Camera/Modifiers/CameraModifier_Shake.h"
+```
+
+================================================================================
+第二部分：更新CreateAllModifiers函数
+================================================================================
+
+**找到CreateAllModifiers()函数，替换为完整实现：**
+
+```cpp
+void UCameraModifierManager:: CreateAllModifiers(UObject* Outer)
+{
+	UE_LOG(LogTemp, Log, TEXT("CameraModifierManager:  Creating all 26 modifiers..."));
+
+	//========================================
+	// Shake Modifiers (S01-S05) - 5 modifiers
+	//========================================
+	
+	RegisterModifier(NewObject<UCameraModifier_S01_Shake_Hit_Light>(Outer));
+	RegisterModifier(NewObject<UCameraModifier_S02_Shake_Hit_Heavy>(Outer));
+	RegisterModifier(NewObject<UCameraModifier_S03_Shake_Attack_Hit>(Outer));
+	RegisterModifier(NewObject<UCameraModifier_S04_Shake_Environment>(Outer));
+	RegisterModifier(NewObject<UCameraModifier_S05_Shake_Landing>(Outer));
+
+	//========================================
+	// Reaction Modifiers (R01-R06) - 6 modifiers
+	// TODO: Will be added in Step 4.3
+	//========================================
+
+	//========================================
+	// Cinematic Modifiers (C01-C05) - 5 modifiers
+	// TODO:   Will be added in Step 4.4
+	//========================================
+
+	//========================================
+	// Zoom Modifiers (Z01-Z04) - 4 modifiers
+	// TODO: Will be added in Step 4.5
+	//========================================
+
+	//========================================
+	// Effect Modifiers (E01-E03) - 3 modifiers
+	// TODO: Will be added in Step 4.5
+	//========================================
+
+	//========================================
+	// Special Modifiers (X01-X03) - 3 modifiers
+	// TODO: Will be added in Step 4.6
+	//========================================
+
+	UE_LOG(LogTemp, Log, TEXT("CameraModifierManager:   Created %d modifiers (5 Shake + 21 pending)"), 
+		RegisteredModifiers.  Num());
+	
+	// Verify Shake modifiers count
+	if (RegisteredModifiers. Num() >= 5)
+	{
+		UE_LOG(LogTemp, Log, TEXT("CameraModifierManager:  Shake modifiers (S01-S05) registered successfully"));
+	}
+}
+```
+
+================================================================================
+第三部分：验证编译和运行时日志
+================================================================================
+
+**编译验证：**
+
+1. 保存所有文件
+2. 编译项目
+3. 确认编译通过（0 errors）
+
+**运行时验证（如可能）：**
+
+启动游戏后，检查日志是否显示：
+- "CameraModifierManager: Creating all 26 modifiers..."
+- "CameraModifierManager: Created 5 modifiers (5 Shake + 21 pending)"
+- "CameraModifierManager: Shake modifiers (S01-S05) registered successfully"
+
+================================================================================
+技术说明
+================================================================================
+
+### 1. 注册流程
+
+```
+SoulsCameraManager::CreateSubSystems()
+    └── ModifierManager = NewObject<UCameraModifierManager>(this)
+            └── ModifierManager->Initialize(this)
+                    └── CreateAllModifiers(this)
+                            ├── NewObject<S01>() → RegisterModifier()
+                            ├── NewObject<S02>() → RegisterModifier()
+                            ├── NewObject<S03>() → RegisterModifier()
+                            ├── NewObject<S04>() → RegisterModifier()
+                            └── NewObject<S05>() → RegisterModifier()
+```
+
+### 2. RegisterModifier内部逻辑
+
+```cpp
+bool RegisterModifier(UCameraModifierBase* Modifier)
+{
+    ECameraModifierID ID = Modifier->GetModifierID();
+    RegisteredModifiers.Add(ID, Modifier);  // TMap<ID, Modifier>
+    return true;
+}
+```
+
+### 3. 后续触发流程
+
+```cpp
+// 游戏代码触发抖动
+ModifierManager->TriggerModifierSimple(
+    ECameraModifierID:: Modifier_S01_Shake_Hit_Light, 
+    1.0f
+);
+
+// 内部查找并触发
+UCameraModifierBase* Modifier = RegisteredModifiers.Find(ID);
+Modifier->Trigger(TriggerData);
+```
+
+================================================================================
+验证标准
+================================================================================
+
+1. **编译验证：**
+   - [ ] 编译通过（0 errors）
+   - [ ] 无新增警告
+
+2. **代码完整性：**
+   - [ ] Include添加正确
+   - [ ] 5个Shake修改器全部注册
+   - [ ] TODO注释标记后续修改器
+
+3. **运行时验证：**
+   - [ ] 日志显示创建5个修改器
+   - [ ] GetModifierCount()返回5
+   - [ ] 可通过TriggerModifierSimple触发Shake
+
+================================================================================
+输出要求
+================================================================================
+
+```
+================================================================================
+Sub-Step 4.2.5 完成报告
+================================================================================
+
+【更新的文件】
+- 文件：CameraModifierManager. cpp
+- 路径：[实际路径]
+
+【添加的Include】
+- Camera/Modifiers/CameraModifier_Shake.h：[已添加/已存在]
+
+【注册的修改器】
+- ✅ UCameraModifier_S01_Shake_Hit_Light
+- ✅ UCameraModifier_S02_Shake_Hit_Heavy
+- ✅ UCameraModifier_S03_Shake_Attack_Hit
+- ✅ UCameraModifier_S04_Shake_Environment
+- ✅ UCameraModifier_S05_Shake_Landing
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【运行时验证】（如已测试）
+- GetModifierCount()：5
+- 日志输出：[正常/异常]
+
+【最终状态】
+✅ Shake修改器注册完成
+
+================================================================================
+```
+
+================================================================================
+Phase 4.2 完成总结
+================================================================================
+
+**完成此Sub-Step后，Phase 4.2 Shake修改器将100%完成！**
+
+| Sub-Step | 内容 | 状态 |
+|----------|------|------|
+| 4.2.1 | CameraModifier_Shake.h | ✅ 完成 |
+| 4.2.2 | CameraModifier_Shake.cpp | ✅ 完成 |
+| 4.2.3 | S01-S02实现 | ⏭️ 已合并到4.2.2 |
+| 4.2.4 | S03-S05实现 | ⏭️ 已合并到4.2.2 |
+| 4.2.5 | 注册到Manager | ⏳ 本步骤 |
+
+**Shake修改器进度：5/5 = 100%**
+**Phase 4修改器进度：5/26 = 19%**
+
+================================================================================
+后续步骤
+================================================================================
+
+Shake修改器完成后：
+- [x] ✅ 4.2: Shake修改器（S01-S05）
+- [ ] ⏳ 4.3:  Reaction修改器（R01-R06）
+- [ ] ⏳ 4.4: Cinematic修改器（C01-C05）
+- [ ] ⏳ 4.5: Zoom + Effect修改器
+- [ ] ⏳ 4.6: Special修改器
+
+================================================================================

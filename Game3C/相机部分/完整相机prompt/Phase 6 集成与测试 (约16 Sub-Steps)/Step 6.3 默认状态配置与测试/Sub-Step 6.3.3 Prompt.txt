@@ -1,0 +1,380 @@
+Sub-Step 6.3.3 Prompt
+
+================================================================================
+任务：在SoulsCameraPresets. cpp中添加游戏风格和模块预设实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+实现游戏风格预设和模块激活预设。
+
+【当前进度】
+Phase 6 Step 6. 3 Sub-Step 6.3.3 (共190个Sub-Step中的第186个)
+前置完成：6.3.2 状态配置实现
+
+【任务目标】
+在SoulsCameraPresets.cpp中添加游戏风格预设、模块激活预设和碰撞配置预设。
+
+【前置依赖】
+需要确认以下结构体和枚举已定义：
+
+已有枚举（在CameraStateEnums.h中）：
+- ECameraModuleType（39个模块类型）
+- ECameraRecoveryMode（恢复模式）
+
+需要确认的结构体（可能在SoulsCameraConfig.h或SoulsCameraParams_*. h中）：
+- FCameraStateConfig（状态配置，包含StateBase, Module, Modifier, Collision）
+- FStateBaseParams（基础参数）
+- FCollisionParams或FCollisionConfig（碰撞配置）
+
+【具体要求】
+
+1. 在SoulsCameraPresets.cpp的状态配置函数之后添加以下代码：
+
+2. 游戏风格预设函数（基于GetExplorationConfig()创建）：
+
+```cpp
+//========================================
+// Game Style Presets - 游戏风格预设
+//========================================
+
+FCameraStateConfig USoulsCameraPresets::GetDarkSoulsStyle()
+{
+    // Dark Souls:  沉重、审慎的相机风格
+    FCameraStateConfig Config = GetExplorationConfig();
+    Config.StateBase.Identity. StateName = FName("DarkSoulsStyle");
+
+    // 较慢、更审慎的相机响应
+    Config. StateBase.Position. FollowLagSpeed = 6.0f;
+    Config.StateBase. Rotation.RotationLagSpeed = 12.0f;
+
+    // 中等距离
+    Config.StateBase.Distance.BaseDistance = 400.0f;
+    Config.StateBase.Distance. DistanceAdjustSpeed = 4.0f;
+
+    // 标准FOV
+    Config.StateBase.FOV.BaseFOV = 90.0f;
+    Config.StateBase.FOV.SpeedFOVMultiplier = 0.01f;
+
+    // 适中的碰撞响应
+    Config. Collision.Response.PullInSpeed = 400.0f;
+    Config. Collision.Recovery.RecoverySpeed = 150.0f;
+    Config.Collision.Recovery.RecoveryMode = ECameraRecoveryMode::Delayed;
+    Config.Collision.Recovery.RecoveryDelay = 0.3f;
+
+    return Config;
+}
+
+FCameraStateConfig USoulsCameraPresets::GetBloodborneStyle()
+{
+    // Bloodborne: 更快、更近、更激进
+    FCameraStateConfig Config = GetExplorationConfig();
+    Config.StateBase. Identity.StateName = FName("BloodborneStyle");
+
+    // 更快的相机响应
+    Config.StateBase. Position.FollowLagSpeed = 12.0f;
+    Config.StateBase.Rotation. RotationLagSpeed = 18.0f;
+
+    // 更近的距离
+    Config. StateBase.Distance. BaseDistance = 320.0f;
+    Config.StateBase.Distance.MinDistance = 120.0f;
+    Config.StateBase.Distance.DistanceAdjustSpeed = 8.0f;
+
+    // 更宽的FOV适应快节奏战斗
+    Config.StateBase.FOV.BaseFOV = 95.0f;
+    Config.StateBase.FOV.SpeedFOVMultiplier = 0.025f;
+    Config.StateBase.FOV.CombatFOVBonus = 8.0f;
+
+    // 激进的碰撞响应
+    Config.Collision. Response.PullInSpeed = 700.0f;
+    Config.Collision.Response.bInstantPullIn = false;
+    Config. Collision.Recovery.RecoverySpeed = 300.0f;
+    Config.Collision.Recovery.RecoveryMode = ECameraRecoveryMode:: Smooth;
+
+    return Config;
+}
+
+FCameraStateConfig USoulsCameraPresets::GetSekiroStyle()
+{
+    // Sekiro: 非常灵敏，近战聚焦
+    FCameraStateConfig Config = GetExplorationConfig();
+    Config.StateBase.Identity.StateName = FName("SekiroStyle");
+
+    // 非常灵敏的相机
+    Config.StateBase.Position.FollowLagSpeed = 15.0f;
+    Config.StateBase.Rotation. RotationLagSpeed = 22.0f;
+
+    // 近距离精确战斗
+    Config.StateBase.Distance.BaseDistance = 300.0f;
+    Config.StateBase.Distance.MinDistance = 100.0f;
+    Config.StateBase.Distance.MaxDistance = 450.0f;
+    Config.StateBase.Distance.DistanceAdjustSpeed = 12.0f;
+
+    // 紧凑FOV增强专注感
+    Config.StateBase.FOV. BaseFOV = 85.0f;
+    Config.StateBase.FOV.CombatFOVBonus = 5.0f;
+
+    // 肩部偏移适应战斗
+    Config.StateBase. Offset. SocketOffset = FVector(0.0f, 55.0f, 5.0f);
+
+    // 非常灵敏的碰撞响应
+    Config.Collision.Response.PullInSpeed = 1000.0f;
+    Config. Collision.Recovery.RecoverySpeed = 500.0f;
+    Config.Collision.Recovery.RecoveryMode = ECameraRecoveryMode::Adaptive;
+
+    return Config;
+}
+
+FCameraStateConfig USoulsCameraPresets:: GetEldenRingStyle()
+{
+    // Elden Ring: 开阔视野，适应开放世界
+    FCameraStateConfig Config = GetExplorationConfig();
+    Config.StateBase.Identity.StateName = FName("EldenRingStyle");
+
+    // 平滑相机
+    Config.StateBase.Position.FollowLagSpeed = 8.0f;
+    Config. StateBase.Rotation.RotationLagSpeed = 14.0f;
+
+    // 更远距离适应开放世界
+    Config.StateBase. Distance.BaseDistance = 450.0f;
+    Config.StateBase.Distance.MinDistance = 200.0f;
+    Config.StateBase.Distance.MaxDistance = 700.0f;
+    Config.StateBase.Distance.DistanceAdjustSpeed = 6.0f;
+    Config.StateBase.Distance.SpeedDistanceMultiplier = 0.08f;
+
+    // 宽视野欣赏风景
+    Config.StateBase.FOV. BaseFOV = 95.0f;
+    Config.StateBase.FOV.SpeedFOVMultiplier = 0.02f;
+
+    // 适中碰撞
+    Config.Collision.Response.PullInSpeed = 500.0f;
+    Config.Collision.Recovery.RecoverySpeed = 200.0f;
+    Config.Collision.Recovery.RecoveryMode = ECameraRecoveryMode:: Smooth;
+
+    return Config;
+}
+```
+
+3. 模块激活预设函数：
+
+```cpp
+//========================================
+// Module Activation Presets - 模块激活预设
+//========================================
+
+TArray<ECameraModuleType> USoulsCameraPresets::GetExplorationModules()
+{
+    TArray<ECameraModuleType> Modules;
+
+    // Position - 位置模块
+    Modules. Add(ECameraModuleType::P02_FollowTarget_Lagged);
+
+    // Rotation - 旋转模块
+    Modules.Add(ECameraModuleType::R01_PlayerInput_Free);
+    Modules.Add(ECameraModuleType::R06_AutoOrient_Movement);
+
+    // Distance - 距离模块
+    Modules.Add(ECameraModuleType::D01_BaseDistance);
+    Modules. Add(ECameraModuleType::D03_Speed_Offset);
+    Modules.Add(ECameraModuleType::D05_Environment_Limit);
+
+    // FOV - 视场角模块
+    Modules.Add(ECameraModuleType:: F01_BaseFOV);
+    Modules.Add(ECameraModuleType::F02_Speed_FOV);
+
+    // Offset - 偏移模块
+    Modules.Add(ECameraModuleType:: O01_SocketOffset_Base);
+    Modules.Add(ECameraModuleType::O02_Shoulder_Offset);
+
+    // Constraints - 约束模块
+    Modules.Add(ECameraModuleType::C01_Pitch_Clamp);
+    Modules.Add(ECameraModuleType:: C02_Distance_Clamp);
+
+    return Modules;
+}
+
+TArray<ECameraModuleType> USoulsCameraPresets::GetCombatModules()
+{
+    TArray<ECameraModuleType> Modules;
+
+    // Position
+    Modules.Add(ECameraModuleType::P02_FollowTarget_Lagged);
+
+    // Rotation
+    Modules.Add(ECameraModuleType::R02_PlayerInput_Lagged);
+    Modules.Add(ECameraModuleType:: R04_LookAt_Target_Soft);
+
+    // Distance
+    Modules.Add(ECameraModuleType::D01_BaseDistance);
+    Modules.Add(ECameraModuleType:: D02_TargetSize_Multiplier);
+    Modules.Add(ECameraModuleType:: D04_Combat_Adjust);
+    Modules.Add(ECameraModuleType::D06_Proximity_Adjust);
+
+    // FOV
+    Modules.Add(ECameraModuleType::F01_BaseFOV);
+    Modules.Add(ECameraModuleType:: F04_Combat_FOV);
+
+    // Offset
+    Modules.Add(ECameraModuleType::O01_SocketOffset_Base);
+    Modules.Add(ECameraModuleType::O02_Shoulder_Offset);
+
+    // Constraints
+    Modules. Add(ECameraModuleType::C01_Pitch_Clamp);
+    Modules.Add(ECameraModuleType::C02_Distance_Clamp);
+    Modules.Add(ECameraModuleType::C04_Visibility_Ensure);
+
+    return Modules;
+}
+
+TArray<ECameraModuleType> USoulsCameraPresets::GetBossLockOnModules()
+{
+    TArray<ECameraModuleType> Modules;
+
+    // Position
+    Modules.Add(ECameraModuleType::P05_Orbit_Boss);
+    Modules.Add(ECameraModuleType::P08_MidPoint_TwoTarget);
+
+    // Rotation
+    Modules.Add(ECameraModuleType::R05_LookAt_Boss);
+
+    // Distance
+    Modules.Add(ECameraModuleType::D01_BaseDistance);
+    Modules.Add(ECameraModuleType::D02_TargetSize_Multiplier);
+    Modules.Add(ECameraModuleType::D07_Boss_Phase);
+
+    // FOV
+    Modules.Add(ECameraModuleType::F01_BaseFOV);
+    Modules. Add(ECameraModuleType::F05_Boss_FOV);
+
+    // Offset
+    Modules.Add(ECameraModuleType::O01_SocketOffset_Base);
+
+    // Constraints
+    Modules.Add(ECameraModuleType::C01_Pitch_Clamp);
+    Modules.Add(ECameraModuleType:: C02_Distance_Clamp);
+    Modules.Add(ECameraModuleType::C04_Visibility_Ensure);
+
+    return Modules;
+}
+```
+
+4. 碰撞配置预设函数：
+
+```cpp
+//========================================
+// Collision Config Presets - 碰撞配置预设
+//========================================
+
+FCollisionParams USoulsCameraPresets:: GetDefaultCollisionConfig()
+{
+    FCollisionParams Config;
+
+    // Detection - 检测配置
+    Config. Detection.CameraProbeRadius = 12.0f;
+    Config.Detection. MinCameraDistance = 50.0f;
+    Config. Detection.CollisionPadding = 10.0f;
+    Config.Detection. bUseSphereTrace = true;
+    Config.Detection. bUseMultiRay = false;
+    Config.Detection.bUsePredictive = true;
+
+    // Response - 响应配置
+    Config.Response.bEnablePullIn = true;
+    Config.Response.bEnableSlide = false;
+    Config.Response.bEnableRotate = false;
+    Config. Response.bEnableHybrid = false;
+    Config. Response.PullInSpeed = 500.0f;
+    Config.Response.bInstantPullIn = false;
+    Config.Response.SoftLimitDistance = 100.0f;
+
+    // Occlusion - 遮挡配置
+    Config. Occlusion.bEnableCharacterFade = true;
+    Config.Occlusion.CharacterFadeStartDistance = 150.0f;
+    Config.Occlusion.CharacterFadeEndDistance = 50.0f;
+    Config.Occlusion.CharacterMinAlpha = 0.1f;
+    Config.Occlusion.CharacterFadeSpeed = 5.0f;
+    Config. Occlusion.bEnsureTargetVisible = true;
+    Config.Occlusion.bEnableTransparencyProbe = false;
+    Config. Occlusion.bEnableSmartReframe = false;
+
+    // Recovery - 恢复配置
+    Config.Recovery.RecoveryMode = ECameraRecoveryMode:: Smooth;
+    Config. Recovery.RecoverySpeed = 200.0f;
+    Config.Recovery. RecoveryDelay = 0.2f;
+    Config.Recovery. RecoverySpeedMultiplier = 1.0f;
+
+    // Special - 特殊场景配置
+    Config.Special.bEnableTightSpaceHandling = true;
+    Config. Special.bEnableWaterHandling = true;
+    Config.Special.bEnableDynamicObstacleHandling = true;
+
+    return Config;
+}
+
+FCollisionParams USoulsCameraPresets::GetAggressiveCollisionConfig()
+{
+    FCollisionParams Config = GetDefaultCollisionConfig();
+
+    // 更快的响应
+    Config.Response.PullInSpeed = 1000.0f;
+    Config. Response.bInstantPullIn = true;
+
+    // 更快的恢复
+    Config.Recovery.RecoveryMode = ECameraRecoveryMode::Adaptive;
+    Config. Recovery.RecoverySpeed = 400.0f;
+    Config.Recovery.RecoveryDelay = 0.0f;
+
+    // 更激进的遮挡处理
+    Config. Occlusion. CharacterFadeStartDistance = 200.0f;
+    Config.Occlusion.CharacterFadeSpeed = 10.0f;
+
+    return Config;
+}
+
+FCollisionParams USoulsCameraPresets::GetRelaxedCollisionConfig()
+{
+    FCollisionParams Config = GetDefaultCollisionConfig();
+
+    // 较慢、不那么突兀的响应
+    Config.Response. PullInSpeed = 300.0f;
+    Config. Response.bInstantPullIn = false;
+
+    // 较慢的恢复带延迟
+    Config.Recovery.RecoveryMode = ECameraRecoveryMode:: Delayed;
+    Config.Recovery.RecoverySpeed = 100.0f;
+    Config.Recovery.RecoveryDelay = 0.5f;
+
+    // 宽松的遮挡处理
+    Config.Occlusion.CharacterFadeStartDistance = 100.0f;
+    Config. Occlusion. CharacterMinAlpha = 0.3f;
+
+    return Config;
+}
+```
+
+【重要注意事项】
+
+1. 确认FCameraStateConfig中StateName的正确路径：
+   - 如果是 `Config.StateName` 直接访问
+   - 如果是 `Config.StateBase.Identity.StateName` 嵌套访问
+   - 需要根据实际的FCameraStateConfig结构调整
+
+2. 确认碰撞配置的返回类型：
+   - 原始PROMPT使用 `FCollisionConfig`
+   - 根据项目实际可能是 `FCollisionParams`
+   - 需要与SoulsCameraPresets. h中的声明一致
+
+3. 确认ECameraModuleType枚举值命名：
+   - 需要与CameraStateEnums. h中定义的一致
+   - 例如可能是 `P02_FollowTarget_Lagged` 或 `Module_P02_FollowTarget_Lagged`
+
+【验证标准】
+- 编译通过
+- 所有预设可正确获取
+- 各游戏风格预设参数差异合理
+- 模块组合符合各场景需求
+
+【输出要求】
+1. 首先检查SoulsCameraPresets.h确认函数声明和返回类型
+2. 检查相关结构体的字段路径
+3. 输出与现有代码兼容的完整实现
+================================================================================

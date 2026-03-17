@@ -1,0 +1,602 @@
+Sub-Step 4.4.2 Prompt
+
+================================================================================
+任务：创建CameraModifier_Cinematic. cpp - CinematicBase基类实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+实现Cinematic修改器的基类，提供相机完全接管功能。
+
+CinematicBase与其他Base类的区别：
+```
+ShakeBase: 
+├── 生成噪声偏移
+├── 叠加到当前相机
+└── 短暂效果
+
+ReactionBase:
+├── 方向性拉近/推远
+├── 叠加到当前相机
+└── 中等时长
+
+CinematicBase:
+├── 完全接管相机（Override模式）
+├── 设置绝对Transform
+├── 较长时长
+├── 支持多阶段演出
+└── Letterbox/FOV控制
+```
+
+【当前进度】
+Phase 4 Step 4.4 Sub-Step 4.4.2 (共190个Sub-Step中的第127个)
+前置完成：4.4.1 CameraModifier_Cinematic.h ✅
+
+【任务目标】
+创建文件：Source/[ProjectName]/Private/Camera/Modifiers/CameraModifier_Cinematic. cpp
+本Sub-Step实现文件框架和CinematicBase基类的完整实现。
+
+【⚠️ 重要提醒】
+
+1. **必须Regenerate：**
+   本Sub-Step创建新的. cpp文件。
+   创建文件后：
+   - 保存所有文件
+   - 右键. uproject → Generate Visual Studio project files
+   - 重新加载解决方案
+   - 然后编译
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **本Sub-Step只实现CinematicBase**
+   C01-C05将在后续Sub-Step中逐个实现。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modifiers/CameraModifier_Cinematic.cpp
+
+2. **完整文件内容：**
+
+```cpp
+// Copyright Epic Games, Inc. All Rights Reserved. 
+
+#include "Camera/Modifiers/CameraModifier_Cinematic.h"
+#include "Camera/Core/SoulsCameraManager.h"
+#include "GameFramework/Character.h"
+
+/**
+ * CameraModifier_Cinematic. cpp
+ * 
+ * This file contains the implementations of the Cinematic modifier base class
+ * and all 5 Cinematic modifiers (C01-C05).
+ * 
+ * Cinematic modifiers provide camera override functionality for dramatic moments. 
+ * Unlike Shake/Reaction modifiers that add offsets, Cinematic modifiers take
+ * full control of the camera transform.
+ * 
+ * Implementation Structure:
+ * - CinematicBase: Common override functionality (this Sub-Step)
+ * - C01: Execution camera (Sub-Step 4.4.3)
+ * - C02: Backstab camera (Sub-Step 4.4.4)
+ * - C03: Riposte camera (Sub-Step 4.4.5)
+ * - C04: BossIntro camera (Sub-Step 4.4.6)
+ * - C05: BossPhase camera (Sub-Step 4.4.7)
+ * 
+ * Override Mode:
+ * When IsOverrideModifier() returns true, Stage 4 uses the OverrideTransform
+ * directly instead of blending with other modifiers.  This allows cinematics
+ * to have complete control over the camera.
+ */
+
+
+//========================================
+// CinematicBase - Common Cinematic Functionality
+//========================================
+
+/**
+ * Constructor - Initialize default cinematic parameters
+ * 
+ * Default values provide a reasonable starting point for most cinematics. 
+ * Derived classes will configure specific parameters.
+ */
+UCameraModifier_CinematicBase::UCameraModifier_CinematicBase()
+	: CameraOffset(FVector(-150.0f, 50.0f, 30.0f))
+	, HeightOffset(50.0f)
+	, CameraDistance(200.0f)
+	, CinematicFOV(70.0f)
+	, bApplyLetterbox(true)
+	, LetterboxAmount(0.12f)
+	, TransformInterpSpeed(8.0f)
+	, bBlockPlayerInput(true)
+	, StoredPlayerLocation(FVector::ZeroVector)
+	, StoredTargetLocation(FVector::ZeroVector)
+	, StoredTargetActor(nullptr)
+	, CurrentCameraTransform(FTransform::Identity)
+	, bTransformInitialized(false)
+	, ActionDirection(FVector::ForwardVector)
+{
+}
+
+/**
+ * OnTriggered - Initialize cinematic state when triggered
+ * 
+ * Stores initial positions for reference during the cinematic. 
+ * These stored positions are used even if actors move during the cinematic
+ * to maintain consistent framing.
+ */
+void UCameraModifier_CinematicBase::OnTriggered(const FModifierTriggerData& InTriggerData)
+{
+	// Call parent
+	Super::OnTriggered(InTriggerData);
+	
+	// Reset transform state
+	bTransformInitialized = false;
+	CurrentCameraTransform = FTransform::Identity;
+	
+	// Store target actor reference
+	StoredTargetActor = InTriggerData. TargetActor;
+	
+	// Store player location (from trigger data or will be updated in ComputeEffect)
+	if (! InTriggerData. SourceLocation.IsNearlyZero())
+	{
+		StoredPlayerLocation = InTriggerData.SourceLocation;
+	}
+	
+	// Store target location
+	if (StoredTargetActor. IsValid())
+	{
+		StoredTargetLocation = StoredTargetActor->GetActorLocation();
+	}
+	else if (! InTriggerData.SourceDirection.IsNearlyZero())
+	{
+		// Use source direction to estimate target location
+		StoredTargetLocation = StoredPlayerLocation + InTriggerData.SourceDirection * 200.0f;
+	}
+	
+	// Calculate action direction (from player to target)
+	FVector DirectionToTarget = StoredTargetLocation - StoredPlayerLocation;
+	DirectionToTarget.Z = 0.0f;  // Keep horizontal
+	if (! DirectionToTarget.IsNearlyZero())
+	{
+		ActionDirection = DirectionToTarget.GetSafeNormal();
+	}
+	else
+	{
+		ActionDirection = FVector::ForwardVector;
+	}
+	
+	UE_LOG(LogTemp, Verbose, TEXT("CinematicBase: Triggered, Player at (%.1f, %.1f, %.1f), Target at (%.1f, %.1f, %.1f)"),
+		StoredPlayerLocation.X, StoredPlayerLocation.Y, StoredPlayerLocation.Z,
+		StoredTargetLocation.X, StoredTargetLocation.Y, StoredTargetLocation.Z);
+}
+
+/**
+ * OnActivated - Called when cinematic is fully active (blend in complete)
+ * 
+ * Can be used to trigger gameplay effects like disabling player input. 
+ */
+void UCameraModifier_CinematicBase:: OnActivated()
+{
+	Super::OnActivated();
+	
+	// Could notify game systems to disable player camera input here
+	// if (bBlockPlayerInput && CameraManager)
+	// {
+	//     CameraManager->SetPlayerInputEnabled(false);
+	// }
+	
+	UE_LOG(LogTemp, Verbose, TEXT("CinematicBase: Activated (blend in complete)"));
+}
+
+/**
+ * OnDeactivating - Called when cinematic begins blend out
+ * 
+ * Prepares for return to normal camera. 
+ */
+void UCameraModifier_CinematicBase:: OnDeactivating()
+{
+	Super::OnDeactivating();
+	
+	// Could notify game systems to re-enable player camera input here
+	// if (bBlockPlayerInput && CameraManager)
+	// {
+	//     CameraManager->SetPlayerInputEnabled(true);
+	// }
+	
+	UE_LOG(LogTemp, Verbose, TEXT("CinematicBase: Deactivating (starting blend out)"));
+}
+
+/**
+ * ComputeEffect - Compute cinematic camera transform
+ * 
+ * Unlike Shake/Reaction modifiers that compute offsets, Cinematic modifiers
+ * compute a full camera transform.  This is stored in OverrideTransform and
+ * bIsOverriding is set to true.
+ * 
+ * Derived classes should: 
+ * 1. Calculate desired camera position
+ * 2. Calculate look-at rotation
+ * 3. Call InterpolateCameraTransform() for smooth motion
+ * 4. Call base ComputeEffect to apply FOV and letterbox
+ */
+void UCameraModifier_CinematicBase::ComputeEffect(float DeltaTime, const FStageExecutionContext& Context)
+{
+	// Update stored player location if not set
+	if (StoredPlayerLocation.IsNearlyZero())
+	{
+		StoredPlayerLocation = Context. InputContext.CharacterLocation;
+	}
+	
+	// Update target location if actor is valid and moving
+	if (StoredTargetActor.IsValid())
+	{
+		// Option:  Track moving target or use stored position
+		// For most cinematics, we use stored position for stability
+		// StoredTargetLocation = StoredTargetActor->GetActorLocation();
+	}
+	
+	// Calculate effective weight
+	float EffectiveWeight = CurrentWeight * CurrentIntensity;
+	
+	// Base implementation computes a default cinematic position
+	// Derived classes should override and call Super at the end
+	
+	if (! bTransformInitialized)
+	{
+		// Initialize transform from current camera
+		CurrentCameraTransform. SetLocation(Context.InputContext.PreviousCameraLocation);
+		CurrentCameraTransform.SetRotation(Context.InputContext.PreviousCameraRotation. Quaternion());
+		bTransformInitialized = true;
+	}
+	
+	// Calculate default cinematic position (can be overridden)
+	FVector DesiredPosition = CalculateCinematicPosition(Context);
+	FVector LookAtPoint = CalculateMidpoint(Context);
+	FRotator DesiredRotation = CalculateLookAtRotation(DesiredPosition, LookAtPoint);
+	
+	// Create target transform
+	FTransform TargetTransform;
+	TargetTransform. SetLocation(DesiredPosition);
+	TargetTransform. SetRotation(DesiredRotation. Quaternion());
+	
+	// Interpolate towards target
+	InterpolateCameraTransform(DeltaTime, TargetTransform, TransformInterpSpeed);
+	
+	// Set override transform (this is what Stage 4 will use)
+	OverrideTransform = CurrentCameraTransform;
+	bIsOverriding = true;
+	
+	// Apply FOV override
+	if (CinematicFOV > 0.0f)
+	{
+		FOVEffect = (CinematicFOV - Context.Output. FOV) * EffectiveWeight;
+	}
+	
+	// Apply letterbox effect (using vignette as approximation)
+	if (bApplyLetterbox)
+	{
+		VignetteEffect = LetterboxAmount * EffectiveWeight;
+	}
+}
+
+/**
+ * CalculateCinematicPosition - Calculate camera position for cinematic shot
+ * 
+ * Default implementation places camera at an offset from the midpoint
+ * between player and target.  Derived classes override for specific behaviors.
+ * 
+ * @param Context Current execution context
+ * @return World position for camera
+ */
+FVector UCameraModifier_CinematicBase::CalculateCinematicPosition(const FStageExecutionContext& Context) const
+{
+	// Calculate midpoint between player and target
+	FVector MidPoint = CalculateMidpoint(Context);
+	
+	// Calculate coordinate system based on action direction
+	FVector Forward = ActionDirection;
+	FVector Right = FVector::CrossProduct(FVector:: UpVector, Forward).GetSafeNormal();
+	FVector Up = FVector::UpVector;
+	
+	// Handle edge case where action direction is vertical
+	if (Right.IsNearlyZero())
+	{
+		Right = FVector:: RightVector;
+	}
+	
+	// Apply offset in local space
+	// CameraOffset. X = forward/back (negative = behind action)
+	// CameraOffset.Y = left/right (positive = right side)
+	// CameraOffset.Z = up/down (positive = above)
+	FVector CameraPos = MidPoint;
+	CameraPos += Forward * CameraOffset.X;
+	CameraPos += Right * CameraOffset.Y;
+	CameraPos += Up * (CameraOffset.Z + HeightOffset);
+	
+	return CameraPos;
+}
+
+/**
+ * CalculateLookAtRotation - Calculate rotation to look at target
+ * 
+ * @param CameraPos Current camera position
+ * @param TargetPos Target to look at
+ * @return Rotation that points camera at target
+ */
+FRotator UCameraModifier_CinematicBase::CalculateLookAtRotation(const FVector& CameraPos, const FVector& TargetPos) const
+{
+	FVector LookDirection = TargetPos - CameraPos;
+	
+	if (LookDirection.IsNearlyZero())
+	{
+		return FRotator::ZeroRotator;
+	}
+	
+	return LookDirection.GetSafeNormal().Rotation();
+}
+
+/**
+ * CalculateMidpoint - Calculate midpoint between player and target
+ * 
+ * Useful for framing both characters in shot. 
+ * 
+ * @param Context Current execution context
+ * @return Midpoint location
+ */
+FVector UCameraModifier_CinematicBase::CalculateMidpoint(const FStageExecutionContext& Context) const
+{
+	FVector PlayerPos = StoredPlayerLocation;
+	FVector TargetPos = StoredTargetLocation;
+	
+	// If stored positions are invalid, use context
+	if (PlayerPos.IsNearlyZero())
+	{
+		PlayerPos = Context.InputContext.CharacterLocation;
+	}
+	
+	if (TargetPos. IsNearlyZero())
+	{
+		// Default to a point in front of player
+		TargetPos = PlayerPos + ActionDirection * 200.0f;
+	}
+	
+	// Calculate midpoint, slightly biased towards target for better framing
+	// 0.5 = exact midpoint, 0.6 = closer to target
+	float TargetBias = 0.55f;
+	return FMath::Lerp(PlayerPos, TargetPos, TargetBias);
+}
+
+/**
+ * InterpolateCameraTransform - Smoothly interpolate camera transform
+ * 
+ * Uses separate interpolation for position and rotation for smoother results.
+ * 
+ * @param DeltaTime Frame delta time
+ * @param TargetTransform Desired transform
+ * @param InterpSpeed Interpolation speed
+ */
+void UCameraModifier_CinematicBase::InterpolateCameraTransform(float DeltaTime, const FTransform& TargetTransform, float InterpSpeed)
+{
+	// Interpolate position
+	FVector CurrentPos = CurrentCameraTransform. GetLocation();
+	FVector TargetPos = TargetTransform.GetLocation();
+	FVector NewPos = FMath::VInterpTo(CurrentPos, TargetPos, DeltaTime, InterpSpeed);
+	
+	// Interpolate rotation
+	FQuat CurrentRot = CurrentCameraTransform. GetRotation();
+	FQuat TargetRot = TargetTransform.GetRotation();
+	FQuat NewRot = FMath::QInterpTo(CurrentRot, TargetRot, DeltaTime, InterpSpeed);
+	
+	// Update current transform
+	CurrentCameraTransform.SetLocation(NewPos);
+	CurrentCameraTransform.SetRotation(NewRot);
+}
+
+/**
+ * ApplyLetterbox - Apply letterbox effect
+ * 
+ * Uses VignetteEffect as an approximation for letterbox bars.
+ * For true letterbox, would need to render actual black bars.
+ * 
+ * @param Amount Letterbox amount (0-1, typically 0.1-0.2)
+ */
+void UCameraModifier_CinematicBase::ApplyLetterbox(float Amount)
+{
+	VignetteEffect = FMath::Clamp(Amount, 0.0f, 0.5f);
+}
+
+
+//========================================
+// C01-C05: Implementations in subsequent Sub-Steps
+//========================================
+
+// C01: UCameraModifier_C01_Cinematic_Execution - Sub-Step 4.4.3
+// C02: UCameraModifier_C02_Cinematic_Backstab - Sub-Step 4.4.4
+// C03: UCameraModifier_C03_Cinematic_Riposte - Sub-Step 4.4.5
+// C04: UCameraModifier_C04_Cinematic_BossIntro - Sub-Step 4.4.6
+// C05: UCameraModifier_C05_Cinematic_BossPhase - Sub-Step 4.4.7
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 文件头说明Override模式的工作原理
+   - 每个方法有详细的功能说明
+   - 说明与其他Base类的区别
+   - 所有注释英文
+
+2. **格式：**
+   - Tab缩进
+   - 清晰的方法分隔
+   - 保持与Shake/Reaction实现一致的风格
+
+3. **关键实现点：**
+   - `bIsOverriding = true` 告诉Stage 4使用Override模式
+   - `OverrideTransform` 存储完整相机变换
+   - 插值使用单独的位置/旋转插值获得更平滑效果
+
+【技术说明】
+
+### 1. Override模式工作流程
+
+```
+OnTriggered()
+├── 存储初始位置
+├── 计算ActionDirection
+└── 重置Transform状态
+
+ComputeEffect() 每帧调用
+├── 计算目标位置 (CalculateCinematicPosition)
+├── 计算目标旋转 (CalculateLookAtRotation)
+├── 平滑插值 (InterpolateCameraTransform)
+├── 设置 OverrideTransform = CurrentCameraTransform
+├── 设置 bIsOverriding = true
+└── 应用FOV/Letterbox效果
+
+Stage 4 处理
+├── 检测到 bIsOverriding == true
+├── 使用 OverrideTransform 作为最终变换
+└── 跳过其他修改器叠加
+```
+
+### 2. 坐标系统说明
+
+```
+ActionDirection = 从玩家指向目标的水平方向
+
+CameraOffset的含义：
+├── X：沿ActionDirection方向
+│   - 负值 = 在动作后方（常用）
+│   - 正值 = 在动作前方
+├── Y：垂直于ActionDirection的水平方向
+│   - 正值 = 右侧
+│   - 负值 = 左侧
+└── Z：垂直方向
+    - 正值 = 上方
+    - 负值 = 下方
+
+示例：CameraOffset(-150, 50, 30)
+= 在动作后方150cm，右侧50cm，上方30cm
+```
+
+### 3. 与Stage 4的交互
+
+```cpp
+// Stage 4 (ModifierApply) 的处理逻辑示例：
+void UCameraStage_ModifierApply::Execute(...)
+{
+    for (UCameraModifierBase* Modifier : ActiveModifiers)
+    {
+        if (Modifier->IsOverrideModifier() && Modifier->bIsOverriding)
+        {
+            // Override模式：直接使用Transform
+            Context.Output.CameraTransform = Modifier->OverrideTransform;
+            Context.Output.bIsCinematic = true;
+            
+            // 仍然应用FOV效果
+            Context.Output.FOV += Modifier->FOVEffect;
+            
+            // 跳过后续非Override修改器
+            break;
+        }
+        else
+        {
+            // 正常模式：叠加偏移
+            Context.Output. PositionOffset += Modifier->PositionEffect;
+            Context.Output.RotationOffset += Modifier->RotationEffect;
+            // ...
+        }
+    }
+}
+```
+
+### 4. CinematicBase提供的辅助方法
+
+| 方法 | 用途 | 派生类使用 |
+|------|------|-----------|
+| `CalculateCinematicPosition` | 计算相机位置 | 可Override |
+| `CalculateLookAtRotation` | 计算看向目标的旋转 | 直接使用 |
+| `CalculateMidpoint` | 计算玩家-目标中点 | 直接使用 |
+| `InterpolateCameraTransform` | 平滑插值Transform | 直接使用 |
+| `ApplyLetterbox` | 应用黑边效果 | 直接使用 |
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] Regenerate执行
+   - [ ] 编译通过（0 errors）
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] 构造函数初始化所有成员
+   - [ ] OnTriggered存储位置和计算方向
+   - [ ] OnActivated/OnDeactivating回调
+   - [ ] ComputeEffect设置Override模式
+   - [ ] 所有辅助方法实现
+
+3. **Override模式：**
+   - [ ] bIsOverriding = true
+   - [ ] OverrideTransform被设置
+   - [ ] 平滑插值工作正常
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 4.4.2 完成报告
+================================================================================
+
+【创建的文件】
+- 文件：CameraModifier_Cinematic. cpp
+- 路径：Source/[ProjectName]/Private/Camera/Modifiers/
+- 代码行数：约XXX行
+
+【实现的方法】
+- ✅ 构造函数（成员初始化）
+- ✅ OnTriggered（存储位置，计算方向）
+- ✅ OnActivated（激活回调）
+- ✅ OnDeactivating（停用回调）
+- ✅ ComputeEffect（Override模式核心）
+- ✅ CalculateCinematicPosition（计算相机位置）
+- ✅ CalculateLookAtRotation（计算看向旋转）
+- ✅ CalculateMidpoint（计算中点）
+- ✅ InterpolateCameraTransform（平滑插值）
+- ✅ ApplyLetterbox（黑边效果）
+
+【关键特性】
+- bIsOverriding = true（Override模式）
+- 使用VInterpTo/QInterpTo平滑插值
+- 支持Letterbox效果
+
+【编译结果】
+- Regenerate：[已执行]
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【最终状态】
+✅ CinematicBase基类实现完成
+
+================================================================================
+```
+
+【后续步骤】
+
+CinematicBase完成后：
+- [x] ✅ 4.4.1:  CameraModifier_Cinematic.h
+- [x] ✅ 4.4.2: CameraModifier_Cinematic. cpp - CinematicBase
+- [ ] ⏳ 4.4.3: C01 Execution实现
+- [ ] ⏳ 4.4.4: C02 Backstab实现
+- [ ] ⏳ 4.4.5: C03 Riposte实现
+- [ ] ⏳ 4.4.6: C04 BossIntro实现
+- [ ] ⏳ 4.4.7: C05 BossPhase实现
+- [ ] ⏳ 4.4.8: 注册到ModifierManager
+
+**Cinematic修改器进度：0/5实现，基类完成**
+
+================================================================================

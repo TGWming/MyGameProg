@@ -1,0 +1,493 @@
+Sub-Step 4.5.2 Prompt
+
+================================================================================
+任务：创建CameraModifier_Zoom.cpp - ZoomBase + Z01 AttackImpact实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+ZoomBase是所有Zoom修改器的基类，提供FOV/距离脉冲的通用功能。
+Z01是攻击命中时的FOV脉冲，提供快速的打击反馈。
+
+【当前进度】
+Phase 4 Step 4.5 Sub-Step 4.5.2 (共190个Sub-Step中的第135个)
+前置完成：4.5.1 CameraModifier_Zoom. h ✅
+
+【任务目标】
+创建文件：Source/MyProject/Private/Camera/Modifiers/CameraModifier_Zoom. cpp
+本Sub-Step实现文件框架、ZoomBase基类和Z01 AttackImpact。
+
+【⚠️ 重要提醒】
+
+1. **本Sub-Step创建新文件**
+   创建后需要：
+   - 保存文件
+   - 右键. uproject → Generate Visual Studio project files
+   - 重新加载解决方案
+   - 编译
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **类名必须与头文件一致：**
+   - `UCameraModifier_ZoomBase`
+   - `UCameraModifier_Z01_Zoom_AttackImpact`
+
+【具体要求】
+
+**文件路径：** `Source/MyProject/Private/Camera/Modifiers/CameraModifier_Zoom.cpp`
+
+**完整文件内容：**
+
+```cpp
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#include "Camera/Modifiers/CameraModifier_Zoom.h"
+#include "Camera/Core/SoulsCameraManager.h"
+
+/**
+ * CameraModifier_Zoom. cpp
+ * 
+ * This file contains the implementations of the Zoom modifier base class
+ * and all 4 Zoom modifiers (Z01-Z04).
+ * 
+ * Zoom modifiers provide FOV and distance pulse effects for combat feedback.
+ * Unlike Shake modifiers that add position noise, Zoom modifiers create
+ * smooth FOV/distance changes with specific curves.
+ * 
+ * Implementation Structure:
+ * - ZoomBase: Common zoom functionality (this Sub-Step)
+ * - Z01: AttackImpact (this Sub-Step)
+ * - Z02:  ChargeRelease (Sub-Step 4.5.3)
+ * - Z03: SkillActivate (Sub-Step 4.5.3)
+ * - Z04: CriticalHit (Sub-Step 4.5.4)
+ * 
+ * Effect Types:
+ * - Punch: Quick peak, slow decay (Z01, Z04)
+ * - Burst: Quick expansion, medium decay (Z02)
+ * - Sustain: Gradual in, hold, gradual out (Z03)
+ */
+
+
+//========================================
+// ZoomBase - Common Zoom Functionality
+//========================================
+
+/**
+ * Constructor - Initialize default zoom parameters
+ * 
+ * Default values provide a subtle zoom effect. 
+ * Derived classes will configure specific parameters.
+ */
+UCameraModifier_ZoomBase:: UCameraModifier_ZoomBase()
+	: BaseFOVChange(0.0f)
+	, BaseDistanceChange(0.0f)
+	, bApplyVignette(false)
+	, ZoomVignetteIntensity(0.1f)
+	, FOVInterpSpeed(15.0f)
+	, CurrentFOVChange(0.0f)
+	, TargetFOVChange(0.0f)
+	, CurrentDistanceChange(0.0f)
+{
+}
+
+/**
+ * OnTriggered - Initialize zoom state when triggered
+ * 
+ * Resets zoom values for fresh effect. 
+ */
+void UCameraModifier_ZoomBase::OnTriggered(const FModifierTriggerData& InTriggerData)
+{
+	// Call parent
+	Super::OnTriggered(InTriggerData);
+	
+	// Reset zoom state
+	CurrentFOVChange = 0.0f;
+	TargetFOVChange = 0.0f;
+	CurrentDistanceChange = 0.0f;
+	
+	UE_LOG(LogTemp, Verbose, TEXT("ZoomBase:  Triggered with intensity %. 2f"), CurrentIntensity);
+}
+
+/**
+ * ComputeEffect - Base zoom effect computation
+ * 
+ * Applies interpolation to smooth FOV/distance changes.
+ * Derived classes set TargetFOVChange and this method smooths it.
+ */
+void UCameraModifier_ZoomBase:: ComputeEffect(float DeltaTime, const FStageExecutionContext& Context)
+{
+	// Interpolate FOV change
+	CurrentFOVChange = FMath::FInterpTo(CurrentFOVChange, TargetFOVChange, DeltaTime, FOVInterpSpeed);
+	
+	// Apply weight and intensity
+	float EffectiveWeight = CurrentWeight * CurrentIntensity;
+	
+	// Set FOV effect
+	FOVEffect = CurrentFOVChange * EffectiveWeight;
+	
+	// Set distance effect
+	DistanceEffect = CurrentDistanceChange * EffectiveWeight;
+	
+	// Apply vignette if enabled
+	if (bApplyVignette && FMath::Abs(CurrentFOVChange) > 0.1f)
+	{
+		// Vignette intensity scales with zoom amount
+		float VignetteScale = FMath::Abs(CurrentFOVChange) / FMath::Max(FMath::Abs(BaseFOVChange), 1.0f);
+		VignetteEffect = ZoomVignetteIntensity * VignetteScale * EffectiveWeight;
+	}
+	else
+	{
+		VignetteEffect = 0.0f;
+	}
+}
+
+/**
+ * CalculateFOVPunch - Quick peak, slow decay curve
+ * 
+ * Used for attack impacts and critical hits.
+ * Creates a sharp initial response that fades out.
+ * 
+ * Curve shape:
+ *   ___
+ *  /   \____
+ * 0%      100%
+ * 
+ * @param NormalizedTime Current time in effect (0-1)
+ * @param PunchAmount Maximum FOV change
+ * @return FOV change value
+ */
+float UCameraModifier_ZoomBase:: CalculateFOVPunch(float NormalizedTime, float PunchAmount) const
+{
+	float PunchCurve;
+	
+	if (NormalizedTime < 0.1f)
+	{
+		// Very fast ramp up (0-10%)
+		PunchCurve = FMath::InterpEaseOut(0.0f, 1.0f, NormalizedTime / 0.1f, 3.0f);
+	}
+	else
+	{
+		// Gradual decay (10-100%)
+		float DecayProgress = (NormalizedTime - 0.1f) / 0.9f;
+		PunchCurve = FMath::InterpEaseIn(1.0f, 0.0f, DecayProgress, 2.0f);
+	}
+	
+	return PunchAmount * PunchCurve;
+}
+
+/**
+ * CalculateFOVBurst - Quick expansion, medium decay curve
+ * 
+ * Used for charge releases. 
+ * Creates a burst effect that settles back. 
+ * 
+ * Curve shape:
+ * ___
+ *    \___
+ *       \____
+ * 0%       100%
+ * 
+ * @param NormalizedTime Current time in effect (0-1)
+ * @param BurstAmount Maximum FOV expansion
+ * @return FOV change value
+ */
+float UCameraModifier_ZoomBase::CalculateFOVBurst(float NormalizedTime, float BurstAmount) const
+{
+	float BurstCurve;
+	
+	if (NormalizedTime < 0.15f)
+	{
+		// Quick burst up (0-15%)
+		BurstCurve = FMath::InterpEaseOut(0.0f, 1.0f, NormalizedTime / 0.15f, 2.5f);
+	}
+	else
+	{
+		// Medium decay (15-100%)
+		float DecayProgress = (NormalizedTime - 0.15f) / 0.85f;
+		BurstCurve = FMath:: InterpEaseOut(1.0f, 0.0f, DecayProgress, 1.5f);
+	}
+	
+	return BurstAmount * BurstCurve;
+}
+
+/**
+ * CalculateFOVSustain - Gradual in, hold, gradual out curve
+ * 
+ * Used for skill activation.
+ * Creates a sustained effect with smooth transitions.
+ * 
+ * Curve shape:
+ *     ____
+ *    /    \
+ * __/      \__
+ * 0%  50%   100%
+ * 
+ * @param NormalizedTime Current time in effect (0-1)
+ * @param TargetChange Target FOV change
+ * @param HoldRatio How much of duration to hold at peak (0-1)
+ * @return FOV change value
+ */
+float UCameraModifier_ZoomBase::CalculateFOVSustain(float NormalizedTime, float TargetChange, float HoldRatio) const
+{
+	// Calculate phase boundaries
+	float RampInEnd = (1.0f - HoldRatio) * 0.5f;
+	float HoldEnd = RampInEnd + HoldRatio;
+	
+	float SustainCurve;
+	
+	if (NormalizedTime < RampInEnd)
+	{
+		// Ramp in
+		float RampProgress = NormalizedTime / RampInEnd;
+		SustainCurve = FMath::InterpEaseInOut(0.0f, 1.0f, RampProgress, 2.0f);
+	}
+	else if (NormalizedTime < HoldEnd)
+	{
+		// Hold at peak
+		SustainCurve = 1.0f;
+	}
+	else
+	{
+		// Ramp out
+		float RampOutProgress = (NormalizedTime - HoldEnd) / (1.0f - HoldEnd);
+		SustainCurve = FMath::InterpEaseInOut(1.0f, 0.0f, RampOutProgress, 2.0f);
+	}
+	
+	return TargetChange * SustainCurve;
+}
+
+/**
+ * CalculateDistancePulse - Distance change with same timing as FOV
+ * 
+ * Typically mirrors the FOV change for cohesive effect.
+ * 
+ * @param NormalizedTime Current time in effect (0-1)
+ * @param PullAmount Distance change amount
+ * @return Distance change value
+ */
+float UCameraModifier_ZoomBase:: CalculateDistancePulse(float NormalizedTime, float PullAmount) const
+{
+	// Use same curve as punch for consistency
+	return CalculateFOVPunch(NormalizedTime, PullAmount);
+}
+
+
+//========================================
+// Z01: Attack Impact Zoom Implementation
+//========================================
+
+/**
+ * Constructor - Configure attack impact zoom parameters
+ * 
+ * Attack impact creates a quick FOV punch: 
+ * - Fast onset for immediate feedback
+ * - Brief tightening for impact feel
+ * - Quick recovery to not disrupt gameplay
+ * - Can stack for combo hits
+ */
+UCameraModifier_Z01_Zoom_AttackImpact::UCameraModifier_Z01_Zoom_AttackImpact()
+	: FOVPunchAmount(-5.0f)
+	, DistancePullAmount(-15.0f)
+	, bScaleWithHitStrength(true)
+{
+	// Configure base zoom settings
+	BaseFOVChange = -5.0f;
+	BaseDistanceChange = -15.0f;
+	bApplyVignette = false;  // Too quick for vignette
+	FOVInterpSpeed = 25.0f;  // Fast response
+}
+
+/**
+ * OnTriggered - Initialize attack impact state
+ * 
+ * Scales effect based on attack intensity (damage, weapon type, etc.)
+ */
+void UCameraModifier_Z01_Zoom_AttackImpact::OnTriggered(const FModifierTriggerData& InTriggerData)
+{
+	// Call parent
+	Super:: OnTriggered(InTriggerData);
+	
+	// Scale based on attack intensity
+	float IntensityScale = 1.0f;
+	if (bScaleWithHitStrength)
+	{
+		IntensityScale = FMath::Clamp(CurrentIntensity, 0.5f, 2.0f);
+	}
+	
+	// Apply scaling to punch amounts
+	FOVPunchAmount = -5.0f * IntensityScale;
+	DistancePullAmount = -15.0f * IntensityScale;
+	
+	UE_LOG(LogTemp, Verbose, TEXT("Z01 AttackImpact:  Triggered, Intensity=%.2f, FOVPunch=%.1f"),
+		CurrentIntensity, FOVPunchAmount);
+}
+
+/**
+ * ComputeEffect - Calculate attack impact FOV punch each frame
+ * 
+ * Uses punch curve:  instant peak, quick decay. 
+ * Effect is very brief (0.15s) for responsive feedback.
+ */
+void UCameraModifier_Z01_Zoom_AttackImpact::ComputeEffect(float DeltaTime, const FStageExecutionContext& Context)
+{
+	// Calculate normalized time (0-1 over duration)
+	float NormalizedTime = 0.0f;
+	if (ActiveDuration > 0.0f)
+	{
+		NormalizedTime = FMath::Clamp(TotalActiveTime / ActiveDuration, 0.0f, 1.0f);
+	}
+	
+	// Calculate FOV punch using base class helper
+	TargetFOVChange = CalculateFOVPunch(NormalizedTime, FOVPunchAmount);
+	
+	// Calculate distance pull
+	CurrentDistanceChange = CalculateDistancePulse(NormalizedTime, DistancePullAmount);
+	
+	// Call base to apply interpolation and weight
+	Super::ComputeEffect(DeltaTime, Context);
+}
+
+
+//========================================
+// Z02-Z04: Implementations in subsequent Sub-Steps
+//========================================
+
+// Z02: UCameraModifier_Z02_Zoom_ChargeRelease - Sub-Step 4.5.3
+// Z03: UCameraModifier_Z03_Zoom_SkillActivate - Sub-Step 4.5.3
+// Z04: UCameraModifier_Z04_Zoom_CriticalHit - Sub-Step 4.5.4
+```
+
+---
+
+【代码设计说明】
+
+### 1. ZoomBase提供的功能
+
+```
+UCameraModifier_ZoomBase
+├── CalculateFOVPunch()    - 攻击冲击曲线
+├── CalculateFOVBurst()    - 蓄力释放曲线
+├── CalculateFOVSustain()  - 技能持续曲线
+├── CalculateDistancePulse() - 距离脉冲
+├── ComputeEffect()        - 应用插值和权重
+└── 通用参数管理
+```
+
+### 2. Z01 Attack Impact特点
+
+```
+触发场景：
+├── 玩家攻击命中敌人
+├── 近战武器打击
+├── 远程攻击命中
+└── 连招中每次命中
+
+效果特点：
+├── 持续时间：0.15秒（最短）
+├── FOV收紧：-5度（可缩放）
+├── 距离拉近：-15cm
+├── 可叠加（连招）
+└── 快速插值（25. 0速度）
+```
+
+### 3. 曲线对比
+
+```
+Z01 Punch曲线（0. 15秒）：
+0%────10%────────────100%
+│快速│    缓慢衰减     │
+│上升│                 │
+
+时间分配：
+├── 0-10%：快速达到峰值
+└── 10-100%：渐进衰减
+```
+
+### 4. 缩放机制
+
+```cpp
+// 根据攻击强度缩放
+IntensityScale = Clamp(Intensity, 0.5, 2.0)
+
+// 轻攻击：Intensity = 0.5
+FOVPunch = -5 * 0.5 = -2.5度
+
+// 重攻击：Intensity = 1.5
+FOVPunch = -5 * 1.5 = -7.5度
+
+// 超强攻击：Intensity = 2.0
+FOVPunch = -5 * 2.0 = -10度
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] Regenerate执行
+   - [ ] 编译通过（0 errors）
+   - [ ] UTF-8 Without BOM
+
+2. **代码完整性：**
+   - [ ] ZoomBase构造函数和所有方法
+   - [ ] Z01构造函数、OnTriggered、ComputeEffect
+   - [ ] 调用Super::OnTriggered和Super::ComputeEffect
+   - [ ] 使用基类的曲线计算方法
+
+3. **效果验证：**
+   - [ ] FOV收紧效果
+   - [ ] 距离拉近效果
+   - [ ] 快速响应
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 4.5.2 完成报告
+================================================================================
+
+【创建的文件】
+- 文件：CameraModifier_Zoom.cpp
+- 路径：Source/MyProject/Private/Camera/Modifiers/
+
+【实现的内容】
+- ✅ UCameraModifier_ZoomBase
+  - 构造函数
+  - OnTriggered
+  - ComputeEffect
+  - CalculateFOVPunch
+  - CalculateFOVBurst
+  - CalculateFOVSustain
+  - CalculateDistancePulse
+
+- ✅ UCameraModifier_Z01_Zoom_AttackImpact
+  - 构造函数：FOVPunch=-5, DistancePull=-15
+  - OnTriggered：根据强度缩放
+  - ComputeEffect：使用Punch曲线
+
+【编译结果】
+- Regenerate：[已执行]
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【最终状态】
+✅ ZoomBase + Z01实现完成
+
+================================================================================
+```
+
+【后续步骤】
+
+4. 5.2完成后：
+- [x] ✅ 4.5.1: CameraModifier_Zoom.h
+- [x] ✅ 4.5.2: ZoomBase + Z01实现
+- [ ] ⏳ 4.5.3: Z02 + Z03实现
+- [ ] ⏳ 4.5.4: Z04实现
+- [ ] ⏳ 4.5.5: CameraModifier_Effect.h
+- [ ] ⏳ 4.5.6: EffectBase + E01-E03实现
+- [ ] ⏳ 4.5.7: 注册Zoom + Effect
+
+**Phase 4.5进度：2/7**
+
+================================================================================

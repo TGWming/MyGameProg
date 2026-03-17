@@ -1,0 +1,503 @@
+Sub-Step 4.4. 7 Prompt
+
+================================================================================
+任务：在CameraModifier_Cinematic.  cpp中添加C05 BossPhase实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4. 27 C++项目。
+C05是Boss阶段转换时的过场相机，展示Boss变身/强化的戏剧性时刻。
+
+【⚠️ 重要说明】
+**原始PROMPT中C05是DeathCam，但根据ECameraModifierID枚举，C05是BossPhase！**
+
+```cpp
+// CameraStateEnums.h 中的定义：
+Modifier_C05_Cinematic_BossPhase  // 不是 DeathCam
+
+// DeathCam 实际上是 X03: 
+Modifier_X03_Special_DeathCam     // 在Special修改器中
+```
+
+【C05 BossPhase设计】
+```
+触发场景：
+├── Boss血量降至阈值（如50%、25%）
+├── Boss进入第二/第三阶段
+├── Boss变身/觉醒动画
+└── Boss释放大招前
+
+相机行为：
+├── 聚焦Boss（玩家暂时不重要）
+├── 拉远展示变身效果
+├── 上升强调Boss变强
+├── 屏幕抖动增加冲击
+├── FOV冲击
+└── 持续约2. 5秒
+```
+
+【当前进度】
+Phase 4 Step 4.4 Sub-Step 4.4.7 (共190个Sub-Step中的第132个)
+前置完成：4.4.6 C04 BossIntro实现 ✅
+这是Step 4. 4的最后一个修改器实现。
+
+【任务目标】
+在CameraModifier_Cinematic. cpp中添加C05 BossPhase的完整实现。
+
+【⚠️ 重要提醒】
+
+1. **本Sub-Step是更新现有文件，不创建新文件**
+   因此**不需要Regenerate**，直接编译即可。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **类名必须与头文件一致：**
+   `UCameraModifier_C05_Cinematic_BossPhase`
+
+4. **在C04实现之后添加代码**
+
+【具体要求】
+
+**在CameraModifier_Cinematic.cpp的C04实现之后添加：**
+
+```cpp
+//========================================
+// C05: Boss Phase Transition Camera Implementation
+//========================================
+
+/**
+ * Constructor - Configure boss phase camera parameters
+ * 
+ * Boss phase camera emphasizes the transformation moment:  
+ * - Focus entirely on boss (player is secondary)
+ * - Pull back and rise to show transformation scale
+ * - Screen shake during power-up
+ * - FOV punch for impact
+ * - Used for phase 2, phase 3, or enrage transitions
+ */
+UCameraModifier_C05_Cinematic_BossPhase::  UCameraModifier_C05_Cinematic_BossPhase()
+	: PullBackDistance(120.0f)
+	, RiseHeight(100.0f)
+	, TransformationShakeIntensity(4.0f)
+	, FOVPunch(12.0f)
+	, TransformationPhase(0.0f)
+{
+	// Configure cinematic settings
+	CameraOffset = FVector(-280.0f, 60.0f, 80.0f);
+	HeightOffset = 80.0f;
+	CameraDistance = 320.0f;
+	CinematicFOV = 72.0f;
+	
+	// Letterbox for dramatic effect
+	bApplyLetterbox = true;
+	LetterboxAmount = 0.14f;
+	
+	// Medium interpolation speed
+	TransformInterpSpeed = 5.0f;
+	
+	// Block player input during phase transition
+	bBlockPlayerInput = true;
+}
+
+/**
+ * OnTriggered - Initialize boss phase camera state
+ * 
+ * Stores boss location as the primary focus. 
+ * Player location is secondary for this cinematic.
+ */
+void UCameraModifier_C05_Cinematic_BossPhase::  OnTriggered(const FModifierTriggerData& InTriggerData)
+{
+	// Call parent to store basic positions
+	Super::OnTriggered(InTriggerData);
+	
+	// For boss phase, target is the boss (primary focus)
+	if (InTriggerData. TargetActor. IsValid())
+	{
+		StoredTargetLocation = InTriggerData. TargetActor->GetActorLocation();
+		StoredTargetActor = InTriggerData.  TargetActor;
+	}
+	
+	// Player location (secondary)
+	if (InTriggerData.  SourceActor.IsValid())
+	{
+		StoredPlayerLocation = InTriggerData.SourceActor->GetActorLocation();
+	}
+	
+	// Calculate direction from player to boss
+	FVector ToBoss = StoredTargetLocation - StoredPlayerLocation;
+	ToBoss.Z = 0.0f;
+	if (! ToBoss.IsNearlyZero())
+	{
+		ActionDirection = ToBoss.GetSafeNormal();
+	}
+	else
+	{
+		ActionDirection = FVector::ForwardVector;
+	}
+	
+	// Reset transformation phase
+	TransformationPhase = 0.0f;
+	
+	// Scale effects based on intensity (phase 3 more dramatic than phase 2)
+	float IntensityScale = FMath::Clamp(CurrentIntensity, 0.8f, 1.5f);
+	PullBackDistance = 120.0f * IntensityScale;
+	RiseHeight = 100.0f * IntensityScale;
+	TransformationShakeIntensity = 4.0f * IntensityScale;
+	
+	UE_LOG(LogTemp, Verbose, TEXT("C05 BossPhase: Triggered, Intensity=%.2f, PullBack=%.1f"),
+		CurrentIntensity, PullBackDistance);
+}
+
+/**
+ * ComputeEffect - Calculate boss-focused dramatic camera each frame
+ * 
+ * Camera pulls back and rises to show boss transformation,
+ * with screen shake during the power-up moment.
+ */
+void UCameraModifier_C05_Cinematic_BossPhase:: ComputeEffect(float DeltaTime, const FStageExecutionContext& Context)
+{
+	// Calculate normalized time (0-1 over duration)
+	float NormalizedTime = 0.0f;
+	if (ActiveDuration > 0.0f)
+	{
+		NormalizedTime = FMath::Clamp(TotalActiveTime / ActiveDuration, 0.0f, 1.0f);
+	}
+	TransformationPhase = NormalizedTime;
+	
+	// Update stored target location if boss is moving during transformation
+	if (StoredTargetActor. IsValid())
+	{
+		// Option:  track boss or use stored position
+		// For stability, we use stored position but can update if needed
+		// StoredTargetLocation = StoredTargetActor->GetActorLocation();
+	}
+	
+	// Calculate right vector for camera positioning
+	FVector Right = FVector::CrossProduct(FVector::UpVector, ActionDirection).GetSafeNormal();
+	if (Right.  IsNearlyZero())
+	{
+		Right = FVector::RightVector;
+	}
+	
+	//========================================
+	// Camera Movement:   Pull back and rise
+	//========================================
+	
+	// Pull back curve:   quick pull at start, hold, then slight return
+	float PullBackCurve;
+	if (NormalizedTime < 0.25f)
+	{
+		// Quick pull back
+		PullBackCurve = FMath::  InterpEaseOut(0.0f, 1.0f, NormalizedTime / 0.25f, 2.0f);
+	}
+	else if (NormalizedTime < 0.75f)
+	{
+		// Hold at maximum
+		PullBackCurve = 1.0f;
+	}
+	else
+	{
+		// Slight return for transition back
+		float ReturnProgress = (NormalizedTime - 0.75f) / 0.25f;
+		PullBackCurve = FMath::Lerp(1.0f, 0.7f, ReturnProgress);
+	}
+	
+	// Rise curve:  gradual rise, peak at middle, then descend
+	float RiseCurve = FMath::Sin(NormalizedTime * PI);
+	
+	// Calculate base camera position
+	float CurrentPullBack = CameraDistance + PullBackDistance * PullBackCurve;
+	float CurrentRise = HeightOffset + RiseHeight * RiseCurve;
+	
+	FVector DesiredPosition = StoredTargetLocation;
+	DesiredPosition -= ActionDirection * CurrentPullBack;  // Behind relative to player
+	DesiredPosition += Right * 80.0f;  // Slight side offset
+	DesiredPosition.Z += CurrentRise;
+	
+	//========================================
+	// Screen Shake during transformation
+	//========================================
+	
+	// Shake is strongest in the middle of the transition
+	float ShakeCurve = 0.0f;
+	if (NormalizedTime > 0.2f && NormalizedTime < 0.7f)
+	{
+		float ShakeProgress = (NormalizedTime - 0.2f) / 0.5f;
+		ShakeCurve = FMath::  Sin(ShakeProgress * PI);  // Peak at middle
+	}
+	
+	float ScaledShake = TransformationShakeIntensity * ShakeCurve;
+	if (ScaledShake > 0.1f)
+	{
+		// Apply perlin noise shake
+		FVector ShakeOffset;
+		ShakeOffset.X = FMath:: PerlinNoise1D(WobbleTime * 20.0f) * ScaledShake;
+		ShakeOffset.Y = FMath::PerlinNoise1D(WobbleTime * 20.0f + 100.0f) * ScaledShake;
+		ShakeOffset.Z = FMath:: PerlinNoise1D(WobbleTime * 15.0f + 200.0f) * ScaledShake * 0.5f;
+		
+		DesiredPosition += ShakeOffset;
+	}
+	
+	// Look at boss (upper body for large bosses)
+	FVector LookAtPoint = StoredTargetLocation + FVector(0.0f, 0.0f, 150.0f);
+	
+	// Calculate look-at rotation
+	FRotator DesiredRotation = CalculateLookAtRotation(DesiredPosition, LookAtPoint);
+	
+	// Add rotation shake during transformation
+	if (ScaledShake > 0.1f)
+	{
+		DesiredRotation. Pitch += FMath:: PerlinNoise1D(WobbleTime * 18.0f + 300.0f) * ScaledShake * 0.3f;
+		DesiredRotation. Yaw += FMath::PerlinNoise1D(WobbleTime * 18.0f + 400.0f) * ScaledShake * 0.2f;
+	}
+	
+	// Create target transform
+	FTransform TargetTransform;
+	TargetTransform.SetLocation(DesiredPosition);
+	TargetTransform.SetRotation(DesiredRotation. Quaternion());
+	
+	// Interpolate to target
+	InterpolateCameraTransform(DeltaTime, TargetTransform, TransformInterpSpeed);
+	
+	// Set override transform
+	OverrideTransform = CurrentCameraTransform;
+	bIsOverriding = true;
+	
+	//========================================
+	// FOV Punch during transformation
+	//========================================
+	
+	float FOVValue = CinematicFOV;
+	
+	// FOV punch:   widen dramatically during power-up, then return
+	if (NormalizedTime > 0.15f && NormalizedTime < 0.6f)
+	{
+		float PunchProgress = (NormalizedTime - 0.15f) / 0.45f;
+		float PunchCurve = FMath::Sin(PunchProgress * PI);
+		FOVValue += FOVPunch * PunchCurve;
+	}
+	
+	FOVEffect = FOVValue - Context.Output.FOV;
+	
+	// Letterbox effect
+	if (bApplyLetterbox)
+	{
+		VignetteEffect = LetterboxAmount;
+	}
+	
+	//========================================
+	// Time dilation during power-up
+	//========================================
+	
+	if (NormalizedTime < 0.15f)
+	{
+		// Start slightly slowed
+		TimeDilationEffect = 0.7f;
+	}
+	else if (NormalizedTime < 0.50f)
+	{
+		// Very slow during transformation peak
+		float SlowProgress = (NormalizedTime - 0.15f) / 0.35f;
+		float SlowCurve = FMath:: Sin(SlowProgress * PI);
+		TimeDilationEffect = FMath::Lerp(0.7f, 0.5f, SlowCurve);
+	}
+	else if (NormalizedTime < 0.70f)
+	{
+		// Return to normal
+		float ReturnProgress = (NormalizedTime - 0.50f) / 0.20f;
+		TimeDilationEffect = FMath:: Lerp(0.5f, 1.0f, ReturnProgress);
+	}
+	else
+	{
+		TimeDilationEffect = 1.0f;
+	}
+	
+	// Slight saturation reduction during power-up
+	if (NormalizedTime > 0.2f && NormalizedTime < 0.6f)
+	{
+		SaturationEffect = 0.85f;
+	}
+	else
+	{
+		SaturationEffect = 1.0f;
+	}
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 构造函数说明阶段转换的设计意图
+   - 强调Boss是主要焦点
+   - 说明抖动和FOV冲击
+   - 所有注释英文
+
+2. **格式：**
+   - Tab缩进
+   - 清晰的代码块分隔（Movement / Shake / FOV / TimeDilation）
+   - 与其他Cinematic风格一致
+
+3. **关键实现点：**
+   - 调用`Super::OnTriggered`
+   - 屏幕抖动使用PerlinNoise
+   - 设置`OverrideTransform`和`bIsOverriding`
+   - 基于Intensity缩放效果强度
+
+【技术说明】
+
+### 1. BossPhase vs DeathCam
+
+```
+原始PROMPT错误：C05 = DeathCam
+实际枚举定义：C05 = BossPhase
+
+DeathCam的正确位置：
+├── X03_Special_DeathCam
+└── 将在Phase 4.6 Special修改器中实现
+```
+
+### 2. 相机运动曲线
+
+```
+拉远曲线 (PullBackCurve):
+0%──25%────────75%──100%
+│拉远│   保持   │返回│
+
+高度曲线 (RiseCurve = sin):
+      ___
+     /   \
+____/     \____
+0%   50%   100%
+
+两者组合产生"升起-保持-下降"的运动
+```
+
+### 3. 抖动系统
+
+```
+抖动时间窗口：20% - 70%
+
+抖动强度曲线：
+      ___
+     /   \
+____/     \____
+20%  45%   70%
+
+使用PerlinNoise生成自然抖动：
+├── Position: X/Y用相同频率，Z减半
+├── Rotation:  Pitch/Yaw轻微抖动
+└── 频率约18-20 Hz
+```
+
+### 4. FOV冲击
+
+```
+FOV冲击窗口：15% - 60%
+
+FOV值变化：
+72° → 84° → 72°
+      ↑
+   +12° punch
+
+宽FOV在变身时强调Boss的强大
+```
+
+### 5. 与C04 BossIntro对比
+
+| 特性 | C04 BossIntro | C05 BossPhase |
+|------|---------------|---------------|
+| 持续时间 | 4.0秒 | 2.5秒 |
+| 相机运动 | 扫视弧线 | 拉远+上升 |
+| 抖动 | 无 | 有（变身时） |
+| FOV | 75° + 10° 波动 | 72° + 12° 冲击 |
+| 阶段数 | 三阶段 | 单阶段渐进 |
+| 焦点 | 从玩家到Boss | 始终Boss |
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过（0 errors）
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] 构造函数初始化所有成员
+   - [ ] OnTriggered缩放效果强度
+   - [ ] ComputeEffect实现拉远+抖动+FOV冲击
+   - [ ] 设置OverrideTransform和bIsOverriding
+
+3. **效果验证：**
+   - [ ] 相机拉远并上升
+   - [ ] 变身期间有屏幕抖动
+   - [ ] FOV冲击效果
+   - [ ] 时间膨胀正确
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 4.4.7 完成报告
+================================================================================
+
+【更新的文件】
+- 文件：CameraModifier_Cinematic.  cpp
+- 添加位置：C04实现之后
+
+【实现的修改器】
+- ✅ UCameraModifier_C05_Cinematic_BossPhase
+  - 构造函数：PullBack=120, Rise=100, Shake=4, FOV=72
+  - OnTriggered：基于Intensity缩放效果
+  - ComputeEffect：拉远 + 上升 + 抖动 + FOV冲击
+
+【关键特性】
+- 聚焦Boss的变身/阶段转换
+- 拉远+上升展示变身规模
+- 屏幕抖动增加冲击力
+- FOV冲击强调Boss强化
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【最终状态】
+✅ C05 BossPhase实现完成
+✅ 全部5个Cinematic修改器实现完成
+
+================================================================================
+```
+
+【Phase 4.4 完成总结】
+
+```
+Phase 4.4 Cinematic修改器
+├── CameraModifier_Cinematic. h      ✅ 完成
+├── CameraModifier_Cinematic.  cpp    ✅ 完成
+│   ├── CinematicBase               ✅ 完成
+│   ├── C01 Execution               ✅ 完成（轨道相机）
+│   ├── C02 Backstab                ✅ 完成（过肩相机）
+│   ├── C03 Riposte                 ✅ 完成（快速拉近）
+│   ├── C04 BossIntro               ✅ 完成（三阶段扫视）
+│   └── C05 BossPhase               ✅ 完成（拉远+抖动）
+└── 待注册到ModifierManager         ⏳ 4.4.8
+```
+
+【后续步骤】
+
+C05完成后：
+- [x] ✅ 4.4.1:   CameraModifier_Cinematic. h
+- [x] ✅ 4.4.2: CinematicBase实现
+- [x] ✅ 4.4.3: C01 Execution实现
+- [x] ✅ 4.4.4: C02 Backstab实现
+- [x] ✅ 4.4.5: C03 Riposte实现
+- [x] ✅ 4.4.6: C04 BossIntro实现
+- [x] ✅ 4.4.7: C05 BossPhase实现
+- [ ] ⏳ 4.4.8: 注册到ModifierManager
+
+**Cinematic修改器进度：5/5 = 100%（实现完成，待注册）**
+
+================================================================================

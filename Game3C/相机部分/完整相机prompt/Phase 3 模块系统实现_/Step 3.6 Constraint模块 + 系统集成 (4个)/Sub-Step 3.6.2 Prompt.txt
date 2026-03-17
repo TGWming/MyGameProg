@@ -1,0 +1,552 @@
+Sub-Step 3.7.2 Prompt
+
+================================================================================
+任务：创建CameraModule_Constraint.cpp - C01 Pitch_Clamp实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+C01负责限制相机的俯仰角在配置的范围内。
+这是Constraint模块的第一个实现，确保相机不会仰得太高或俯得太低。
+
+【Pipeline中的位置】
+```
+Stage 3 - Module Compute (Constraint部分):
+├─ C01: Pitch Clamp (Override, 200) ← 当前
+│   → 限制俯仰角在 MinPitch 到 MaxPitch 范围内
+├─ C02: Distance Clamp (Override, 200)
+├─ C03: FOV Clamp (Override, 200)
+└─ C04: Visibility Ensure (Blend, 210)
+
+执行时机：
+- 在所有Position/Rotation/Distance/FOV/Offset模块之后
+- 对累积的结果进行最终校验和限制
+```
+
+【当前进度】
+Phase 3 Step 3.7 Sub-Step 3.7.2 (共190个Sub-Step中的第101个)
+前置完成：3.7.1 CameraModule_Constraint.h ✅
+
+【任务目标】
+创建文件：Source/[ProjectName]/Private/Camera/Modules/CameraModule_Constraint.cpp
+本Sub-Step实现文件框架和C01 Pitch_Clamp模块。
+同时为C02-C04添加占位符stub。
+
+【⚠️ 重要提醒】
+
+1. **必须Regenerate：**
+   本Sub-Step创建新的. cpp文件。
+   创建文件后：
+   - 保存所有文件
+   - 右键. uproject → Generate Visual Studio project files
+   - 重新加载解决方案
+   - 然后编译
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   确认StateConfig的字段路径与项目实际结构一致。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_Constraint.cpp
+
+2. **完整文件内容：**
+
+```cpp
+// Copyright Epic Games, Inc. All Rights Reserved. 
+
+#include "Camera/Modules/CameraModule_Constraint.h"
+#include "Camera/Core/SoulsCameraManager.h"
+
+/**
+ * CameraModule_Constraint. cpp
+ * 
+ * This file contains the implementations of 4 Constraint modules (C01-C04).
+ * Constraint modules are responsible for enforcing limits and ensuring
+ * the final camera values stay within acceptable ranges.
+ * 
+ * These modules execute LAST in Stage 3 with priority 200+,
+ * after all other module types have calculated their values.
+ * 
+ * Output is typically Override policy to enforce hard limits.
+ * 
+ * Key Principle: 
+ * - Other modules calculate what camera SHOULD do
+ * - Constraint modules ensure values ARE valid
+ * 
+ * Constraint Types:
+ * - Pitch Clamp: Limit vertical rotation angle
+ * - Distance Clamp: Limit camera arm length
+ * - FOV Clamp: Limit field of view angle
+ * - Visibility Ensure: Keep target in view
+ * 
+ * Module List:
+ * - C01: Pitch Clamp - Enforces pitch limits (implemented)
+ * - C02: Distance Clamp - Enforces distance limits (TODO:  Sub-Step 3.7.3)
+ * - C03: FOV Clamp - Enforces FOV limits (TODO: Sub-Step 3.7.4)
+ * - C04: Visibility Ensure - Keeps target visible (TODO: Sub-Step 3.7.5)
+ */
+
+
+//========================================
+// C01: Pitch Clamp - Enforces pitch angle limits
+//========================================
+
+/**
+ * ShouldActivate - Pitch clamp is always active
+ * 
+ * C01 is a safety constraint that should always be active. 
+ * It ensures the camera pitch never exceeds configured limits,
+ * regardless of what other modules have calculated.
+ * 
+ * Priority 200 (constraint level), uses Override policy.
+ */
+bool UCameraModule_C01_Pitch_Clamp:: ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Pitch clamp is always active as a safety constraint
+	// Only check if module is enabled
+	return bIsEnabled;
+}
+
+/**
+ * Compute - Clamp pitch rotation to configured limits
+ * 
+ * This module reads the current accumulated rotation from the context
+ * and clamps the pitch component to the configured min/max values.
+ * 
+ * Steps:
+ * 1. Get current rotation from context output
+ * 2. Get pitch limits from state config
+ * 3. Apply default limits if not configured
+ * 4. Clamp pitch to valid range
+ * 5. Output the clamped rotation
+ * 
+ * Pitch Convention (UE4):
+ * - Negative pitch = Looking UP (camera tilts up)
+ * - Positive pitch = Looking DOWN (camera tilts down)
+ * - Zero pitch = Looking straight ahead (horizontal)
+ * 
+ * Typical Limits:
+ * - MinPitch: -80 to -60 degrees (looking up limit)
+ * - MaxPitch: +60 to +80 degrees (looking down limit)
+ * 
+ * @param Context The current pipeline execution context
+ * @param StateConfig The current camera state configuration
+ * @param OutOutput Output structure to fill with computed values
+ * @return True if computation succeeded
+ */
+bool UCameraModule_C01_Pitch_Clamp::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Step 1: Get current rotation from context output
+	// This is the accumulated rotation from all previous modules
+	FRotator CurrentRotation = Context.Output.Rotation;
+	
+	// Step 2: Get pitch limits from state config
+	float MinPitch = StateConfig.StateBase.Rotation.MinPitch;
+	float MaxPitch = StateConfig.StateBase.Rotation.MaxPitch;
+	
+	// Step 3: Apply default limits if not configured
+	// MinPitch should be negative (looking up limit)
+	if (MinPitch >= 0.0f || MinPitch < -89.0f)
+	{
+		MinPitch = -80.0f;  // Default:  can look up to 80 degrees
+	}
+	
+	// MaxPitch should be positive (looking down limit)
+	if (MaxPitch <= 0.0f || MaxPitch > 89.0f)
+	{
+		MaxPitch = 80.0f;  // Default: can look down to 80 degrees
+	}
+	
+	// Ensure min < max (swap if inverted)
+	if (MinPitch > MaxPitch)
+	{
+		float Temp = MinPitch;
+		MinPitch = MaxPitch;
+		MaxPitch = Temp;
+	}
+	
+	// Step 4: Clamp pitch to valid range
+	float OriginalPitch = CurrentRotation. Pitch;
+	float ClampedPitch = FMath:: Clamp(CurrentRotation.Pitch, MinPitch, MaxPitch);
+	
+	// Step 5: Create output rotation
+	FRotator ClampedRotation = CurrentRotation;
+	ClampedRotation.Pitch = ClampedPitch;
+	
+	// Fill output structure
+	OutOutput.RotationOutput = ClampedRotation;
+	OutOutput.bHasRotationOutput = true;
+	
+	return true;
+}
+
+
+//========================================
+// C02: Distance Clamp
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.7.3
+// Enforces camera arm length limits
+
+/**
+ * ShouldActivate - Placeholder implementation
+ */
+bool UCameraModule_C02_Distance_Clamp::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Placeholder: Will be properly implemented in Sub-Step 3.7.3
+	// Distance clamp should always be active
+	return bIsEnabled;
+}
+
+/**
+ * Compute - Placeholder implementation
+ */
+bool UCameraModule_C02_Distance_Clamp::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Placeholder:  Will be properly implemented in Sub-Step 3.7.3
+	OutOutput = CreateBaseOutput();
+	
+	// Pass through current distance unchanged
+	OutOutput.DistanceOutput = Context.Output.Distance;
+	OutOutput.bHasDistanceOutput = true;
+	
+	return true;
+}
+
+
+//========================================
+// C03: FOV Clamp
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.7.4
+// Enforces field of view limits
+
+/**
+ * ShouldActivate - Placeholder implementation
+ */
+bool UCameraModule_C03_FOV_Clamp::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Placeholder:  Will be properly implemented in Sub-Step 3.7.4
+	// FOV clamp should always be active
+	return bIsEnabled;
+}
+
+/**
+ * Compute - Placeholder implementation
+ */
+bool UCameraModule_C03_FOV_Clamp:: Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Placeholder: Will be properly implemented in Sub-Step 3.7.4
+	OutOutput = CreateBaseOutput();
+	
+	// Pass through current FOV unchanged
+	OutOutput.FOVOutput = Context.Output.FOV;
+	OutOutput.bHasFOVOutput = true;
+	
+	return true;
+}
+
+
+//========================================
+// C04: Visibility Ensure
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.7.5
+// Ensures locked target remains visible on screen
+
+/**
+ * Constructor - Initialize visibility tracking state
+ */
+UCameraModule_C04_Visibility_Ensure::UCameraModule_C04_Visibility_Ensure()
+	: TimeSinceTargetVisible(0.0f)
+	, LastVisibleTargetPosition(FVector::ZeroVector)
+{
+}
+
+/**
+ * ShouldActivate - Placeholder implementation
+ */
+bool UCameraModule_C04_Visibility_Ensure:: ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Placeholder: Will be properly implemented in Sub-Step 3.7.5
+	// Only activate when there is a locked target
+	return bIsEnabled && Context.InputContext.bHasTarget;
+}
+
+/**
+ * Compute - Placeholder implementation
+ */
+bool UCameraModule_C04_Visibility_Ensure:: Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Placeholder: Will be properly implemented in Sub-Step 3.7.5
+	OutOutput = CreateBaseOutput();
+	
+	// Pass through current rotation unchanged
+	OutOutput.RotationOutput = Context.Output. Rotation;
+	OutOutput.bHasRotationOutput = true;
+	
+	return true;
+}
+
+/**
+ * IsPointVisible - Placeholder implementation
+ */
+bool UCameraModule_C04_Visibility_Ensure::IsPointVisible(
+	const FStageExecutionContext& Context, 
+	const FVector& WorldPoint, 
+	float ScreenMargin) const
+{
+	// Placeholder: Will be properly implemented in Sub-Step 3.7.5
+	// For now, assume point is always visible
+	return true;
+}
+
+/**
+ * CalculateVisibilityAdjustment - Placeholder implementation
+ */
+FRotator UCameraModule_C04_Visibility_Ensure::CalculateVisibilityAdjustment(
+	const FStageExecutionContext& Context, 
+	const FVector& TargetPoint) const
+{
+	// Placeholder: Will be properly implemented in Sub-Step 3.7.5
+	// For now, return no adjustment
+	return FRotator::ZeroRotator;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 文件头注释说明所有模块
+   - 每个方法前添加文档注释
+   - 说明UE4的Pitch约定（负=向上看）
+   - 所有注释使用英文
+
+2. **格式：**
+   - 使用Tab缩进（与现有代码一致）
+   - 每个模块用分隔注释分开
+   - 占位符标记清晰
+
+3. **占位符策略：**
+   - ShouldActivate返回bIsEnabled（始终激活）
+   - Compute传递当前值不修改（pass-through）
+   - 构造函数初始化成员变量
+   - 辅助函数返回默认值
+
+【技术说明】
+
+**C01的核心机制：**
+
+### 1. UE4的Pitch约定
+
+```
+UE4 Pitch角度约定：
+
+     -90° (看天)
+        ↑
+        |
+-180° ← 0° → +180° (水平)
+        |
+        ↓
+     +90° (看地)
+
+常用范围：
+- MinPitch = -80° (最多向上看80度)
+- MaxPitch = +80° (最多向下看80度)
+
+注意：
+- Pitch范围通常限制在 -89 到 +89 度
+- 避免 ±90 度会导致万向锁问题
+```
+
+### 2. Constraint模块与其他模块的区别
+
+```
+普通Rotation模块（如R03 Input_Yaw）：
+- 计算"应该"的旋转值
+- 基于输入或游戏状态
+- 可能产生任意值
+
+Constraint模块（C01 Pitch_Clamp）：
+- 不计算新值，只限制现有值
+- 读取累积结果（Context.Output）
+- 确保值在合理范围内
+- 是最后的安全网
+```
+
+### 3. Context. Output的使用
+
+```cpp
+// 从Context.Output读取累积结果
+FRotator CurrentRotation = Context.Output.Rotation;
+
+// 这里的Rotation是所有前面模块的累积结果
+// 包括：
+// - R01 BaseRotation
+// - R03 Input_Yaw
+// - R04 Input_Pitch
+// - R05 LockOn_Yaw
+// - 等等... 
+
+// Constraint模块在此基础上进行限制
+```
+
+### 4. 默认值的选择
+
+```cpp
+// 为什么默认MinPitch = -80而不是-90？
+// 1. 避免万向锁（Gimbal Lock）
+// 2. 看正上方时很少有实际需求
+// 3. 留有余量防止极端情况
+
+// 为什么检查 MinPitch >= 0？
+// 因为MinPitch应该是负数（向上看的限制）
+// 如果配置为正数，说明配置错误，使用默认值
+```
+
+### 5. UE_LOG的移除
+
+原始PROMPT中有UE_LOG，修改版中移除了：
+```cpp
+// 移除原因：
+// 1. Constraint模块每帧都会执行
+// 2. 大量日志会影响性能
+// 3. 如需调试，可以临时添加
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] Regenerate执行
+   - [ ] 编译通过（0 errors, 0 warnings）
+   - [ ] 文件编码为UTF-8 Without BOM
+   - [ ] 所有注释为英文
+
+2. **代码完整性：**
+   - [ ] C01实现完整（ShouldActivate + Compute）
+   - [ ] C02-C03占位符完整（pass-through）
+   - [ ] C04占位符完整（构造函数 + 4个方法）
+   - [ ] 所有方法签名与. h一致
+
+3. **逻辑正确性：**
+   - [ ] C01总是激活（bIsEnabled）
+   - [ ] 从Context.Output读取当前旋转
+   - [ ] 默认Pitch限制：-80到+80
+   - [ ] MinPitch/MaxPitch验证和交换
+   - [ ] FMath::Clamp正确使用
+
+4. **字段访问：**
+   - [ ] Context.Output.Rotation
+   - [ ] StateConfig.StateBase.Rotation. MinPitch
+   - [ ] StateConfig.StateBase.Rotation.MaxPitch
+
+【注意事项】
+
+1. **必须Regenerate：**
+   创建新. cpp文件后必须Regenerate。
+
+2. **字段缺失处理：**
+   ```cpp
+   // 如果MinPitch/MaxPitch字段不存在
+   float MinPitch = -80.0f;  // 默认值
+   float MaxPitch = 80.0f;   // 默认值
+   ```
+
+3. **Context.Output结构：**
+   确认FStageExecutionContext中有Output子结构：
+   ```cpp
+   struct FStageExecutionContext
+   {
+       // ... 
+       struct
+       {
+           FRotator Rotation;
+           float Distance;
+           float FOV;
+           // ...
+       } Output;
+   };
+   ```
+
+4. **测试建议：**
+   - 设置Pitch超出范围 → 应被限制
+   - 设置Pitch在范围内 → 应保持不变
+   - 确认MinPitch < MaxPitch验证有效
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 3.7.2 完成报告
+================================================================================
+
+【创建的文件】
+- 文件：CameraModule_Constraint.cpp
+- 路径：Source/[ProjectName]/Private/Camera/Modules/
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ C01: Pitch_Clamp（完整实现）
+- ⏳ C02: Distance_Clamp（占位符）
+- ⏳ C03: FOV_Clamp（占位符）
+- ⏳ C04: Visibility_Ensure（占位符+构造函数+辅助函数）
+
+【编译结果】
+- Regenerate：[已执行/未执行]
+- 编译状态：[成功/失败]
+- 错误数：[数量]
+- 警告数：[数量]
+
+【遇到的问题】
+[如有字段路径问题，详细描述]
+
+【最终状态】
+✅ Constraint模块. cpp创建完成，C01实现完毕
+
+================================================================================
+```
+
+【后续步骤】
+
+C01完成后，Constraint模块进度：
+- [x] ✅ 3.7.1:  CameraModule_Constraint.h
+- [x] ✅ 3.7.2: C01 - Pitch Clamp
+- [ ] ⏳ 3.7.3: C02 - Distance Clamp（下一步）
+- [ ] ⏳ 3.7.4: C03 - FOV Clamp
+- [ ] ⏳ 3.7.5: C04 - Visibility Ensure
+- [ ] ⏳ 3.7.6: 系统集成与验证
+
+**Constraint模块完成度：1/4 (25%)**
+
+**Phase 3进度：40/43模块 = 93.0%**
+
+================================================================================

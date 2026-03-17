@@ -1,0 +1,429 @@
+Sub-Step 4.4.5 Prompt
+
+================================================================================
+任务：在CameraModifier_Cinematic. cpp中添加C03 Riposte实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4. 27 C++项目。
+C03是弹反后反击的过场相机，快速戏剧性的特写。
+
+【C03 Riposte设计】
+```
+触发场景：
+├── 黑魂系列：弹反后处决（Riposte）
+├── 血源：枪反后内脏攻击
+├── 只狼：弹刀后忍杀
+└── P的谎言：完美格挡后致命一击
+
+相机行为：
+├── 快速拉近（强调技巧奖励）
+├── 低角度强调力量感
+├── 侧面视角展示双方
+├── 最短的Cinematic（1.2秒）
+├── 强烈时间膨胀（奖励感）
+└── 紧凑FOV（55°）
+```
+
+【当前进度】
+Phase 4 Step 4.4 Sub-Step 4.4.5 (共190个Sub-Step中的第130个)
+前置完成：4.4.4 C02 Backstab实现 ✅
+
+【任务目标】
+在CameraModifier_Cinematic.cpp中添加C03 Riposte的完整实现。
+
+【⚠️ 重要提醒】
+
+1. **本Sub-Step是更新现有文件，不创建新文件**
+   因此**不需要Regenerate**，直接编译即可。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **类名必须与头文件一致：**
+   `UCameraModifier_C03_Cinematic_Riposte`
+
+4. **在C02实现之后添加代码**
+
+【具体要求】
+
+**在CameraModifier_Cinematic.cpp的C02实现之后添加：**
+
+```cpp
+//========================================
+// C03:  Riposte Camera Implementation
+//========================================
+
+/**
+ * Constructor - Configure riposte camera parameters
+ * 
+ * Riposte camera is the snappiest cinematic: 
+ * - Quick pull-in for dramatic emphasis
+ * - Low angle to show power of the counter
+ * - Tightest FOV for maximum focus
+ * - Strongest time dilation (reward for skill)
+ * - Shortest duration (player earned quick kill)
+ */
+UCameraModifier_C03_Cinematic_Riposte::UCameraModifier_C03_Cinematic_Riposte()
+	: PullInDistance(80.0f)
+	, LowAngleOffset(-35.0f)
+	, SideAngle(50.0f)
+	, RiposteTimeDilation(0.4f)
+{
+	// Configure cinematic settings
+	CameraOffset = FVector(-120.0f, 70.0f, -20.0f);
+	HeightOffset = -20.0f;  // Low angle
+	CameraDistance = 150.0f;
+	CinematicFOV = 55.0f;   // Tightest FOV
+	
+	// Letterbox for cinematic feel
+	bApplyLetterbox = true;
+	LetterboxAmount = 0.10f;
+	
+	// Fast camera for snappy feel
+	TransformInterpSpeed = 12.0f;  // Faster than other cinematics
+	
+	// Block player input during riposte
+	bBlockPlayerInput = true;
+}
+
+/**
+ * OnTriggered - Initialize riposte camera state
+ * 
+ * Riposte is a reward for skillful play, so the camera
+ * emphasizes the satisfying counter-attack moment.
+ */
+void UCameraModifier_C03_Cinematic_Riposte::OnTriggered(const FModifierTriggerData& InTriggerData)
+{
+	// Call parent to store basic positions
+	Super::OnTriggered(InTriggerData);
+	
+	// Get player/attacker location
+	if (InTriggerData. SourceActor. IsValid())
+	{
+		StoredPlayerLocation = InTriggerData. SourceActor->GetActorLocation();
+	}
+	
+	// Get victim/target location (the staggered enemy)
+	if (InTriggerData. TargetActor. IsValid())
+	{
+		StoredTargetLocation = InTriggerData. TargetActor->GetActorLocation();
+		StoredTargetActor = InTriggerData.TargetActor;
+	}
+	
+	// Calculate attack direction
+	FVector AttackDir = StoredTargetLocation - StoredPlayerLocation;
+	AttackDir.Z = 0.0f;
+	if (! AttackDir.IsNearlyZero())
+	{
+		ActionDirection = AttackDir. GetSafeNormal();
+	}
+	else
+	{
+		ActionDirection = FVector::ForwardVector;
+	}
+	
+	// Scale pull-in based on intensity (higher intensity = closer camera)
+	float IntensityScale = FMath:: Clamp(CurrentIntensity, 0.8f, 1.5f);
+	PullInDistance = 80.0f * IntensityScale;
+	
+	// Randomize side angle direction
+	if (FMath::RandBool())
+	{
+		SideAngle = FMath:: Abs(SideAngle);
+	}
+	else
+	{
+		SideAngle = -FMath::Abs(SideAngle);
+	}
+	
+	UE_LOG(LogTemp, Verbose, TEXT("C03 Riposte: Triggered, Intensity=%.2f, PullIn=%.1f"),
+		CurrentIntensity, PullInDistance);
+}
+
+/**
+ * ComputeEffect - Calculate dramatic low-angle camera each frame
+ * 
+ * Camera quickly pulls in to a low angle, emphasizing the
+ * power and skill of the riposte.  This is the most "rewarding"
+ * feeling cinematic.
+ */
+void UCameraModifier_C03_Cinematic_Riposte:: ComputeEffect(float DeltaTime, const FStageExecutionContext& Context)
+{
+	// Calculate normalized time (0-1 over duration)
+	float NormalizedTime = 0.0f;
+	if (ActiveDuration > 0.0f)
+	{
+		NormalizedTime = FMath::Clamp(TotalActiveTime / ActiveDuration, 0.0f, 1.0f);
+	}
+	
+	// Calculate action center (slightly biased towards target - the staggered enemy)
+	FVector ActionCenter = FMath:: Lerp(StoredPlayerLocation, StoredTargetLocation, 0.55f);
+	
+	// Calculate coordinate axes
+	FVector Forward = ActionDirection;
+	FVector Right = FVector::CrossProduct(FVector::UpVector, Forward).GetSafeNormal();
+	if (Right.IsNearlyZero())
+	{
+		Right = FVector::RightVector;
+	}
+	FVector Up = FVector:: UpVector;
+	
+	// Pull-in curve:  very fast at start (reward feeling), then hold
+	float PullInCurve;
+	if (NormalizedTime < 0.15f)
+	{
+		// Very fast pull-in (0-15%)
+		PullInCurve = FMath::InterpEaseOut(0.0f, 1.0f, NormalizedTime / 0.15f, 3.0f);
+	}
+	else
+	{
+		// Hold at maximum
+		PullInCurve = 1.0f;
+	}
+	
+	// Calculate camera distance with pull-in
+	float BaseDistance = 180.0f;
+	float CurrentDistance = BaseDistance - (PullInDistance * PullInCurve);
+	
+	// Side offset with angle
+	float AngleRad = FMath::DegreesToRadians(SideAngle);
+	float SideOffset = FMath::Sin(AngleRad) * CurrentDistance * 0.5f;
+	float ForwardOffset = FMath:: Cos(AngleRad) * CurrentDistance;
+	
+	// Low angle:  start low, stay low
+	float CurrentHeight = LowAngleOffset;
+	
+	// Slight rise at the end for transition back
+	if (NormalizedTime > 0.8f)
+	{
+		float RiseProgress = (NormalizedTime - 0.8f) / 0.2f;
+		CurrentHeight = FMath::Lerp(LowAngleOffset, LowAngleOffset + 30.0f, RiseProgress);
+	}
+	
+	// Calculate camera position
+	FVector DesiredPosition = ActionCenter;
+	DesiredPosition -= Forward * ForwardOffset;      // In front/behind based on angle
+	DesiredPosition += Right * SideOffset;           // To the side
+	DesiredPosition += Up * CurrentHeight;           // Low angle
+	
+	// Look at point:  action center, at chest height
+	FVector LookAtPoint = ActionCenter + FVector(0.0f, 0.0f, 70.0f);
+	
+	// Calculate look-at rotation
+	FRotator DesiredRotation = CalculateLookAtRotation(DesiredPosition, LookAtPoint);
+	
+	// Create target transform
+	FTransform TargetTransform;
+	TargetTransform.SetLocation(DesiredPosition);
+	TargetTransform.SetRotation(DesiredRotation. Quaternion());
+	
+	// Fast interpolation for snappy feel
+	InterpolateCameraTransform(DeltaTime, TargetTransform, TransformInterpSpeed);
+	
+	// Set override transform
+	OverrideTransform = CurrentCameraTransform;
+	bIsOverriding = true;
+	
+	// FOV with tightening pulse at impact
+	float FOVValue = CinematicFOV;
+	
+	// FOV tightens during impact (15-35%)
+	if (NormalizedTime > 0.15f && NormalizedTime < 0.35f)
+	{
+		float PulseProgress = (NormalizedTime - 0.15f) / 0.20f;
+		float FOVTighten = FMath::Sin(PulseProgress * PI) * 5.0f;
+		FOVValue -= FOVTighten;  // Tighter FOV = more intense
+	}
+	
+	FOVEffect = FOVValue - Context.Output.FOV;
+	
+	// Letterbox effect
+	if (bApplyLetterbox)
+	{
+		VignetteEffect = LetterboxAmount;
+	}
+	
+	// Strong time dilation - this is the reward! 
+	// Riposte has the strongest slow-mo of all cinematics
+	if (NormalizedTime < 0.10f)
+	{
+		// Quick start
+		TimeDilationEffect = 1.0f;
+	}
+	else if (NormalizedTime < 0.40f)
+	{
+		// Strong slow-mo during impact
+		TimeDilationEffect = RiposteTimeDilation;  // 0.4 = 40% speed
+	}
+	else if (NormalizedTime < 0.60f)
+	{
+		// Gradual return to normal
+		float ReturnProgress = (NormalizedTime - 0.40f) / 0.20f;
+		TimeDilationEffect = FMath::Lerp(RiposteTimeDilation, 1.0f, FMath::InterpEaseIn(0.0f, 1.0f, ReturnProgress, 2.0f));
+	}
+	else
+	{
+		TimeDilationEffect = 1.0f;
+	}
+	
+	// Slight saturation reduction for dramatic feel
+	SaturationEffect = 0.85f;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 构造函数说明Riposte是"奖励"性质的Cinematic
+   - 强调快速拉近和低角度的设计意图
+   - 说明时间膨胀是玩家技巧的奖励
+   - 所有注释英文
+
+2. **格式：**
+   - Tab缩进
+   - 清晰的代码分隔
+   - 与C01/C02风格一致
+
+3. **关键实现点：**
+   - 调用`Super::OnTriggered`
+   - 使用`InterpEaseOut`快速拉近
+   - 设置`OverrideTransform`和`bIsOverriding`
+   - 最强的时间膨胀（0.4 = 40%速度）
+
+【技术说明】
+
+### 1. Riposte相机特点
+
+```
+与其他Cinematic对比：
+
+         C01执行     C02背刺     C03弹反
+持续时间   2.0秒      1.5秒      1.2秒 ← 最短
+FOV       65°        62°        55°  ← 最紧
+时间膨胀   0.75       0.6        0.4  ← 最慢
+相机运动   轨道环绕    后→侧      快速拉近
+角度       低角度     过肩       低角度
+Interp速度 6.0       8.0        12.0 ← 最快
+```
+
+### 2. 拉近曲线
+
+```
+时间线：
+0%──15%────────────────80%──100%
+│拉近│      保持       │上升│
+
+PullInCurve (InterpEaseOut, exp=3.0):
+快速达到最大拉近效果
+
+     _________
+    /
+   /
+__/
+0%  15%
+
+高指数(3.0)使拉近非常迅速，强调"冲击感"
+```
+
+### 3. 时间膨胀曲线
+
+```
+时间线：
+0%─10%───40%───60%────100%
+│正常│ 极慢  │ 恢复 │正常│
+
+TimeDilation值：
+1.0 → 0.4 → 1.0
+
+0.4 = 40%速度 = 最强慢动作
+这是对玩家成功弹反的"奖励"
+```
+
+### 4. 低角度计算
+
+```cpp
+// 低角度使玩家看起来更强大
+LowAngleOffset = -35.0f;  // 负值 = 相机在下方
+
+// 最终相机低于动作中心35cm
+// 仰视角度使处决动作更有力量感
+
+// 结束时上升以平滑过渡
+if (NormalizedTime > 0.8f)
+{
+    CurrentHeight → LowAngleOffset + 30.0f
+}
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过（0 errors）
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] 构造函数初始化所有成员
+   - [ ] OnTriggered调用Super并缩放拉近
+   - [ ] ComputeEffect计算低角度位置
+   - [ ] 设置OverrideTransform和bIsOverriding
+
+3. **效果验证：**
+   - [ ] 快速拉近（0. 15秒完成）
+   - [ ] 低角度视角
+   - [ ] 最紧FOV（55°）
+   - [ ] 最强时间膨胀（0.4）
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 4.4.5 完成报告
+================================================================================
+
+【更新的文件】
+- 文件：CameraModifier_Cinematic. cpp
+- 添加位置：C02实现之后
+
+【实现的修改器】
+- ✅ UCameraModifier_C03_Cinematic_Riposte
+  - 构造函数：PullIn=80, LowAngle=-35, FOV=55
+  - OnTriggered：缩放拉近距离，随机侧向
+  - ComputeEffect：快速拉近 + 低角度 + 强时间膨胀
+
+【关键特性】
+- 最快的Cinematic（1.2秒）
+- 最紧的FOV（55°）
+- 最强的时间膨胀（0.4）
+- 快速拉近强调技巧奖励
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【最终状态】
+✅ C03 Riposte实现完成
+
+================================================================================
+```
+
+【后续步骤】
+
+C03完成后：
+- [x] ✅ 4.4.1:  CameraModifier_Cinematic. h
+- [x] ✅ 4.4.2: CinematicBase实现
+- [x] ✅ 4.4.3: C01 Execution实现
+- [x] ✅ 4.4.4: C02 Backstab实现
+- [x] ✅ 4.4.5: C03 Riposte实现
+- [ ] ⏳ 4.4.6: C04 BossIntro实现
+- [ ] ⏳ 4.4.7: C05 BossPhase实现
+- [ ] ⏳ 4.4.8: 注册到ModifierManager
+
+**Cinematic修改器进度：3/5 = 60%**
+
+================================================================================

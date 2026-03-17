@@ -1,0 +1,555 @@
+Sub-Step 3.2.5 Prompt
+
+================================================================================
+任务：在CameraModule_Position.cpp中添加P04 Orbit_LockOn实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+P04在锁定敌人时计算轨道位置，保持玩家和目标都在视野内。
+这是类魂游戏核心战斗相机功能之一，需要在玩家-目标之间计算合适的焦点位置。
+
+【当前进度】
+Phase 3 Step 3.2 Sub-Step 3.2.5 (共190个Sub-Step中的第64个)
+前置完成：3.2.4 P03实现 ✅
+
+【任务目标】
+在CameraModule_Position.cpp中完整实现P04模块，替换现有的stub占位符。
+
+【⚠️ 重要提醒】
+
+1. **编译前必做步骤：**
+   本Sub-Step只修改现有.  cpp文件，不添加新文件。
+   因此**不需要Regenerate**，可以直接编译。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   确认StateConfig和InputContext的字段路径与项目实际结构一致。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_Position. cpp
+
+2. **定位修改位置：**
+
+在文件中找到P04的stub实现部分：
+
+```cpp
+//========================================
+// P04: Orbit Lock-On - Orbits around player during lock-on
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.2.5
+// ...   stub代码
+```
+
+**将上述stub代码完整替换为下方的完整实现。**
+
+---
+
+3. **P04完整实现代码：**
+
+**A. ShouldActivate()方法（需要完整实现）：**
+
+**当前stub代码：**
+```cpp
+bool UCameraModule_P04_Orbit_LockOn::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Stub - only activates when a target is locked on
+	return false;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * ShouldActivate - Determine if lock-on orbit should be active
+ * 
+ * P04 activates when:
+ * - Module is enabled
+ * - Player has a locked-on target
+ * - Target is NOT a boss (boss uses P05 with wider orbit)
+ * 
+ * This module provides dynamic positioning to keep both player
+ * and enemy visible during combat encounters.
+ */
+bool UCameraModule_P04_Orbit_LockOn::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if player has a locked target
+	if (!Context.InputContext.bHasTarget)
+	{
+		return false;
+	}
+	
+	// Don't activate for boss targets (P05 handles those)
+	// bTargetIsBoss flag indicates if locked target is a boss enemy
+	if (Context.InputContext.bTargetIsBoss)
+	{
+		return false;
+	}
+	
+	// All conditions met - activate lock-on orbit
+	return true;
+}
+```
+
+**说明：**
+- 三重条件检查：启用 + 有目标 + 非Boss
+- 清晰的注释说明每个条件的作用
+- Boss目标由P05处理（更宽的轨道）
+
+**⚠️ InputContext字段注意：**
+如果FCameraInputContext中没有bTargetIsBoss字段，可以简化：
+```cpp
+// 简化版本（如果bTargetIsBoss不存在）
+bool UCameraModule_P04_Orbit_LockOn::  ShouldActivate(...  ) const
+{
+	// Activate when locked onto a target
+	return bIsEnabled && Context.InputContext.bHasTarget;
+}
+```
+
+---
+
+**B. Compute()方法（需要完整实现）：**
+
+**当前stub代码：**
+```cpp
+bool UCameraModule_P04_Orbit_LockOn::Compute(...)
+{
+	OutOutput = CreateBaseOutput();
+	OutOutput.bHasPositionOutput = false;
+	return false;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * Compute - Calculate orbit position for lock-on camera
+ * 
+ * This module calculates a focus point between the player and locked target
+ * to ensure both are visible in frame.  The calculation involves:
+ * 
+ * Steps:
+ * 1. Validate target exists
+ * 2. Get player and target locations
+ * 3. Calculate weighted midpoint based on MidPointBias
+ * 4. Apply standard focus offset
+ * 5. Apply orbit radius adjustment to move focus toward player
+ * 6. Output the calculated focus point
+ * 
+ * Design Goals:
+ * - Keep both player and enemy visible
+ * - Favor player framing slightly (via orbit offset)
+ * - Provide stable focus during combat
+ * - Allow configuration via StateConfig
+ * 
+ * Typical Use Cases:
+ * - Standard enemy lock-on (humanoid enemies)
+ * - Combat encounters with normal-sized foes
+ * - Situations requiring both combatants in frame
+ */
+bool UCameraModule_P04_Orbit_LockOn:: Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Step 1: Validate that we have a locked target
+	// Safety check - ShouldActivate should prevent this, but double-check
+	if (!Context. InputContext.bHasTarget)
+	{
+		// No target - cannot compute orbit position
+		OutOutput.bHasPositionOutput = false;
+		return false;
+	}
+	
+	// Step 2: Get player and target world locations
+	FVector PlayerLocation = Context.InputContext.CharacterLocation;
+	FVector TargetLocation = Context.InputContext.TargetLocation;
+	
+	// Step 3: Calculate weighted midpoint between player and target
+	// MidPointBias controls the weighting: 
+	// - 0.0 = focus on player
+	// - 0.5 = focus on exact midpoint
+	// - 1.0 = focus on target
+	// Typical value: 0.5 (equal weighting)
+	float MidPointBias = StateConfig.Module. Position.MidPointBias;
+	
+	// If MidPointBias not configured, use default
+	if (MidPointBias < 0.0f || MidPointBias > 1.0f)
+	{
+		MidPointBias = 0.5f;  // Default:  exact midpoint
+	}
+	
+	// Calculate weighted midpoint using linear interpolation
+	// This is the base focus point between player and target
+	FVector FocusPoint = FMath::  Lerp(PlayerLocation, TargetLocation, MidPointBias);
+	
+	// Step 4: Apply standard focus offset for height adjustment
+	// This raises the focus point to upper body/head level
+	FVector FocusOffset = StateConfig.StateBase. Offset.FocusOffset;
+	float VerticalOffset = StateConfig.StateBase.Offset.VerticalOffset;
+	FocusOffset.Z += VerticalOffset;
+	
+	FocusPoint += FocusOffset;
+	
+	// Step 5: Apply orbit radius adjustment
+	// This moves the focus point slightly toward the player for better framing
+	// OrbitRadiusMultiplier allows configuration of how much to offset
+	float OrbitMultiplier = StateConfig.Module. Position. OrbitRadiusMultiplier;
+	
+	// If OrbitMultiplier not configured, use default
+	if (OrbitMultiplier <= 0.0f)
+	{
+		OrbitMultiplier = 1.0f;  // Default: standard offset
+	}
+	
+	// Calculate direction from target to player
+	FVector ToPlayer = (PlayerLocation - TargetLocation).GetSafeNormal();
+	
+	// Base orbit offset in centimeters
+	// 50cm provides good framing without being too extreme
+	const float BaseOrbitOffset = 50.0f;
+	float OrbitOffset = BaseOrbitOffset * OrbitMultiplier;
+	
+	// Apply orbit offset along the player direction
+	// This ensures the player is slightly favored in framing
+	FocusPoint += ToPlayer * OrbitOffset;
+	
+	// Step 6: Fill output structure
+	OutOutput.PositionOffset = FocusPoint;
+	OutOutput.bHasPositionOutput = true;
+	
+	return true;
+}
+```
+
+**说明：**
+- **安全检查**：验证目标存在
+- **加权中点**：使用MidPointBias控制偏向
+- **轨道偏移**：向玩家方向偏移，改善构图
+- **配置驱动**：支持通过StateConfig调整参数
+- **默认值处理**：防止配置缺失导致异常
+
+---
+
+4. **完整的P04代码块（用于复制粘贴）：**
+
+如果AGENT需要完整的代码块，提供以下版本：
+
+```cpp
+//========================================
+// P04: Orbit Lock-On - Orbits around player during lock-on
+//========================================
+
+/**
+ * ShouldActivate - Activate when locked onto a non-boss target
+ */
+bool UCameraModule_P04_Orbit_LockOn::  ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (! bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if player has a locked target
+	if (!Context.InputContext.bHasTarget)
+	{
+		return false;
+	}
+	
+	// Don't activate for boss targets (P05 handles those)
+	if (Context.InputContext.bTargetIsBoss)
+	{
+		return false;
+	}
+	
+	return true;
+}
+
+/**
+ * Compute - Calculate orbit position for lock-on camera
+ */
+bool UCameraModule_P04_Orbit_LockOn::  Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output
+	OutOutput = CreateBaseOutput();
+	
+	// Validate target exists
+	if (!Context.InputContext.bHasTarget)
+	{
+		OutOutput.bHasPositionOutput = false;
+		return false;
+	}
+	
+	// Get player and target locations
+	FVector PlayerLocation = Context.InputContext.CharacterLocation;
+	FVector TargetLocation = Context. InputContext.TargetLocation;
+	
+	// Calculate weighted midpoint (default 0.5 = exact midpoint)
+	float MidPointBias = StateConfig.Module. Position.  MidPointBias;
+	if (MidPointBias < 0.0f || MidPointBias > 1.0f)
+	{
+		MidPointBias = 0.5f;
+	}
+	
+	FVector FocusPoint = FMath::Lerp(PlayerLocation, TargetLocation, MidPointBias);
+	
+	// Apply standard focus offset
+	FVector FocusOffset = StateConfig.StateBase.Offset.FocusOffset;
+	float VerticalOffset = StateConfig.  StateBase.Offset.VerticalOffset;
+	FocusOffset.Z += VerticalOffset;
+	FocusPoint += FocusOffset;
+	
+	// Apply orbit radius adjustment (default 1.0)
+	float OrbitMultiplier = StateConfig.Module.Position.  OrbitRadiusMultiplier;
+	if (OrbitMultiplier <= 0.0f)
+	{
+		OrbitMultiplier = 1.0f;
+	}
+	
+	// Offset focus point toward player for better framing
+	FVector ToPlayer = (PlayerLocation - TargetLocation).GetSafeNormal();
+	const float BaseOrbitOffset = 50.0f;  // 50cm base offset
+	float OrbitOffset = BaseOrbitOffset * OrbitMultiplier;
+	FocusPoint += ToPlayer * OrbitOffset;
+	
+	// Fill output
+	OutOutput.PositionOffset = FocusPoint;
+	OutOutput.bHasPositionOutput = true;
+	
+	return true;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 每个方法前添加多行文档注释
+   - 关键步骤添加详细注释
+   - 所有注释使用英文
+
+2. **格式：**
+   - 使用Tab缩进（与现有代码一致）
+   - 方法之间空两行
+   - 常量命名清晰（BaseOrbitOffset）
+
+3. **安全性：**
+   - 参数验证（MidPointBias范围检查）
+   - 默认值处理（防止配置缺失）
+   - 空指针安全（GetSafeNormal）
+
+【技术说明】
+
+**P04的核心机制：**
+
+### 1. 加权中点计算
+
+```
+MidPointBias = 0.5
+
+PlayerLocation = (0, 0, 100)
+TargetLocation = (0, 0, 500)
+
+FocusPoint = Lerp(Player, Target, 0.5)
+           = (0, 0, 300)  // 正中间
+
+效果：相机会看向玩家和目标之间，两者都在视野内
+```
+
+**不同MidPointBias的效果：**
+
+| MidPointBias | 焦点位置 | 效果 |
+|-------------|---------|------|
+| 0.0 | 玩家位置 | 更关注玩家，目标在边缘 |
+| 0.3 | 偏向玩家 | 玩家占据更多画面 |
+| 0.5 | 正中间 | 两者均衡 |
+| 0.7 | 偏向目标 | 目标占据更多画面 |
+| 1.0 | 目标位置 | 更关注目标，玩家在边缘 |
+
+### 2. 轨道偏移调整
+
+```
+为什么需要ToPlayer偏移？
+
+场景：玩家和敌人相距400cm
+- 不加偏移：焦点在正中间（200cm处）
+- 加50cm偏移：焦点向玩家方向偏移50cm（150cm处）
+
+效果：
+- 玩家在画面中稍微靠中心
+- 敌人仍然可见但稍微偏边缘
+- 符合"以玩家为主"的设计原则
+```
+
+**OrbitMultiplier的作用：**
+
+```
+OrbitMultiplier = 1.0 → OrbitOffset = 50cm（标准）
+OrbitMultiplier = 1.5 → OrbitOffset = 75cm（更偏向玩家）
+OrbitMultiplier = 0.5 → OrbitOffset = 25cm（更中立）
+```
+
+### 3. 与其他模块的对比
+
+| 模块 | 焦点位置 | 适用场景 |
+|------|---------|---------|
+| **P01** | 玩家位置 | 探索 |
+| **P04** | 玩家-目标中点 | 普通战斗 |
+| **P05** | 玩家-Boss中点（宽轨道） | Boss战 |
+| **P08** | 玩家-目标加权中点 | 可配置场景 |
+
+**P04 vs P08的区别：**
+- P04：专用于锁定，包含轨道偏移逻辑
+- P08：通用双目标，更简单的中点计算
+
+### 4. 典型配置值
+
+```cpp
+// 推荐的StateConfig配置
+StateConfig.Module.Position.MidPointBias = 0.5f;          // 均衡
+StateConfig.Module.Position.OrbitRadiusMultiplier = 1.0f; // 标准偏移
+StateConfig.StateBase.Offset.  VerticalOffset = 100.0f;     // 100cm上偏
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过（0 errors, 0 warnings）
+   - [ ] 文件编码为UTF-8 Without BOM
+   - [ ] 所有注释为英文
+
+2. **代码完整性：**
+   - [ ] ShouldActivate()实现完整
+   - [ ] Compute()实现完整
+   - [ ] 所有方法签名与.  h一致
+
+3. **逻辑正确性：**
+   - [ ] 仅在有目标且非Boss时激活
+   - [ ] 安全检查目标存在
+   - [ ] 加权中点计算正确
+   - [ ] 轨道偏移应用正确
+   - [ ] 默认值处理完善
+   - [ ] 输出bHasPositionOutput=true
+
+4. **字段访问：**
+   - [ ] Context.InputContext.bHasTarget
+   - [ ] Context.InputContext.bTargetIsBoss（可选）
+   - [ ] Context.InputContext. TargetLocation
+   - [ ] StateConfig.Module.Position.MidPointBias
+   - [ ] StateConfig.Module.Position.OrbitRadiusMultiplier
+
+【注意事项】
+
+1. **不需要Regenerate：**
+   本Sub-Step只修改现有.  cpp文件内容，不添加新文件。
+   保存后可以直接编译，无需Regenerate。
+
+2. **StateConfig字段缺失处理：**
+   如果StateConfig中没有相关字段：
+   ```cpp
+   // 使用固定默认值
+   float MidPointBias = 0.5f;
+   float OrbitMultiplier = 1.0f;
+   ```
+
+3. **InputContext字段缺失处理：**
+   ```cpp
+   // 如果没有bTargetIsBoss：
+   // 在ShouldActivate中删除该检查，仅检查bHasTarget
+   
+   // 如果没有TargetLocation：
+   // 使用备用方法获取目标位置，或返回false
+   AActor* TargetActor = GetTargetActor(Context);
+   if (!TargetActor) return false;
+   FVector TargetLocation = TargetActor->GetActorLocation();
+   ```
+
+4. **GetSafeNormal()的作用：**
+   ```cpp
+   // 防止零向量导致的NaN
+   FVector ToPlayer = (PlayerLocation - TargetLocation).GetSafeNormal();
+   
+   // 如果PlayerLocation == TargetLocation：
+   // GetSafeNormal()返回零向量，不会崩溃
+   ```
+
+5. **测试建议：**
+   编译通过后，可以通过调整参数测试效果：
+   - MidPointBias = 0.3 → 更关注玩家
+   - MidPointBias = 0.7 → 更关注敌人
+   - OrbitMultiplier = 0 → 无偏移（纯中点）
+   - OrbitMultiplier = 2. 0 → 强烈偏向玩家
+
+【输出要求】
+
+完成修改后，请报告：
+
+```
+================================================================================
+Sub-Step 3. 2. 5 完成报告
+================================================================================
+
+【修改内容】
+- 文件：CameraModule_Position.cpp
+- 修改位置：P04模块（ShouldActivate、Compute）
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ ShouldActivate：检查锁定目标（非Boss）
+- ✅ Compute：加权中点 + 轨道偏移
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误数：[数量]
+- 警告数：[数量]
+
+【遇到的问题】
+[如果有字段路径问题，详细描述]
+
+【最终状态】
+✅ P04模块完整实现，可以在锁定时计算正确的焦点位置
+
+================================================================================
+```
+
+【后续步骤】
+
+P04完成后，Position模块进度：
+- [x] ✅ P01:  Follow Target
+- [x] ✅ P02: Follow Target Lagged
+- [x] ✅ P03: Follow Target Predictive
+- [x] ✅ P04: Orbit Lock-On
+- [ ] ⏳ P05: Orbit Boss (Sub-Step 3.2.6)
+- [ ] ⏳ P06: Fixed Point (Sub-Step 3.2.7)
+- [ ] ⏳ P07: Spline Follow (Sub-Step 3.2.8)
+- [ ] ⏳ P08: MidPoint Two Target (Sub-Step 3.2.9)
+
+完成后准备进入Sub-Step 3.2.6（P05: Orbit Boss - 与P04类似但参数不同）。
+
+================================================================================

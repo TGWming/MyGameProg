@@ -1,0 +1,664 @@
+Sub-Step 4.5.6 Prompt
+
+================================================================================
+任务：创建CameraModifier_Effect.cpp - EffectBase + E01-E03实现
+================================================================================
+
+【⚠️ 重要说明】
+原始PROMPT 4.5.6是创建Effect头文件，但：
+1. Effect头文件已在Sub-Step 4.5.5中创建
+2. 因此本Sub-Step改为创建Effect实现文件（.  cpp）
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.  27 C++项目。
+Effect修改器负责持续性视觉效果，如低血量、中毒、专注模式等。
+
+【当前进度】
+Phase 4 Step 4.5 Sub-Step 4.5.6 (共190个Sub-Step中的第139个)
+前置完成：4.5.5 CameraModifier_Effect.h ✅
+
+【任务目标】
+创建文件：Source/MyProject/Private/Camera/Modifiers/CameraModifier_Effect. cpp
+实现EffectBase基类和E01-E03三个Effect修改器。
+
+【⚠️ 重要提醒】
+
+1. **本Sub-Step创建新文件**
+   创建后需要：
+   - 保存文件
+   - 右键.  uproject → Generate Visual Studio project files
+   - 重新加载解决方案
+   - 编译
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **类名必须与头文件一致：**
+   - `UCameraModifier_EffectBase`
+   - `UCameraModifier_E01_Effect_LowHealth`
+   - `UCameraModifier_E02_Effect_Poison`
+   - `UCameraModifier_E03_Effect_Focus`
+
+【具体要求】
+
+**文件路径：** `Source/MyProject/Private/Camera/Modifiers/CameraModifier_Effect. cpp`
+
+**完整文件内容：**
+
+```cpp
+// Copyright Epic Games, Inc.   All Rights Reserved.  
+
+#include "Camera/Modifiers/CameraModifier_Effect.h"
+#include "Camera/Core/SoulsCameraManager.  h"
+
+/**
+ * CameraModifier_Effect.cpp
+ * 
+ * This file contains the implementations of the Effect modifier base class
+ * and all 3 Effect modifiers (E01-E03).
+ * 
+ * Effect modifiers provide persistent visual effects that reflect player state.  
+ * Unlike brief modifiers (Shake/Zoom), Effect modifiers can run continuously
+ * and have their intensity dynamically updated.
+ * 
+ * Implementation Structure:
+ * - EffectBase:  Common effect functionality
+ * - E01: LowHealth - Critical health visual feedback
+ * - E02: Poison - Toxic status effect
+ * - E03: Focus - Concentration mode enhancement
+ * 
+ * Key Feature:
+ * Effect modifiers support dynamic intensity updates via UpdateIntensity(),
+ * allowing effects to scale with game state (e.g., health percentage).
+ */
+
+
+//========================================
+// EffectBase - Common Effect Functionality
+//========================================
+
+/**
+ * Constructor - Initialize default effect parameters
+ * 
+ * Default values provide subtle visual enhancement.  
+ * Derived classes configure specific effect parameters.
+ */
+UCameraModifier_EffectBase:: UCameraModifier_EffectBase()
+	: EffectVignetteIntensity(0.15f)
+	, EffectSaturation(1.0f)
+	, EffectColorTint(FLinearColor::White)
+	, bShouldPulse(false)
+	, PulseSpeed(1.0f)
+	, PulseAmount(0.1f)
+	, IntensityInterpSpeed(5.0f)
+	, TargetIntensity(1.0f)
+	, DynamicIntensity(0.0f)
+	, PulseTimer(0.0f)
+{
+}
+
+/**
+ * OnTriggered - Initialize effect state when triggered
+ * 
+ * Sets up initial intensity and resets pulse timer.
+ */
+void UCameraModifier_EffectBase::OnTriggered(const FModifierTriggerData& InTriggerData)
+{
+	// Call parent
+	Super::OnTriggered(InTriggerData);
+	
+	// Initialize intensity from trigger data
+	TargetIntensity = CurrentIntensity;
+	DynamicIntensity = 0.0f;  // Will interpolate to target
+	PulseTimer = 0.0f;
+	
+	UE_LOG(LogTemp, Verbose, TEXT("EffectBase:   Triggered with intensity %.  2f"), TargetIntensity);
+}
+
+/**
+ * UpdateIntensity - Dynamically update effect intensity
+ * 
+ * Allows effects to scale with game state (e.g., health level).
+ * The actual effect will smoothly interpolate to the new intensity. 
+ * 
+ * @param NewIntensity New target intensity (0-1 typical, can exceed)
+ */
+void UCameraModifier_EffectBase:: UpdateIntensity(float NewIntensity)
+{
+	TargetIntensity = FMath::Max(0.0f, NewIntensity);
+	
+	// Also update base intensity for weight calculations
+	CurrentIntensity = TargetIntensity;
+}
+
+/**
+ * ComputeEffect - Base effect computation
+ * 
+ * Handles intensity interpolation and pulse calculation.
+ * Derived classes should call Super and add specific effects.
+ */
+void UCameraModifier_EffectBase::ComputeEffect(float DeltaTime, const FStageExecutionContext& Context)
+{
+	// Interpolate dynamic intensity towards target
+	DynamicIntensity = FMath::  FInterpTo(DynamicIntensity, TargetIntensity, DeltaTime, IntensityInterpSpeed);
+	
+	// Update pulse timer
+	if (bShouldPulse)
+	{
+		PulseTimer += DeltaTime * PulseSpeed;
+	}
+	
+	// Calculate effective weight with dynamic intensity
+	float EffectiveWeight = CurrentWeight * DynamicIntensity;
+	
+	// Apply base effects
+	VignetteEffect = EffectVignetteIntensity * EffectiveWeight;
+	SaturationEffect = FMath::Lerp(1.0f, EffectSaturation, EffectiveWeight);
+	ColorTintEffect = FMath::Lerp(FLinearColor::White, EffectColorTint, EffectiveWeight);
+}
+
+/**
+ * CalculatePulse - Calculate pulsing effect value
+ * 
+ * Creates a smooth oscillation for visual feedback.
+ * 
+ * @param BaseValue Base value to pulse around
+ * @param PulseAmt Amount of variation
+ * @param Speed Pulse speed (already factored into PulseTimer)
+ * @return Pulsed value
+ */
+float UCameraModifier_EffectBase::  CalculatePulse(float BaseValue, float PulseAmt, float Speed) const
+{
+	float PulseWave = FMath::Sin(PulseTimer * PI * 2.0f);
+	return BaseValue + (PulseWave * PulseAmt);
+}
+
+/**
+ * CalculateHeartbeatPulse - Calculate heartbeat-style pulse
+ * 
+ * Creates a double-beat pattern like a heartbeat for critical states.
+ * Pattern: beat-beat-pause-beat-beat-pause... 
+ * 
+ * @param Intensity Effect intensity (affects pulse amplitude)
+ * @return Heartbeat curve value (0-1)
+ */
+float UCameraModifier_EffectBase:: CalculateHeartbeatPulse(float Intensity) const
+{
+	// Heartbeat pattern:  two quick pulses followed by pause
+	float CyclePosition = FMath:: Fmod(PulseTimer, 1.0f);
+	
+	float Beat = 0.0f;
+	
+	// First beat (0. 0 - 0.15)
+	if (CyclePosition < 0.15f)
+	{
+		float BeatProgress = CyclePosition / 0.15f;
+		Beat = FMath:: Sin(BeatProgress * PI);
+	}
+	// Second beat (0.2 - 0.35)
+	else if (CyclePosition >= 0.2f && CyclePosition < 0.35f)
+	{
+		float BeatProgress = (CyclePosition - 0.2f) / 0.15f;
+		Beat = FMath:: Sin(BeatProgress * PI) * 0.7f;  // Second beat slightly weaker
+	}
+	// Pause (0.35 - 1.0)
+	
+	return Beat * Intensity;
+}
+
+
+//========================================
+// E01: Low Health Effect Implementation
+//========================================
+
+/**
+ * Constructor - Configure low health effect parameters
+ * 
+ * Low health creates urgent visual feedback: 
+ * - Red vignette that pulses with heartbeat
+ * - Desaturation for danger feel
+ * - Slight FOV reduction (tunnel vision)
+ * - Pulse rate increases as health decreases
+ */
+UCameraModifier_E01_Effect_LowHealth::UCameraModifier_E01_Effect_LowHealth()
+	: HealthThreshold(0.3f)
+	, MaxVignetteIntensity(0.35f)
+	, MaxFOVReduction(5.0f)
+	, LowHealthTint(FLinearColor(1.0f, 0.3f, 0.3f, 1.0f))
+	, CurrentHealthPercent(1.0f)
+{
+	// Configure base effect settings
+	EffectVignetteIntensity = 0.35f;
+	EffectSaturation = 0.7f;
+	EffectColorTint = LowHealthTint;
+	bShouldPulse = true;
+	PulseSpeed = 1.2f;  // Base heartbeat rate
+	PulseAmount = 0.15f;
+	IntensityInterpSpeed = 3.0f;  // Slower for smooth health transitions
+}
+
+/**
+ * OnTriggered - Initialize low health state
+ * 
+ * Intensity represents how critical health is (1.0 = very low, 0.0 = at threshold).
+ */
+void UCameraModifier_E01_Effect_LowHealth::  OnTriggered(const FModifierTriggerData& InTriggerData)
+{
+	// Call parent
+	Super::OnTriggered(InTriggerData);
+	
+	// Intensity represents severity (1.0 - health_percent/threshold)
+	// Higher intensity = lower health = more urgent effect
+	CurrentHealthPercent = 1.0f - FMath:: Clamp(CurrentIntensity, 0.0f, 1.0f);
+	
+	// Adjust pulse rate based on health (faster when more critical)
+	PulseSpeed = FMath:: Lerp(1.0f, 2.5f, CurrentIntensity);
+	
+	UE_LOG(LogTemp, Verbose, TEXT("E01 LowHealth:  Triggered, HealthPercent=%.2f, PulseSpeed=%. 2f"),
+		CurrentHealthPercent, PulseSpeed);
+}
+
+/**
+ * ComputeEffect - Calculate low health visual feedback each frame
+ * 
+ * Creates pulsing red vignette with heartbeat pattern.  
+ * Effect intensity scales with how low health is.
+ */
+void UCameraModifier_E01_Effect_LowHealth::ComputeEffect(float DeltaTime, const FStageExecutionContext& Context)
+{
+	// Update pulse speed based on current intensity (can be updated dynamically)
+	PulseSpeed = FMath::  Lerp(1.0f, 2.5f, DynamicIntensity);
+	
+	// Call base to handle interpolation and pulse timer
+	Super::ComputeEffect(DeltaTime, Context);
+	
+	// Calculate heartbeat pulse
+	float HeartbeatValue = CalculateHeartbeatPulse(DynamicIntensity);
+	
+	// Calculate effective weight
+	float EffectiveWeight = CurrentWeight * DynamicIntensity;
+	
+	// Vignette with heartbeat pulse
+	float BaseVignette = MaxVignetteIntensity * EffectiveWeight;
+	float PulsedVignette = BaseVignette * (1.0f + HeartbeatValue * 0.3f);
+	VignetteEffect = PulsedVignette;
+	
+	// Red tint with pulse
+	float TintStrength = EffectiveWeight * (1.0f + HeartbeatValue * 0.2f);
+	ColorTintEffect = FMath::Lerp(FLinearColor::White, LowHealthTint, TintStrength);
+	
+	// Desaturation (more desaturated when more critical)
+	SaturationEffect = FMath::Lerp(1.0f, 0.6f, EffectiveWeight);
+	
+	// FOV reduction (tunnel vision) with slight pulse
+	float FOVChange = MaxFOVReduction * EffectiveWeight * (1.0f + HeartbeatValue * 0.1f);
+	FOVEffect = -FOVChange;  // Negative = tighter FOV
+}
+
+
+//========================================
+// E02: Poison Effect Implementation
+//========================================
+
+/**
+ * Constructor - Configure poison effect parameters
+ * 
+ * Poison creates unsettling visual feedback: 
+ * - Green/purple color tint
+ * - Slight vignette
+ * - FOV wobble for nausea
+ * - Desaturation
+ * - Slow pulse for sickly feel
+ */
+UCameraModifier_E02_Effect_Poison::UCameraModifier_E02_Effect_Poison()
+	: PoisonTint(FLinearColor(0.7f, 1.0f, 0.7f, 1.0f))
+	, PoisonVignetteIntensity(0.18f)
+	, PoisonDesaturation(0.75f)
+	, FOVWobbleAmount(2.0f)
+	, WobbleSpeed(1.5f)
+	, PoisonSeverity(1.0f)
+{
+	// Configure base effect settings
+	EffectVignetteIntensity = 0.18f;
+	EffectSaturation = 0.75f;
+	EffectColorTint = PoisonTint;
+	bShouldPulse = true;
+	PulseSpeed = 0.8f;  // Slow, sickly pulse
+	PulseAmount = 0.1f;
+	IntensityInterpSpeed = 4.0f;
+}
+
+/**
+ * OnTriggered - Initialize poison state
+ * 
+ * Intensity represents poison severity. 
+ */
+void UCameraModifier_E02_Effect_Poison::OnTriggered(const FModifierTriggerData& InTriggerData)
+{
+	// Call parent
+	Super::  OnTriggered(InTriggerData);
+	
+	// Store poison severity
+	PoisonSeverity = FMath::Clamp(CurrentIntensity, 0.3f, 1.5f);
+	
+	// Adjust effect parameters based on severity
+	PoisonVignetteIntensity = 0.18f * PoisonSeverity;
+	FOVWobbleAmount = 2.0f * PoisonSeverity;
+	
+	UE_LOG(LogTemp, Verbose, TEXT("E02 Poison:  Triggered, Severity=%. 2f"), PoisonSeverity);
+}
+
+/**
+ * ComputeEffect - Calculate poison visual effect each frame
+ * 
+ * Creates nauseating effect with color tint and FOV wobble. 
+ */
+void UCameraModifier_E02_Effect_Poison:: ComputeEffect(float DeltaTime, const FStageExecutionContext& Context)
+{
+	// Call base to handle interpolation and pulse timer
+	Super::ComputeEffect(DeltaTime, Context);
+	
+	// Calculate effective weight
+	float EffectiveWeight = CurrentWeight * DynamicIntensity;
+	
+	// Poison vignette with slow pulse
+	float PulseFactor = CalculatePulse(1.0f, 0.15f, PulseSpeed);
+	VignetteEffect = PoisonVignetteIntensity * EffectiveWeight * PulseFactor;
+	
+	// Green tint with slight variation
+	float TintPulse = CalculatePulse(1.0f, 0.1f, PulseSpeed * 0.7f);
+	FLinearColor PulsedTint = PoisonTint;
+	PulsedTint.G *= TintPulse;  // Vary green channel
+	ColorTintEffect = FMath::Lerp(FLinearColor::White, PulsedTint, EffectiveWeight);
+	
+	// Desaturation
+	SaturationEffect = FMath:: Lerp(1.0f, PoisonDesaturation, EffectiveWeight);
+	
+	// FOV wobble for nausea effect
+	float WobbleTime = TotalActiveTime * WobbleSpeed;
+	float WobbleX = FMath:: Sin(WobbleTime * 2.0f) * FOVWobbleAmount;
+	float WobbleY = FMath::Cos(WobbleTime * 1.7f) * FOVWobbleAmount * 0.5f;
+	
+	FOVEffect = WobbleX * EffectiveWeight;
+	
+	// Subtle rotation wobble for disorientation
+	RotationEffect. Pitch = WobbleY * EffectiveWeight * 0.3f;
+	RotationEffect.Roll = FMath:: Sin(WobbleTime * 1.3f) * EffectiveWeight * 0.5f;
+	RotationEffect. Yaw = 0.0f;
+}
+
+
+//========================================
+// E03: Focus Effect Implementation
+//========================================
+
+/**
+ * Constructor - Configure focus effect parameters
+ * 
+ * Focus creates heightened awareness visual feedback:
+ * - Slight vignette for concentration
+ * - Subtle FOV reduction (tunnel vision)
+ * - Enhanced saturation (heightened senses)
+ * - Clean, professional look
+ */
+UCameraModifier_E03_Effect_Focus::UCameraModifier_E03_Effect_Focus()
+	: FocusFOVReduction(3.0f)
+	, FocusVignetteIntensity(0.10f)
+	, FocusSaturationBoost(1.08f)
+	, FocusTimeDilation(0.95f)
+	, bStrongFocus(false)
+{
+	// Configure base effect settings
+	EffectVignetteIntensity = 0.10f;
+	EffectSaturation = 1.08f;
+	EffectColorTint = FLinearColor::  White;  // No tint for focus
+	bShouldPulse = false;  // Clean, stable effect
+	IntensityInterpSpeed = 8.0f;  // Quick response for aiming
+}
+
+/**
+ * OnTriggered - Initialize focus state
+ * 
+ * Strong focus (intensity >= 1.0) provides more pronounced effect.
+ */
+void UCameraModifier_E03_Effect_Focus::  OnTriggered(const FModifierTriggerData& InTriggerData)
+{
+	// Call parent
+	Super::OnTriggered(InTriggerData);
+	
+	// Determine focus strength
+	bStrongFocus = (CurrentIntensity >= 1.0f);
+	
+	// Scale parameters based on focus strength
+	float FocusScale = FMath::Clamp(CurrentIntensity, 0.5f, 1.5f);
+	
+	FocusFOVReduction = 3.0f * FocusScale;
+	FocusVignetteIntensity = 0.10f * FocusScale;
+	
+	if (bStrongFocus)
+	{
+		// Strong focus gets more pronounced effects
+		FocusSaturationBoost = 1.12f;
+		FocusTimeDilation = 0.92f;
+	}
+	else
+	{
+		FocusSaturationBoost = 1.08f;
+		FocusTimeDilation = 0.95f;
+	}
+	
+	UE_LOG(LogTemp, Verbose, TEXT("E03 Focus:  Triggered, StrongFocus=%d, FOVReduction=%.2f"),
+		bStrongFocus ?  1 : 0, FocusFOVReduction);
+}
+
+/**
+ * ComputeEffect - Calculate focus visual enhancement each frame
+ * 
+ * Creates clean, professional visual enhancement for aiming/lock-on.
+ */
+void UCameraModifier_E03_Effect_Focus:: ComputeEffect(float DeltaTime, const FStageExecutionContext& Context)
+{
+	// Call base to handle interpolation
+	Super::ComputeEffect(DeltaTime, Context);
+	
+	// Calculate effective weight
+	float EffectiveWeight = CurrentWeight * DynamicIntensity;
+	
+	// Subtle vignette for focus
+	VignetteEffect = FocusVignetteIntensity * EffectiveWeight;
+	
+	// FOV reduction (tunnel vision for focus)
+	FOVEffect = -FocusFOVReduction * EffectiveWeight;
+	
+	// Saturation boost (heightened senses)
+	SaturationEffect = FMath::  Lerp(1.0f, FocusSaturationBoost, EffectiveWeight);
+	
+	// Very subtle color enhancement (slightly warmer for focus)
+	ColorTintEffect = FMath::Lerp(
+		FLinearColor::White,
+		FLinearColor(1.02f, 1.01f, 1.0f, 1.0f),  // Very subtle warm
+		EffectiveWeight
+	);
+	
+	// Time dilation hint for focused perception
+	TimeDilationEffect = FMath:: Lerp(1.0f, FocusTimeDilation, EffectiveWeight);
+	
+	// No rotation effects - focus should be stable
+	RotationEffect = FRotator::  ZeroRotator;
+}
+```
+
+---
+
+【代码设计说明】
+
+### 1. EffectBase功能
+
+```
+UCameraModifier_EffectBase
+├── UpdateIntensity()          - 动态更新效果强度
+├── CalculatePulse()           - 通用脉冲计算
+├── CalculateHeartbeatPulse()  - 心跳节奏脉冲
+├── ComputeEffect()            - 基础效果计算
+└── 平滑强度插值
+```
+
+### 2. 三种Effect对比
+
+| 特性 | E01 LowHealth | E02 Poison | E03 Focus |
+|------|---------------|------------|-----------|
+| 颜色 | 红色 | 绿色 | 无/微暖 |
+| 晕影 | 0.35脉冲 | 0.18 | 0.10 |
+| 饱和度 | 降低(0.6) | 降低(0.75) | **提高(1.08)** |
+| FOV | 收紧5度 | 摇晃±2度 | 收紧3度 |
+| 脉冲 | 心跳节奏 | 慢速恶心 | 无 |
+| 特殊 | 心跳加速 | 旋转摇晃 | 时间膨胀 |
+
+### 3. 心跳脉冲模式
+
+```
+E01使用心跳节奏脉冲：
+
+一个周期 (1秒):
+0%──15%──20%──35%────────100%
+│第一│ │第二│    静默     │
+│心跳│ │心跳│             │
+
+波形：
+  _     _
+ / \   / \
+/   \_/   \__________
+第一  第二     静默
+(强)  (弱)
+```
+
+### 4. 中毒FOV摇晃
+
+```
+E02使用不同频率的Sin波叠加：
+
+X方向：sin(time * 2.0) * 2度
+Y方向：cos(time * 1.7) * 1度
+Roll： sin(time * 1.3) * 0.5度
+
+不同频率产生不规则摇晃，模拟恶心感
+```
+
+### 5. 动态更新示例
+
+```cpp
+// 游戏代码中动态更新低血量效果
+
+void AMyCharacter::  OnHealthChanged(float NewHealth, float MaxHealth)
+{
+    float HealthPercent = NewHealth / MaxHealth;
+    float Threshold = 0.3f;
+    
+    if (HealthPercent < Threshold)
+    {
+        // 计算效果强度 (血量越低越强)
+        float Intensity = 1.0f - (HealthPercent / Threshold);
+        
+        if (! LowHealthEffect->IsActive())
+        {
+            // 首次激活
+            FModifierTriggerData TriggerData;
+            TriggerData. Intensity = Intensity;
+            ModifierManager->TriggerModifier(
+                ECameraModifierID:: Modifier_E01_Effect_LowHealth,
+                TriggerData
+            );
+        }
+        else
+        {
+            // 动态更新强度
+            LowHealthEffect->UpdateIntensity(Intensity);
+        }
+    }
+    else if (LowHealthEffect->IsActive())
+    {
+        // 血量恢复，停止效果
+        LowHealthEffect->Stop(false);  // 平滑淡出
+    }
+}
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] Regenerate执行
+   - [ ] 编译通过（0 errors）
+   - [ ] UTF-8 Without BOM
+
+2. **代码完整性：**
+   - [ ] EffectBase完整实现
+   - [ ] E01构造函数、OnTriggered、ComputeEffect
+   - [ ] E02构造函数、OnTriggered、ComputeEffect
+   - [ ] E03构造函数、OnTriggered、ComputeEffect
+   - [ ] 调用Super::OnTriggered和Super::ComputeEffect
+
+3. **效果验证：**
+   - [ ] E01：红色晕影 + 心跳脉冲
+   - [ ] E02：绿色色调 + FOV摇晃
+   - [ ] E03：微晕影 + 饱和度提升
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 4. 5. 6 完成报告
+================================================================================
+
+【创建的文件】
+- 文件：CameraModifier_Effect. cpp
+- 路径：Source/MyProject/Private/Camera/Modifiers/
+
+【实现的内容】
+- ✅ UCameraModifier_EffectBase
+  - 构造函数
+  - OnTriggered
+  - UpdateIntensity
+  - ComputeEffect
+  - CalculatePulse
+  - CalculateHeartbeatPulse
+
+- ✅ UCameraModifier_E01_Effect_LowHealth
+  - 红色晕影 + 心跳脉冲
+  - 脉冲速度随血量降低而加快
+
+- ✅ UCameraModifier_E02_Effect_Poison
+  - 绿色色调 + FOV摇晃
+  - 旋转摇晃模拟恶心
+
+- ✅ UCameraModifier_E03_Effect_Focus
+  - 清晰专注效果
+  - 饱和度提升 + 时间膨胀
+
+【编译结果】
+- Regenerate：[已执行]
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【最终状态】
+✅ EffectBase + E01-E03实现完成
+✅ 全部3个Effect修改器实现完成
+
+================================================================================
+```
+
+【后续步骤】
+
+4. 5. 6完成后：
+- [x] ✅ 4.5.1:   CameraModifier_Zoom.  h
+- [x] ✅ 4.5.2:  ZoomBase + Z01实现
+- [x] ✅ 4.5.3: Z02 + Z03实现
+- [x] ✅ 4.5.4: Z04实现
+- [x] ✅ 4.5.5: CameraModifier_Effect.  h
+- [x] ✅ 4.5.6: EffectBase + E01-E03实现
+- [ ] ⏳ 4.5.7: 注册Zoom + Effect到Manager
+
+**Phase 4. 5进度：6/7**
+
+================================================================================

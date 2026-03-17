@@ -1,0 +1,549 @@
+Sub-Step 3.2.4 Prompt
+
+================================================================================
+任务：在CameraModule_Position.cpp中添加P03 FollowTarget_Predictive实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+P03根据角色速度预测未来位置，提前移动相机焦点，提供更流畅的高速移动体验。
+这是一个动态权重模块，速度越快，预测效果越强。
+
+【当前进度】
+Phase 3 Step 3.2 Sub-Step 3.2.4 (共190个Sub-Step中的第63个)
+前置完成：3.2.3 P02实现 ✅
+
+【任务目标】
+在CameraModule_Position.cpp中完整实现P03模块，替换现有的stub占位符。
+
+【⚠️ 重要提醒】
+
+1. **编译前必做步骤：**
+   本Sub-Step只修改现有. cpp文件，不添加新文件。
+   因此**不需要Regenerate**，可以直接编译。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   确认StateConfig和InputContext的字段路径与项目实际结构一致。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_Position. cpp
+
+2. **定位修改位置：**
+
+在文件中找到P03的stub实现部分：
+
+```cpp
+//========================================
+// P03: Follow Target Predictive - Anticipates movement
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.2.4
+// ...   stub代码
+```
+
+**将上述stub代码完整替换为下方的完整实现。**
+
+---
+
+3. **P03完整实现代码：**
+
+**A. ShouldActivate()方法（需要完整实现）：**
+
+**当前stub代码：**
+```cpp
+bool UCameraModule_P03_FollowTarget_Predictive:: ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Stub - typically activates during high-speed movement
+	return false;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * ShouldActivate - Determine if predictive following should be active
+ * 
+ * P03 activates when the character is moving, as prediction is only
+ * useful during movement.  When stationary, basic follow (P01) is sufficient.
+ * 
+ * The module uses dynamic weight based on speed, so it can be active
+ * even during slow movement (with low weight).
+ */
+bool UCameraModule_P03_FollowTarget_Predictive::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Activate when character is moving
+	// bIsMoving flag indicates character has non-zero velocity
+	return Context.InputContext.bIsMoving;
+}
+```
+
+**说明：**
+- 检查bIsEnabled确保模块未被手动禁用
+- 检查bIsMoving标志，仅在移动时激活
+- 静止时不激活，避免不必要的预测计算
+
+**⚠️ InputContext字段注意：**
+如果FCameraInputContext中没有bIsMoving字段，可以使用速度判断：
+```cpp
+// 替代方案：使用速度判断
+float Speed = Context.InputContext.  CharacterVelocity. Size();
+return bIsEnabled && (Speed > 10.0f);  // 速度阈值：10 cm/s
+```
+
+---
+
+**B. Compute()方法（需要完整实现）：**
+
+**当前stub代码：**
+```cpp
+bool UCameraModule_P03_FollowTarget_Predictive::Compute(...)
+{
+	OutOutput = CreateBaseOutput();
+	OutOutput.bHasPositionOutput = false;
+	return false;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * Compute - Calculate predicted follow position based on velocity
+ * 
+ * This module implements velocity-based prediction to make the camera
+ * look ahead in the direction of movement.  This provides: 
+ * - Smoother tracking during fast movement
+ * - More screen space in front of the character
+ * - Anticipation of direction changes
+ * 
+ * Steps:
+ * 1. Calculate base focus position (character + offset)
+ * 2. Get character velocity from input context
+ * 3. Calculate predicted offset based on velocity and prediction time
+ * 4. Clamp prediction to maximum distance
+ * 5. Apply only horizontal prediction (ignore vertical/falling)
+ * 6. Calculate dynamic weight based on movement speed
+ * 7. Output predicted position with weight
+ * 
+ * The weight system allows this module to blend with other position
+ * modules - higher speed = more prediction influence. 
+ */
+bool UCameraModule_P03_FollowTarget_Predictive::  Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Override blend policy to Blend (not Override)
+	// This allows prediction to blend with other position modules
+	OutOutput.BlendPolicy = EBlendPolicy:: Blend;
+	
+	// Step 1: Get character location and velocity
+	FVector CharacterLocation = Context.InputContext.CharacterLocation;
+	FVector Velocity = Context.InputContext.CharacterVelocity;
+	
+	// Step 2: Apply standard focus offset
+	FVector FocusOffset = StateConfig.StateBase.Offset.FocusOffset;
+	float VerticalOffset = StateConfig. StateBase.  Offset. VerticalOffset;
+	FocusOffset.Z += VerticalOffset;
+	
+	// Step 3: Get prediction time from state config
+	// PredictionTime is in seconds - how far ahead to predict
+	// Typical values: 0.2-0.5 seconds
+	float PredictionTime = StateConfig.Module.Position.PredictionTime;
+	
+	// If prediction time not configured, use default
+	if (PredictionTime <= 0.0f)
+	{
+		PredictionTime = 0.3f;  // Default:  300ms prediction
+	}
+	
+	// Step 4: Calculate predicted offset
+	// PredictedOffset = Velocity * Time (basic physics:  distance = velocity * time)
+	FVector PredictedOffset = Velocity * PredictionTime;
+	
+	// Step 5: Limit prediction distance to avoid excessive offset
+	// MaxPrediction is in centimeters (UE4 units)
+	const float MaxPrediction = 200.0f;  // Max 200cm (2 meters) prediction
+	
+	if (PredictedOffset.Size() > MaxPrediction)
+	{
+		// Clamp to max distance while preserving direction
+		PredictedOffset = PredictedOffset.GetSafeNormal() * MaxPrediction;
+	}
+	
+	// Step 6: Only predict horizontal movement
+	// We don't want to predict falling/jumping (vertical velocity)
+	// This keeps the camera stable during vertical movement
+	PredictedOffset.Z = 0.0f;
+	
+	// Step 7: Calculate final focus point
+	// Base position + standard offset + predicted offset
+	FVector FocusPoint = CharacterLocation + FocusOffset + PredictedOffset;
+	
+	// Step 8: Fill output
+	OutOutput.PositionOffset = FocusPoint;
+	OutOutput.bHasPositionOutput = true;
+	
+	// Step 9: Calculate dynamic weight based on movement speed
+	// Weight determines how much this module influences the final result
+	// Faster movement = higher weight = more prediction
+	// Slower movement = lower weight = less prediction (blends with basic follow)
+	
+	float CharacterSpeed = Context.InputContext.  CharacterSpeed;
+	
+	// If CharacterSpeed field doesn't exist, calculate from velocity
+	// float CharacterSpeed = Velocity.Size();
+	
+	// Normalize speed to 0-1 range
+	// Assuming max run speed is around 600 cm/s (6 m/s)
+	const float MaxRunSpeed = 600.0f;
+	float SpeedRatio = FMath::Clamp(CharacterSpeed / MaxRunSpeed, 0.0f, 1.0f);
+	
+	// Apply speed ratio as weight
+	// At low speed:  weight ~0, prediction has minimal effect
+	// At high speed: weight ~1, prediction has full effect
+	OutOutput.Weight = SpeedRatio;
+	
+	// Optional: Apply smoothing to weight changes
+	// OutOutput.Weight = FMath:: Pow(SpeedRatio, 1.5f);  // Non-linear curve
+	
+	return true;
+}
+```
+
+**说明：**
+- 使用Blend策略，允许与其他Position模块混合
+- 基于速度计算预测偏移量（Velocity * Time）
+- 限制最大预测距离（200cm）
+- 仅预测水平方向（Z=0），避免相机跟随跳跃/下落
+- 使用动态权重（基于速度），速度越快影响越大
+
+**⚠️ StateConfig字段路径注意：**
+根据实际项目结构，可能需要调整：
+```cpp
+// 可能的路径变体：
+StateConfig.Module.Position.PredictionTime
+StateConfig.  PositionSettings.PredictionTime
+StateConfig. Prediction.Time
+```
+
+如果编译时报错，根据错误信息调整字段路径。
+
+**⚠️ InputContext字段注意：**
+- `CharacterSpeed`：如果不存在，使用 `Velocity.Size()` 计算
+- `CharacterVelocity`：确认是FVector类型
+- `bIsMoving`：如果不存在，用速度判断
+
+---
+
+4. **完整的P03代码块（用于复制粘贴）：**
+
+如果AGENT需要完整的代码块，提供以下版本：
+
+```cpp
+//========================================
+// P03: Follow Target Predictive - Anticipates movement
+//========================================
+
+/**
+ * ShouldActivate - Activate when character is moving
+ */
+bool UCameraModule_P03_FollowTarget_Predictive::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (! bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Activate when character is moving
+	return Context.InputContext.bIsMoving;
+}
+
+/**
+ * Compute - Calculate predicted follow position based on velocity
+ */
+bool UCameraModule_P03_FollowTarget_Predictive:: Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output
+	OutOutput = CreateBaseOutput();
+	OutOutput.BlendPolicy = EBlendPolicy:: Blend;  // Blend with other modules
+	
+	// Get character location and velocity
+	FVector CharacterLocation = Context.InputContext.CharacterLocation;
+	FVector Velocity = Context.InputContext.CharacterVelocity;
+	
+	// Apply standard focus offset
+	FVector FocusOffset = StateConfig.StateBase. Offset.FocusOffset;
+	float VerticalOffset = StateConfig.StateBase. Offset.VerticalOffset;
+	FocusOffset.Z += VerticalOffset;
+	
+	// Get prediction time from config (default 0.3s if not set)
+	float PredictionTime = StateConfig.Module.Position. PredictionTime;
+	if (PredictionTime <= 0.0f)
+	{
+		PredictionTime = 0.3f;
+	}
+	
+	// Calculate predicted offset
+	FVector PredictedOffset = Velocity * PredictionTime;
+	
+	// Limit prediction distance
+	const float MaxPrediction = 200.0f;  // 2 meters max
+	if (PredictedOffset.Size() > MaxPrediction)
+	{
+		PredictedOffset = PredictedOffset.GetSafeNormal() * MaxPrediction;
+	}
+	
+	// Only predict horizontal movement (no vertical prediction)
+	PredictedOffset.Z = 0.0f;
+	
+	// Calculate final focus point
+	FVector FocusPoint = CharacterLocation + FocusOffset + PredictedOffset;
+	
+	// Fill output
+	OutOutput.PositionOffset = FocusPoint;
+	OutOutput.bHasPositionOutput = true;
+	
+	// Calculate dynamic weight based on movement speed
+	float CharacterSpeed = Context.InputContext.CharacterSpeed;
+	// If CharacterSpeed doesn't exist:  float CharacterSpeed = Velocity.Size();
+	
+	const float MaxRunSpeed = 600.0f;  // 6 m/s typical run speed
+	float SpeedRatio = FMath::Clamp(CharacterSpeed / MaxRunSpeed, 0.0f, 1.0f);
+	OutOutput.Weight = SpeedRatio;
+	
+	return true;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 每个方法前添加多行文档注释，说明目的和算法
+   - 关键步骤添加行内注释
+   - 所有注释使用英文
+
+2. **格式：**
+   - 使用Tab缩进（与现有代码一致）
+   - 方法之间空两行
+   - 常量命名使用大写（MaxPrediction, MaxRunSpeed）
+
+3. **魔法数字：**
+   - 重要数值定义为const常量并添加注释
+   - 单位说明清楚（cm, seconds等）
+
+【技术说明】
+
+**P03的核心机制：**
+
+1. **速度预测：**
+   ```
+   PredictedPosition = CurrentPosition + Velocity * PredictionTime
+   
+   例如：
+   - 速度：500 cm/s 向前
+   - 预测时间：0.3秒
+   - 预测偏移：150cm 向前
+   
+   → 相机焦点会在角色前方150cm处
+   ```
+
+2. **动态权重系统：**
+   ```
+   慢速移动（100 cm/s）：
+   - SpeedRatio = 100/600 = 0.17
+   - Weight = 0.17
+   - 预测效果很弱，主要使用P01
+
+   快速移动（600 cm/s）：
+   - SpeedRatio = 600/600 = 1.0
+   - Weight = 1.0
+   - 预测效果完全，大幅超前
+   ```
+
+3. **仅预测水平方向：**
+   ```
+   为什么PredictedOffset. Z = 0？
+   
+   场景1：角色跳跃
+   - 垂直速度向上
+   - 如果预测垂直，相机会向上偏移
+   - 结果：相机抖动，视觉不稳定
+   
+   场景2：角色下落
+   - 垂直速度向下
+   - 如果预测垂直，相机会向下偏移
+   - 结果：看不到落地点
+   
+   → 仅预测水平保持相机稳定
+   ```
+
+4. **最大预测距离限制：**
+   ```
+   为什么需要MaxPrediction？
+   
+   极端情况：
+   - 角色速度：2000 cm/s（极快）
+   - 预测时间：0.5秒
+   - 预测偏移：1000cm（10米）
+   
+   → 相机焦点会在角色前方10米
+   → 角色可能不在屏幕内！
+   
+   限制到200cm确保角色始终可见
+   ```
+
+**P03与P01/P02的对比：**
+
+| 模块 | 响应方式 | 权重 | 适用场景 |
+|------|---------|------|---------|
+| **P01** | 即时跟随 | 固定1.0 | 基础跟随 |
+| **P02** | 平滑延迟 | 固定1.0 | 电影感移动 |
+| **P03** | 预测超前 | 动态0-1 | 高速战斗 |
+
+**混合效果：**
+```
+场景：角色慢走（速度200 cm/s）
+- P01: Weight=1.0, Position=角色位置
+- P03: Weight=0.33, Position=角色前方67cm
+
+Stage 5混合：
+- 最终位置 = P01 * 1.0 + P03 * 0.33（归一化）
+- 结果：轻微超前，主要跟随角色
+
+场景：角色冲刺（速度600 cm/s）
+- P01: Weight=1.0, Position=角色位置
+- P03: Weight=1.0, Position=角色前方180cm
+
+Stage 5混合：
+- 最终位置 = (P01 * 1.0 + P03 * 1.0) / 2
+- 结果：显著超前，相机看向前方
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过（0 errors, 0 warnings）
+   - [ ] 文件编码为UTF-8 Without BOM
+   - [ ] 所有注释为英文
+
+2. **代码完整性：**
+   - [ ] ShouldActivate()实现完整
+   - [ ] Compute()实现完整
+   - [ ] 所有方法签名与. h一致
+
+3. **逻辑正确性：**
+   - [ ] 仅在移动时激活
+   - [ ] BlendPolicy设置为Blend
+   - [ ] 垂直方向预测归零（Z=0）
+   - [ ] 预测距离有上限
+   - [ ] 动态权重基于速度
+   - [ ] 输出bHasPositionOutput=true
+
+4. **字段访问：**
+   - [ ] StateConfig.Module.Position.PredictionTime（或实际路径）
+   - [ ] Context.InputContext.bIsMoving（或速度判断）
+   - [ ] Context.InputContext.CharacterSpeed（或Velocity.Size()）
+
+【注意事项】
+
+1. **不需要Regenerate：**
+   本Sub-Step只修改现有. cpp文件内容，不添加新文件。
+   保存后可以直接编译，无需Regenerate。
+
+2. **StateConfig字段缺失处理：**
+   如果StateConfig中没有PredictionTime字段：
+   ```cpp
+   // 使用默认值
+   float PredictionTime = 0.3f;  // 固定300ms预测
+   ```
+
+3. **InputContext字段缺失处理：**
+   ```cpp
+   // 如果没有bIsMoving：
+   float Speed = Context.InputContext.  CharacterVelocity.Size();
+   return bIsEnabled && (Speed > 10.0f);
+   
+   // 如果没有CharacterSpeed：
+   float CharacterSpeed = Context.InputContext. CharacterVelocity.Size();
+   ```
+
+4. **测试建议：**
+   编译通过后，可以通过调整参数测试效果：
+   - PredictionTime = 0.1 → 轻微超前
+   - PredictionTime = 0.5 → 显著超前
+   - MaxPrediction = 100 → 限制更严格
+   - MaxPrediction = 400 → 允许更远预测
+
+【输出要求】
+
+完成修改后，请报告：
+
+```
+================================================================================
+Sub-Step 3. 2. 4 完成报告
+================================================================================
+
+【修改内容】
+- 文件：CameraModule_Position.cpp
+- 修改位置：P03模块（ShouldActivate、Compute）
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ ShouldActivate：检查是否移动
+- ✅ Compute：速度预测 + 动态权重
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误数：[数量]
+- 警告数：[数量]
+
+【遇到的问题】
+[如果有字段路径问题，详细描述]
+
+【最终状态】
+✅ P03模块完整实现，可以根据速度预测位置
+
+================================================================================
+```
+
+【后续步骤】
+
+P03完成后，Position模块进度：
+- [x] ✅ P01:  Follow Target
+- [x] ✅ P02: Follow Target Lagged
+- [x] ✅ P03: Follow Target Predictive
+- [ ] ⏳ P04: Orbit Lock-On (Sub-Step 3.2.5)
+- [ ] ⏳ P05: Orbit Boss (Sub-Step 3.2.6)
+- [ ] ⏳ P06: Fixed Point (Sub-Step 3.2.7)
+- [ ] ⏳ P07: Spline Follow (Sub-Step 3.2.8)
+- [ ] ⏳ P08: MidPoint Two Target (Sub-Step 3.2.9)
+
+完成后准备进入Sub-Step 3.2.5。
+
+================================================================================

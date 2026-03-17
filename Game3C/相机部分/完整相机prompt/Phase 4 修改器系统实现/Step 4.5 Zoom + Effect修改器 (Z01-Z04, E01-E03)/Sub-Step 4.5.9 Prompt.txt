@@ -1,0 +1,489 @@
+Sub-Step 4.6.2 Prompt
+
+================================================================================
+任务：创建CameraModifier_Special.cpp - SpecialBase + X01 SlowMotion实现
+================================================================================
+
+【⚠️ 重要说明】
+原始PROMPT 4.5.9是E03 EnvironmentEffect实现，但：
+1. E01-E03已在Sub-Step 4.5.6中全部实现
+2. Phase 4.5已完成，现在继续Phase 4.6
+3. 因此本Sub-Step改为创建Special实现文件（SpecialBase + X01）
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4. 27 C++项目。
+SpecialBase是所有Special修改器的基类，提供时间控制的通用功能。
+X01是慢动作效果，用于戏剧性时刻的时间膨胀。
+
+【当前进度】
+Phase 4 Step 4.6 Sub-Step 4.6.2 (共190个Sub-Step中的第142个)
+前置完成：4.6.1 CameraModifier_Special.h ✅
+
+【任务目标】
+创建文件：Source/MyProject/Private/Camera/Modifiers/CameraModifier_Special.cpp
+本Sub-Step实现文件框架、SpecialBase基类和X01 SlowMotion。
+
+【⚠️ 重要提醒】
+
+1. **本Sub-Step创建新文件**
+   创建后需要：
+   - 保存文件
+   - 右键. uproject → Generate Visual Studio project files
+   - 重新加载解决方案
+   - 编译
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **类名必须与头文件一致：**
+   - `UCameraModifier_SpecialBase`
+   - `UCameraModifier_X01_Special_SlowMotion`
+
+【具体要求】
+
+**文件路径：** `Source/MyProject/Private/Camera/Modifiers/CameraModifier_Special. cpp`
+
+**完整文件内容：**
+
+```cpp
+// Copyright Epic Games, Inc.  All Rights Reserved. 
+
+#include "Camera/Modifiers/CameraModifier_Special.h"
+#include "Camera/Core/SoulsCameraManager.h"
+
+/**
+ * CameraModifier_Special. cpp
+ * 
+ * This file contains the implementations of the Special modifier base class
+ * and all 3 Special modifiers (X01-X03).
+ * 
+ * Special modifiers provide time control and special camera behaviors for
+ * critical gameplay moments like slow motion, hit stops, and death sequences.
+ * 
+ * Implementation Structure:
+ * - SpecialBase: Common time control functionality (this Sub-Step)
+ * - X01: SlowMotion (this Sub-Step)
+ * - X02: HitStop (Sub-Step 4.6.3)
+ * - X03: DeathCam (Sub-Step 4.6.3)
+ * 
+ * Key Feature:
+ * Special modifiers have the highest priority and control time dilation,
+ * which affects the entire game feel during critical moments.
+ */
+
+
+//========================================
+// SpecialBase - Common Special Functionality
+//========================================
+
+/**
+ * Constructor - Initialize default special parameters
+ * 
+ * Default values provide a subtle time effect. 
+ * Derived classes configure specific parameters. 
+ */
+UCameraModifier_SpecialBase::UCameraModifier_SpecialBase()
+	: TargetTimeDilation(0.5f)
+	, TimeRampIn(0.05f)
+	, TimeRampOut(0.2f)
+	, bApplyVisualEffects(true)
+	, SpecialVignette(0.1f)
+	, SpecialSaturation(0.9f)
+	, CurrentTimeDilation(1.0f)
+	, bAtFullIntensity(false)
+{
+}
+
+/**
+ * OnTriggered - Initialize special state when triggered
+ * 
+ * Prepares time dilation and visual effects. 
+ */
+void UCameraModifier_SpecialBase::OnTriggered(const FModifierTriggerData& InTriggerData)
+{
+	// Call parent
+	Super::OnTriggered(InTriggerData);
+	
+	// Initialize time dilation state
+	CurrentTimeDilation = 1.0f;
+	bAtFullIntensity = false;
+	
+	UE_LOG(LogTemp, Verbose, TEXT("SpecialBase:  Triggered, TargetTimeDilation=%.2f"), TargetTimeDilation);
+}
+
+/**
+ * OnActivated - Called when special effect is fully active
+ */
+void UCameraModifier_SpecialBase::OnActivated()
+{
+	Super::OnActivated();
+	bAtFullIntensity = true;
+	
+	UE_LOG(LogTemp, Verbose, TEXT("SpecialBase:  Fully activated"));
+}
+
+/**
+ * OnDeactivating - Called when special effect begins to end
+ */
+void UCameraModifier_SpecialBase:: OnDeactivating()
+{
+	Super::OnDeactivating();
+	bAtFullIntensity = false;
+	
+	UE_LOG(LogTemp, Verbose, TEXT("SpecialBase:  Deactivating"));
+}
+
+/**
+ * ComputeEffect - Base special effect computation
+ * 
+ * Handles time dilation interpolation and basic visual effects.
+ * Derived classes should call Super and add specific effects.
+ */
+void UCameraModifier_SpecialBase::ComputeEffect(float DeltaTime, const FStageExecutionContext& Context)
+{
+	// Calculate normalized time
+	float NormalizedTime = 0.0f;
+	if (ActiveDuration > 0.0f)
+	{
+		NormalizedTime = FMath::Clamp(TotalActiveTime / ActiveDuration, 0.0f, 1.0f);
+	}
+	
+	// Calculate ramp ratios based on duration
+	float RampInRatio = (ActiveDuration > 0.0f) ? (TimeRampIn / ActiveDuration) : 0.0f;
+	float RampOutRatio = (ActiveDuration > 0.0f) ? (TimeRampOut / ActiveDuration) : 0.0f;
+	
+	// Clamp ratios to prevent overlap
+	float TotalRamp = RampInRatio + RampOutRatio;
+	if (TotalRamp > 1.0f)
+	{
+		RampInRatio /= TotalRamp;
+		RampOutRatio /= TotalRamp;
+	}
+	
+	// Calculate current time dilation
+	CurrentTimeDilation = CalculateTimeDilation(NormalizedTime, TargetTimeDilation, RampInRatio, RampOutRatio);
+	
+	// Apply time dilation effect
+	float EffectiveWeight = CurrentWeight * CurrentIntensity;
+	TimeDilationEffect = CurrentTimeDilation;
+	
+	// Apply visual effects if enabled
+	if (bApplyVisualEffects)
+	{
+		// Calculate visual intensity (matches time dilation curve)
+		float VisualIntensity = (1.0f - CurrentTimeDilation) / (1.0f - TargetTimeDilation);
+		VisualIntensity = FMath:: Clamp(VisualIntensity, 0.0f, 1.0f) * EffectiveWeight;
+		
+		VignetteEffect = SpecialVignette * VisualIntensity;
+		SaturationEffect = FMath::Lerp(1.0f, SpecialSaturation, VisualIntensity);
+	}
+}
+
+/**
+ * CalculateTimeDilation - Smooth time dilation with ramp in/out
+ * 
+ * Creates professional-feeling time control with smooth transitions. 
+ * 
+ * @param NormalizedTime Current time in effect (0-1)
+ * @param TargetDilation Target time dilation (e.g., 0.3 for 30% speed)
+ * @param RampInRatio Ratio of duration for ramp in (0-0.5)
+ * @param RampOutRatio Ratio of duration for ramp out (0-0.5)
+ * @return Current time dilation value (1.0 = normal, <1.0 = slow)
+ */
+float UCameraModifier_SpecialBase::CalculateTimeDilation(float NormalizedTime, float TargetDilation, float RampInRatio, float RampOutRatio) const
+{
+	float RampOutStart = 1.0f - RampOutRatio;
+	
+	if (NormalizedTime < RampInRatio && RampInRatio > 0.0f)
+	{
+		// Ramp in phase:  1. 0 -> TargetDilation
+		float RampProgress = NormalizedTime / RampInRatio;
+		float EasedProgress = FMath::InterpEaseOut(0.0f, 1.0f, RampProgress, 2.0f);
+		return FMath::Lerp(1.0f, TargetDilation, EasedProgress);
+	}
+	else if (NormalizedTime > RampOutStart && RampOutRatio > 0.0f)
+	{
+		// Ramp out phase: TargetDilation -> 1.0
+		float RampProgress = (NormalizedTime - RampOutStart) / RampOutRatio;
+		float EasedProgress = FMath::InterpEaseIn(0.0f, 1.0f, RampProgress, 2.0f);
+		return FMath:: Lerp(TargetDilation, 1.0f, EasedProgress);
+	}
+	else
+	{
+		// Hold at target
+		return TargetDilation;
+	}
+}
+
+/**
+ * ApplyRadialBlur - Apply radial blur approximation
+ * 
+ * Uses FOV and vignette to approximate radial blur effect. 
+ * 
+ * @param Intensity Blur intensity (0-1)
+ */
+void UCameraModifier_SpecialBase::ApplyRadialBlur(float Intensity)
+{
+	// Approximate radial blur with vignette and slight FOV push
+	VignetteEffect += Intensity * 0.15f;
+	FOVEffect += Intensity * 3.0f;
+}
+
+
+//========================================
+// X01: Slow Motion Implementation
+//========================================
+
+/**
+ * Constructor - Configure slow motion parameters
+ * 
+ * Slow motion provides dramatic time dilation: 
+ * - Configurable time scale
+ * - Smooth ramp in and out
+ * - Optional visual enhancements
+ * - Used for parries, dodges, critical moments
+ */
+UCameraModifier_X01_Special_SlowMotion::UCameraModifier_X01_Special_SlowMotion()
+	: SlowMotionScale(0.35f)
+	, bDesaturateDuringSlowMo(true)
+	, SlowMoDesaturation(0.15f)
+	, SlowMoFOVChange(-3.0f)
+{
+	// Configure base special settings
+	TargetTimeDilation = 0.35f;
+	TimeRampIn = 0.05f;
+	TimeRampOut = 0.25f;
+	bApplyVisualEffects = true;
+	SpecialVignette = 0.12f;
+	SpecialSaturation = 0.85f;
+}
+
+/**
+ * OnTriggered - Initialize slow motion state
+ * 
+ * Intensity can modify the slow motion scale.
+ * Higher intensity = slower time. 
+ */
+void UCameraModifier_X01_Special_SlowMotion:: OnTriggered(const FModifierTriggerData& InTriggerData)
+{
+	// Store original scale
+	float BaseScale = SlowMotionScale;
+	
+	// Modify time scale based on intensity
+	// Intensity 0.5 = 50% effect (faster), 1.0 = normal, 1.5 = 150% effect (slower)
+	float IntensityModifier = FMath::Clamp(CurrentIntensity, 0.5f, 1.5f);
+	
+	// Lower intensity = faster (closer to 1.0), higher intensity = slower
+	SlowMotionScale = FMath::Lerp(0.6f, 0.2f, (IntensityModifier - 0.5f));
+	
+	// Update base class target
+	TargetTimeDilation = SlowMotionScale;
+	
+	// Check if custom duration was provided
+	if (InTriggerData.CustomFloat > 0.0f)
+	{
+		// CustomFloat can override duration
+		// This is handled by the base class via TriggerData. Duration
+	}
+	
+	// Call parent
+	Super:: OnTriggered(InTriggerData);
+	
+	UE_LOG(LogTemp, Verbose, TEXT("X01 SlowMotion:  Triggered, Scale=%.2f, Intensity=%.2f"),
+		SlowMotionScale, CurrentIntensity);
+}
+
+/**
+ * ComputeEffect - Calculate slow motion effect each frame
+ * 
+ * Applies time dilation with optional visual enhancements. 
+ */
+void UCameraModifier_X01_Special_SlowMotion::ComputeEffect(float DeltaTime, const FStageExecutionContext& Context)
+{
+	// Call base to handle time dilation
+	Super::ComputeEffect(DeltaTime, Context);
+	
+	// Calculate effect intensity based on current time dilation
+	float EffectiveWeight = CurrentWeight * CurrentIntensity;
+	float SlowMoIntensity = (1.0f - CurrentTimeDilation) / (1.0f - SlowMotionScale);
+	SlowMoIntensity = FMath::Clamp(SlowMoIntensity, 0.0f, 1.0f);
+	
+	// Apply FOV change during slow motion
+	FOVEffect = SlowMoFOVChange * SlowMoIntensity * EffectiveWeight;
+	
+	// Apply desaturation if enabled
+	if (bDesaturateDuringSlowMo)
+	{
+		float DesatAmount = SlowMoDesaturation * SlowMoIntensity * EffectiveWeight;
+		SaturationEffect = FMath::Lerp(SaturationEffect, 1.0f - DesatAmount, 0.5f);
+	}
+	
+	// Subtle color grade during slow motion (slightly cooler)
+	float ColorGradeIntensity = SlowMoIntensity * EffectiveWeight * 0.05f;
+	ColorTintEffect = FLinearColor(
+		1.0f - ColorGradeIntensity * 0.5f,  // Slightly less red
+		1.0f,                                // Normal green
+		1.0f + ColorGradeIntensity,          // Slightly more blue
+		1.0f
+	);
+}
+
+
+//========================================
+// X02-X03: Implementations in subsequent Sub-Steps
+//========================================
+
+// X02: UCameraModifier_X02_Special_HitStop - Sub-Step 4.6.3
+// X03: UCameraModifier_X03_Special_DeathCam - Sub-Step 4.6.3
+```
+
+---
+
+【代码设计说明】
+
+### 1. SpecialBase功能
+
+```
+UCameraModifier_SpecialBase
+├── CalculateTimeDilation()  - 平滑时间膨胀曲线
+├── ApplyRadialBlur()        - 径向模糊近似
+├── OnActivated()            - 全强度激活回调
+├── OnDeactivating()         - 开始退出回调
+├── ComputeEffect()          - 基础时间和视觉效果
+└── 高优先级 + 不可中断
+```
+
+### 2. 时间膨胀曲线
+
+```
+X01 SlowMotion曲线（0.8秒，0.35时间膨胀）：
+
+时间：  0%────5%────────────75%────100%
+阶段：  │入 │     保持      │  出  │
+
+时间膨胀值：
+1.0 ─────\
+          \────────────────/
+0.35 ─────────────────────/
+
+RampIn (5%):  1.0 → 0.35 (EaseOut - 快速进入)
+Hold (70%):   0.35 保持
+RampOut (25%): 0.35 → 1.0 (EaseIn - 渐进恢复)
+```
+
+### 3. 强度影响时间膨胀
+
+```cpp
+// Intensity影响慢动作程度
+IntensityModifier = Clamp(Intensity, 0.5, 1.5)
+
+// 低强度：轻微慢动作
+Intensity = 0.5 → SlowMotionScale ≈ 0.6 (60%速度)
+
+// 标准强度：正常慢动作
+Intensity = 1.0 → SlowMotionScale ≈ 0.4 (40%速度)
+
+// 高强度：极端慢动作
+Intensity = 1.5 → SlowMotionScale ≈ 0.2 (20%速度)
+```
+
+### 4. 视觉效果层次
+
+```
+X01 SlowMotion视觉效果：
+├── Layer 1: 时间膨胀 (核心)
+├── Layer 2: FOV轻微收紧 (-3度)
+├── Layer 3: 晕影 (0.12)
+├── Layer 4: 饱和度降低 (0.85)
+└── Layer 5: 冷色调偏移 (轻微蓝调)
+
+所有效果与时间膨胀曲线同步变化
+```
+
+### 5. 与Cinematic的时间膨胀对比
+
+```
+Cinematic的TimeDilationEffect：
+├── 只是"建议"值
+├── 由游戏代码决定是否应用
+└── 通常较温和 (0.7-0.9)
+
+Special的TimeDilationEffect：
+├── 核心功能
+├── 必须被游戏代码尊重
+└── 可以非常极端 (0.01-0.5)
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] Regenerate执行
+   - [ ] 编译通过（0 errors）
+   - [ ] UTF-8 Without BOM
+
+2. **代码完整性：**
+   - [ ] SpecialBase构造函数和所有方法
+   - [ ] X01构造函数、OnTriggered、ComputeEffect
+   - [ ] 调用Super:: OnTriggered和Super::ComputeEffect
+   - [ ] 使用基类的CalculateTimeDilation方法
+
+3. **效果验证：**
+   - [ ] 时间膨胀平滑过渡
+   - [ ] 视觉效果同步变化
+   - [ ] RampIn/RampOut正确
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 4.6.2 完成报告
+================================================================================
+
+【创建的文件】
+- 文件：CameraModifier_Special. cpp
+- 路径：Source/MyProject/Private/Camera/Modifiers/
+
+【实现的内容】
+- ✅ UCameraModifier_SpecialBase
+  - 构造函数
+  - OnTriggered / OnActivated / OnDeactivating
+  - ComputeEffect
+  - CalculateTimeDilation
+  - ApplyRadialBlur
+
+- ✅ UCameraModifier_X01_Special_SlowMotion
+  - 构造函数：SlowMotionScale=0.35
+  - OnTriggered：根据强度调整时间膨胀
+  - ComputeEffect：时间膨胀 + FOV + 饱和度 + 色调
+
+【关键特性】
+- 平滑时间膨胀曲线
+- RampIn/RampOut控制
+- 强度动态影响时间膨胀
+- 同步视觉效果
+
+【编译结果】
+- Regenerate：[已执行]
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【最终状态】
+✅ SpecialBase + X01实现完成
+
+================================================================================
+```
+
+【后续步骤】
+
+4. 6.2完成后：
+- [x] ✅ 4.6.1: CameraModifier_Special.h
+- [x] ✅ 4.6.2: SpecialBase + X01实现
+- [ ] ⏳ 4.6.3: X02 + X03实现
+- [ ] ⏳ 4.6.4: 注册Special到Manager
+
+**Phase 4.6进度：2/4**
+**Phase 4整体进度：24/26 = 92%**
+
+================================================================================

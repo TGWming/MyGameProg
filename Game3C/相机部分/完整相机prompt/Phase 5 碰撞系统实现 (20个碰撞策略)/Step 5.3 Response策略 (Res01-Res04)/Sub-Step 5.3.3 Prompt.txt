@@ -1,0 +1,657 @@
+Sub-Step 5.3.3 Prompt
+
+================================================================================
+任务：在CameraCollision_Response. cpp中实现Res02 Slide和Res03 Rotate
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.  27 C++项目。
+- Res02通过沿碰撞表面滑动相机来保持距离
+- Res03通过旋转相机找到清晰的视线
+
+【当前进度】
+Phase 5 Step 5.  3 Sub-Step 5. 3. 3 (共190个Sub-Step中的第160个)
+前置完成：
+- 5.3.1: CameraCollision_Response.h ✅
+- 5.3.2: ResponseBase + Res01实现 ✅
+
+【任务目标】
+在CameraCollision_Response.cpp中替换Res02和Res03的placeholder为完整实现。
+
+【⚠️ 重要提醒】
+
+1. **本Sub-Step是更新现有文件，不创建新文件**
+   因此**不需要Regenerate**，直接编译即可。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **方法签名（与头文件一致）：**
+   - ShouldExecute: 1个参数（只有Context）
+   - Execute: 3个参数（无StateConfig）
+
+4. **使用基类方法：**
+   - InterpolateValue / InterpolateVector / InterpolateRotator
+   - IsResponseNeeded
+   - InitializeResponse
+   - LineTrace（继承自CameraCollisionBase）
+
+【具体要求】
+
+**文件路径：** `Source/MyProject/Private/Camera/Collision/CameraCollision_Response.cpp`
+
+**找到Res02和Res03的placeholder代码，替换为以下实现：**
+
+---
+
+### Res02: Slide 完整实现
+
+```cpp
+//========================================
+// Res02: Slide Implementation
+//========================================
+
+/**
+ * Constructor - Configure slide response parameters
+ * 
+ * Slide response moves camera laterally to avoid obstacles:  
+ * - Maintains distance from target
+ * - Uses collision normal to determine slide direction
+ * - Validates new position to avoid secondary collisions
+ */
+UCameraCollision_Res02_Slide::UCameraCollision_Res02_Slide()
+    : MaxSlideDistance(80.0f)
+    , SlideSpeed(200.0f)
+    , bPreferHorizontalSlide(true)
+    , bVerifySlideDestination(true)
+    , CurrentSlideOffset(FVector::ZeroVector)
+    , TargetSlideOffset(FVector::ZeroVector)
+    , SlideDirection(FVector::ZeroVector)
+{
+    Priority = 110;
+    BaseInterpSpeed = 12.0f;
+}
+
+bool UCameraCollision_Res02_Slide::ShouldExecute(const FStageExecutionContext& Context) const
+{
+    return bIsEnabled;
+}
+
+bool UCameraCollision_Res02_Slide::Execute(
+    const FStageExecutionContext& Context,
+    const FCollisionDetectionResult& DetectionResult,
+    FCollisionResponseOutput& OutResponse)
+{
+    // Check if response is needed
+    if (!IsResponseNeeded(DetectionResult))
+    {
+        // No collision - smoothly return slide to zero
+        if (! CurrentSlideOffset.IsNearlyZero(0.5f))
+        {
+            CurrentSlideOffset = InterpolateVector(
+                CurrentSlideOffset,
+                FVector::ZeroVector,
+                CachedDeltaTime,
+                BaseInterpSpeed * 0.7f  // Slower return for stability
+            );
+            
+            // Still output the returning slide
+            InitializeResponse(OutResponse);
+            OutResponse.PositionAdjustment = CurrentSlideOffset;
+            OutResponse.ActiveDuration = ResponseTime;
+            
+            bResponseActive = true;
+            SetActive(true);
+            return true;
+        }
+        
+        bResponseActive = false;
+        SetActive(false);
+        return false;
+    }
+
+    bResponseActive = true;
+    SetActive(true);
+
+    // Get collision info
+    FVector CollisionNormal = DetectionResult.CollisionNormal;
+    FVector CameraDirection = -Context. Output.Rotation. Vector();
+    
+    // Calculate slide direction (perpendicular to collision normal)
+    SlideDirection = CalculateSlideDirection(CollisionNormal, CameraDirection);
+    
+    // If prefer horizontal, flatten the slide direction
+    if (bPreferHorizontalSlide)
+    {
+        SlideDirection. Z *= 0.3f;  // Reduce vertical component
+        SlideDirection. Normalize();
+        
+        if (SlideDirection. IsNearlyZero())
+        {
+            // Fallback to pure horizontal
+            FVector RightVector = FVector::CrossProduct(FVector::  UpVector, CameraDirection). GetSafeNormal();
+            SlideDirection = RightVector;
+        }
+    }
+    
+    // Calculate target slide distance based on adjustment ratio
+    float AdjustmentNeeded = DetectionResult. DesiredDistance - DetectionResult.SafeDistance;
+    float SlideAmount = FMath::  Clamp(AdjustmentNeeded * 0.6f, 0.0f, MaxSlideDistance);
+    
+    // Determine slide direction (try to maintain consistency)
+    FVector NewTargetSlide = SlideDirection * SlideAmount;
+    
+    // If we're already sliding, prefer to continue in same direction
+    if (! CurrentSlideOffset.IsNearlyZero() && CurrentSlideOffset.  GetSafeNormal().  Dot(NewTargetSlide. GetSafeNormal()) < 0.0f)
+    {
+        // Would reverse direction - check if current direction still works
+        FVector ContinueSlide = CurrentSlideOffset. GetSafeNormal() * SlideAmount;
+        if (IsSlideValid(Context, DetectionResult, ContinueSlide))
+        {
+            NewTargetSlide = ContinueSlide;
+        }
+    }
+    
+    // Verify slide destination if enabled
+    if (bVerifySlideDestination)
+    {
+        if (!IsSlideValid(Context, DetectionResult, NewTargetSlide))
+        {
+            // Try opposite direction
+            NewTargetSlide = -NewTargetSlide;
+            
+            if (! IsSlideValid(Context, DetectionResult, NewTargetSlide))
+            {
+                // Both blocked - reduce slide amount
+                NewTargetSlide = SlideDirection * (SlideAmount * 0.3f);
+            }
+        }
+    }
+    
+    TargetSlideOffset = NewTargetSlide;
+    
+    // Calculate interpolation speed based on urgency
+    float Urgency = DetectionResult.AdjustmentRatio;
+    float EffectiveSpeed = BaseInterpSpeed * (1.0f + Urgency);
+    
+    // Interpolate current slide towards target
+    CurrentSlideOffset = InterpolateVector(
+        CurrentSlideOffset,
+        TargetSlideOffset,
+        CachedDeltaTime,
+        EffectiveSpeed
+    );
+
+    // Build response output
+    InitializeResponse(OutResponse);
+    OutResponse.PositionAdjustment = CurrentSlideOffset;
+    OutResponse.ActiveDuration = ResponseTime;
+
+    UE_LOG(LogTemp, Verbose, TEXT("Res02 Slide: Offset=(%.1f, %.1f, %.1f), target=(%.1f, %.1f, %. 1f)"),
+        CurrentSlideOffset.  X, CurrentSlideOffset.Y, CurrentSlideOffset.Z,
+        TargetSlideOffset. X, TargetSlideOffset.Y, TargetSlideOffset.Z);
+
+    return true;
+}
+
+void UCameraCollision_Res02_Slide::Update(float DeltaTime, const FStageExecutionContext& Context)
+{
+    Super::Update(DeltaTime, Context);
+}
+
+void UCameraCollision_Res02_Slide::Reset()
+{
+    Super::Reset();
+    CurrentSlideOffset = FVector::ZeroVector;
+    TargetSlideOffset = FVector::ZeroVector;
+    SlideDirection = FVector::ZeroVector;
+}
+
+/**
+ * Calculate optimal slide direction from collision
+ */
+FVector UCameraCollision_Res02_Slide::CalculateSlideDirection(
+    const FVector& CollisionNormal,
+    const FVector& CameraDirection) const
+{
+    // Project camera direction onto collision plane
+    FVector SlideDir = FVector::VectorPlaneProject(CameraDirection, CollisionNormal);
+    
+    if (SlideDir. IsNearlyZero())
+    {
+        // Camera direction is perpendicular to surface - use arbitrary direction
+        FVector Right = FVector::CrossProduct(CollisionNormal, FVector:: UpVector);
+        if (Right.IsNearlyZero())
+        {
+            Right = FVector::CrossProduct(CollisionNormal, FVector:: ForwardVector);
+        }
+        SlideDir = Right. GetSafeNormal();
+    }
+    else
+    {
+        SlideDir. Normalize();
+    }
+    
+    return SlideDir;
+}
+
+/**
+ * Verify that slide position doesn't cause new collision
+ */
+bool UCameraCollision_Res02_Slide::IsSlideValid(
+    const FStageExecutionContext& Context,
+    const FCollisionDetectionResult& DetectionResult,
+    const FVector& SlideOffset) const
+{
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        return true;  // Assume valid if can't check
+    }
+    
+    FVector FocusPoint = Context.Output.FocusPoint;
+    FVector TestPosition = DetectionResult.SafeLocation + SlideOffset;
+    
+    FCollisionQueryParams Params = GetDefaultTraceParams();
+    
+    FHitResult Hit;
+    bool bBlocked = World->LineTraceSingleByChannel(
+        Hit,
+        FocusPoint,
+        TestPosition,
+        TraceChannel,
+        Params
+    );
+    
+    return !bBlocked;
+}
+```
+
+---
+
+### Res03: Rotate 完整实现
+
+```cpp
+//========================================
+// Res03: Rotate Implementation
+//========================================
+
+/**
+ * Constructor - Configure rotation response parameters
+ * 
+ * Rotate response adjusts camera angle to find clear view: 
+ * - Tests multiple angles to find best rotation
+ * - Prefers yaw over pitch for natural feel
+ * - Limited rotation to prevent disorientation
+ */
+UCameraCollision_Res03_Rotate::UCameraCollision_Res03_Rotate()
+    : MaxRotationAngle(20.0f)
+    , RotationSpeed(90.0f)
+    , NumTestAngles(8)
+    , bPreferYawRotation(true)
+    , MaxPitchAdjustment(10.0f)
+    , CurrentRotationAdjustment(FRotator::ZeroRotator)
+    , TargetRotationAdjustment(FRotator::ZeroRotator)
+    , BestFoundRotation(FRotator::ZeroRotator)
+{
+    Priority = 105;
+    BaseInterpSpeed = 8.0f;  // Slower for rotation to feel natural
+}
+
+bool UCameraCollision_Res03_Rotate::ShouldExecute(const FStageExecutionContext& Context) const
+{
+    return bIsEnabled;
+}
+
+bool UCameraCollision_Res03_Rotate::Execute(
+    const FStageExecutionContext& Context,
+    const FCollisionDetectionResult& DetectionResult,
+    FCollisionResponseOutput& OutResponse)
+{
+    // Check if response is needed
+    if (!IsResponseNeeded(DetectionResult))
+    {
+        // No collision - smoothly return rotation to zero
+        if (!CurrentRotationAdjustment.IsNearlyZero(0.5f))
+        {
+            CurrentRotationAdjustment = InterpolateRotator(
+                CurrentRotationAdjustment,
+                FRotator::ZeroRotator,
+                CachedDeltaTime,
+                BaseInterpSpeed * 0.5f  // Slow return to avoid snap
+            );
+            
+            // Still output the returning rotation
+            InitializeResponse(OutResponse);
+            OutResponse.RotationAdjustment = CurrentRotationAdjustment;
+            OutResponse.ActiveDuration = ResponseTime;
+            
+            bResponseActive = true;
+            SetActive(true);
+            return true;
+        }
+        
+        bResponseActive = false;
+        SetActive(false);
+        return false;
+    }
+
+    bResponseActive = true;
+    SetActive(true);
+
+    // Find best rotation to avoid collision
+    BestFoundRotation = FindBestRotation(Context, DetectionResult);
+    
+    // If no good rotation found, don't apply rotation response
+    if (BestFoundRotation. IsNearlyZero())
+    {
+        // Still interpolate current rotation back towards zero
+        TargetRotationAdjustment = FRotator::ZeroRotator;
+    }
+    else
+    {
+        TargetRotationAdjustment = BestFoundRotation;
+    }
+    
+    // Calculate interpolation speed based on urgency
+    float Urgency = DetectionResult.AdjustmentRatio;
+    float EffectiveSpeed = BaseInterpSpeed * (1.0f + Urgency * 0.5f);
+    
+    // Interpolate current rotation towards target
+    CurrentRotationAdjustment = InterpolateRotator(
+        CurrentRotationAdjustment,
+        TargetRotationAdjustment,
+        CachedDeltaTime,
+        EffectiveSpeed
+    );
+
+    // Build response output
+    InitializeResponse(OutResponse);
+    OutResponse.RotationAdjustment = CurrentRotationAdjustment;
+    OutResponse.ActiveDuration = ResponseTime;
+
+    UE_LOG(LogTemp, Verbose, TEXT("Res03 Rotate: Adjustment=(P: %.1f, Y:%.1f, R:%.1f)"),
+        CurrentRotationAdjustment. Pitch,
+        CurrentRotationAdjustment. Yaw,
+        CurrentRotationAdjustment.Roll);
+
+    return true;
+}
+
+void UCameraCollision_Res03_Rotate::Update(float DeltaTime, const FStageExecutionContext& Context)
+{
+    Super:: Update(DeltaTime, Context);
+}
+
+void UCameraCollision_Res03_Rotate:: Reset()
+{
+    Super::Reset();
+    CurrentRotationAdjustment = FRotator::ZeroRotator;
+    TargetRotationAdjustment = FRotator:: ZeroRotator;
+    BestFoundRotation = FRotator::ZeroRotator;
+}
+
+FRotator UCameraCollision_Res03_Rotate::FindBestRotation(
+    const FStageExecutionContext& Context,
+    const FCollisionDetectionResult& DetectionResult)
+{
+    FRotator BestRotation = FRotator::ZeroRotator;
+    float BestScore = 0.0f;
+    
+    // Test angles in both directions
+    for (int32 i = 1; i <= NumTestAngles; ++i)
+    {
+        float Fraction = static_cast<float>(i) / static_cast<float>(NumTestAngles);
+        float TestAngle = MaxRotationAngle * Fraction;
+        
+        // Test positive and negative yaw
+        TArray<FRotator> TestRotations;
+        
+        if (bPreferYawRotation)
+        {
+            // Primarily yaw, with optional pitch
+            TestRotations. Add(FRotator(0. 0f, TestAngle, 0.0f));
+            TestRotations.Add(FRotator(0.0f, -TestAngle, 0.0f));
+            
+            // Also test pitch at smaller angles
+            float PitchAngle = FMath::Min(TestAngle, MaxPitchAdjustment);
+            TestRotations.Add(FRotator(PitchAngle, 0.0f, 0.0f));
+            TestRotations.Add(FRotator(-PitchAngle, 0.0f, 0.0f));
+            
+            // Combined
+            TestRotations. Add(FRotator(PitchAngle * 0.5f, TestAngle * 0.7f, 0.0f));
+            TestRotations.Add(FRotator(PitchAngle * 0.5f, -TestAngle * 0.7f, 0.0f));
+        }
+        else
+        {
+            // Equal yaw and pitch testing
+            TestRotations.Add(FRotator(0.0f, TestAngle, 0.0f));
+            TestRotations.Add(FRotator(0.0f, -TestAngle, 0.0f));
+            TestRotations.Add(FRotator(TestAngle, 0.0f, 0.0f));
+            TestRotations.Add(FRotator(-TestAngle, 0.0f, 0.0f));
+        }
+        
+        for (const FRotator& TestRot : TestRotations)
+        {
+            if (TestRotation(Context, TestRot))
+            {
+                // Score based on smaller rotation being better
+                float RotationMagnitude = FMath::Abs(TestRot. Yaw) + FMath:: Abs(TestRot.Pitch) * 1.5f;
+                float Score = MaxRotationAngle * 2.0f - RotationMagnitude;
+                
+                if (Score > BestScore)
+                {
+                    BestScore = Score;
+                    BestRotation = TestRot;
+                }
+            }
+        }
+        
+        // If found a good rotation at this angle, use it (prefer smaller angles)
+        if (BestScore > 0.0f)
+        {
+            break;
+        }
+    }
+    
+    return BestRotation;
+}
+
+bool UCameraCollision_Res03_Rotate::TestRotation(
+    const FStageExecutionContext& Context,
+    const FRotator& TestRotation) const
+{
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        return true;  // Assume valid if can't check
+    }
+    
+    // Apply test rotation to camera direction
+    FRotator AdjustedRotation = Context.Output.  Rotation + TestRotation;
+    FVector AdjustedDirection = -AdjustedRotation.Vector();
+    
+    // Calculate test camera position
+    FVector FocusPoint = Context.Output.FocusPoint;
+    FVector TestPosition = FocusPoint + AdjustedDirection * Context.Output.Distance;
+    
+    // Trace to check if path is clear
+    FCollisionQueryParams Params = GetDefaultTraceParams();
+    
+    FHitResult Hit;
+    bool bBlocked = World->LineTraceSingleByChannel(
+        Hit,
+        FocusPoint,
+        TestPosition,
+        TraceChannel,
+        Params
+    );
+    
+    // Clear if no hit, or hit is far enough
+    if (!bBlocked)
+    {
+        return true;
+    }
+    
+    // Consider it valid if we can get at least 80% of desired distance
+    return Hit.Distance >= Context.Output.  Distance * 0.8f;
+}
+```
+
+---
+
+### 需要在Res02_Slide类中添加的辅助方法声明
+
+**在 CameraCollision_Response. h 的 Res02_Slide 类中添加：**
+
+```cpp
+protected:
+    // ...  existing members ...
+    
+    /**
+     * Calculate optimal slide direction from collision normal
+     * @param CollisionNormal Normal of collision surface
+     * @param CameraDirection Current camera direction
+     * @return Slide direction vector
+     */
+    FVector CalculateSlideDirection(
+        const FVector& CollisionNormal,
+        const FVector& CameraDirection
+    ) const;
+    
+    /**
+     * Verify that slide position doesn't cause new collision
+     * @param Context Execution context
+     * @param DetectionResult Detection results
+     * @param SlideOffset Proposed slide offset
+     * @return True if slide position is valid
+     */
+    bool IsSlideValid(
+        const FStageExecutionContext& Context,
+        const FCollisionDetectionResult& DetectionResult,
+        const FVector& SlideOffset
+    ) const;
+```
+
+---
+
+【代码设计说明】
+
+### 1. Res02 Slide 特性
+
+```
+滑动方向计算：
+├── 投影相机方向到碰撞平面
+├── 如果偏好水平滑动，减少Z分量
+└── 如果方向无效，使用垂直于法线的方向
+
+滑动验证：
+├── 检查新位置是否会产生新碰撞
+├── 如果双向都阻塞，减少滑动量
+└── 保持滑动方向的一致性
+
+平滑恢复：
+├── 碰撞结束后以较慢速度（0.7x）返回
+└── 避免相机突然跳回
+```
+
+### 2. Res03 Rotate 特性
+
+```
+旋转搜索算法：
+├── 从小角度开始测试
+├── 同时测试正负方向
+├── 偏好Yaw旋转（更自然）
+├── Pitch旋转限制在MaxPitchAdjustment内
+└── 找到第一个有效角度后停止（最小旋转）
+
+旋转评分：
+├── 较小的旋转得分更高
+├── Pitch权重更高（因为更不自然）
+└── 选择得分最高的旋转
+
+验证条件：
+├── 完全无碰撞：有效
+└── 能达到80%距离：也有效
+```
+
+### 3. Slide vs Rotate 对比
+
+| 特性 | Res02 Slide | Res03 Rotate |
+|------|-------------|--------------|
+| 调整类型 | 位置偏移 | 旋转角度 |
+| 优先级 | 110 | 105 |
+| 插值速度 | 12. 0 | 8.0（更慢） |
+| 恢复速度 | 0.7x | 0.5x |
+| 验证方式 | 射线检测新位置 | 多角度测试 |
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过（0 errors）
+   - [ ] 无链接错误
+
+2. **代码完整性：**
+   - [ ] Res02 Slide完整实现
+   - [ ] Res02辅助方法（CalculateSlideDirection, IsSlideValid）
+   - [ ] Res03 Rotate完整实现
+   - [ ] Res03辅助方法（FindBestRotation, TestRotation）
+
+3. **头文件更新：**
+   - [ ] Res02_Slide类添加两个辅助方法声明
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 5.3. 3 完成报告
+================================================================================
+
+【更新的文件】
+1. CameraCollision_Response.cpp
+   - 替换Res02 placeholder为完整实现
+   - 替换Res03 placeholder为完整实现
+
+2. CameraCollision_Response.h（可选）
+   - 在Res02_Slide类中添加辅助方法声明
+
+【实现的内容】
+
+Res02 Slide：
+- ✅ Execute() - 完整滑动实现
+- ✅ CalculateSlideDirection() - 计算滑动方向
+- ✅ IsSlideValid() - 验证滑动位置
+- ✅ 平滑恢复机制
+- ✅ 方向一致性保持
+
+Res03 Rotate：
+- ✅ Execute() - 完整旋转实现
+- ✅ FindBestRotation() - 搜索最佳旋转
+- ✅ TestRotation() - 测试旋转有效性
+- ✅ 平滑恢复机制
+- ✅ Yaw优先策略
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【最终状态】
+✅ Res02 + Res03实现完成
+⏳ Res04待实现
+
+================================================================================
+```
+
+【后续步骤】
+
+5. 3.3完成后：
+- [x] ✅ 5.3.1:  CameraCollision_Response.h
+- [x] ✅ 5.3.2: ResponseBase + Res01
+- [x] ✅ 5.3.3: Res02 + Res03（当前）
+- [ ] ⏳ 5.3.4: Res04实现 + 注册
+
+**Phase 5. 3进度：3/4**
+
+================================================================================

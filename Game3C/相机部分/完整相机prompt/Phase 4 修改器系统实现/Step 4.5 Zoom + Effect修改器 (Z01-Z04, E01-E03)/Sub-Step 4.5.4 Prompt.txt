@@ -1,0 +1,380 @@
+Sub-Step 4.5.4 Prompt
+
+================================================================================
+任务：在CameraModifier_Zoom. cpp中添加Z04 CriticalHit实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Z04是暴击/弱点命中时的戏剧性变焦，强调关键伤害时刻。
+
+【⚠️ 说明】
+原始PROMPT 4.5.4是Z03 SkillZoom，但Z03已在Sub-Step 4.5.3中与Z02一起实现。
+因此本Sub-Step改为实现Z04 CriticalHit。
+
+【当前进度】
+Phase 4 Step 4.5 Sub-Step 4.5.4 (共190个Sub-Step中的第137个)
+前置完成：4.5.3 Z02 + Z03实现 ✅
+
+【任务目标】
+在CameraModifier_Zoom.cpp中添加Z04 CriticalHit实现。
+
+【⚠️ 重要提醒】
+
+1. **本Sub-Step是更新现有文件，不创建新文件**
+   因此**不需要Regenerate**，直接编译即可。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **类名必须与头文件一致：**
+   `UCameraModifier_Z04_Zoom_CriticalHit`
+
+4. **在Z03实现之后添加代码**
+
+【具体要求】
+
+**在CameraModifier_Zoom.cpp的Z03实现之后添加：**
+
+```cpp
+//========================================
+// Z04: Critical Hit Zoom Implementation
+//========================================
+
+/**
+ * Constructor - Configure critical hit zoom parameters
+ * 
+ * Critical hit creates the most dramatic zoom effect: 
+ * - Significant FOV tightening for focus
+ * - Strong distance pull for impact
+ * - Heavy vignette for dramatic framing
+ * - Optional time dilation for emphasis
+ * - Cannot be interrupted (critical moment completes)
+ */
+UCameraModifier_Z04_Zoom_CriticalHit::UCameraModifier_Z04_Zoom_CriticalHit()
+	: CriticalFOVChange(-10.0f)
+	, CriticalDistancePull(-40.0f)
+	, CriticalVignetteIntensity(0.18f)
+	, CriticalTimeDilation(0.65f)
+	, CriticalSaturation(0.85f)
+{
+	// Configure base zoom settings
+	BaseFOVChange = -10.0f;
+	BaseDistanceChange = -40.0f;
+	bApplyVignette = true;
+	ZoomVignetteIntensity = 0.18f;
+	FOVInterpSpeed = 18.0f;  // Fast but not instant
+}
+
+/**
+ * OnTriggered - Initialize critical hit state
+ * 
+ * Critical hits are special moments that deserve emphasis. 
+ * Effect scales with damage multiplier passed as intensity.
+ */
+void UCameraModifier_Z04_Zoom_CriticalHit::OnTriggered(const FModifierTriggerData& InTriggerData)
+{
+	// Call parent
+	Super::OnTriggered(InTriggerData);
+	
+	// Scale based on critical damage multiplier
+	// Intensity 1.0 = normal crit, 1.5 = super crit, 2.0 = ultra crit
+	float CritScale = FMath::Clamp(CurrentIntensity, 0.8f, 2.0f);
+	
+	// Apply scaling to critical effects
+	CriticalFOVChange = -10.0f * CritScale;
+	CriticalDistancePull = -40.0f * CritScale;
+	CriticalVignetteIntensity = 0.18f * FMath::Min(CritScale, 1.5f);  // Cap vignette
+	
+	// Stronger crits get more time dilation
+	if (CritScale >= 1.5f)
+	{
+		CriticalTimeDilation = 0.5f;  // 50% speed for super crits
+	}
+	else
+	{
+		CriticalTimeDilation = 0.65f;  // 65% speed for normal crits
+	}
+	
+	UE_LOG(LogTemp, Verbose, TEXT("Z04 CriticalHit:  Triggered, CritScale=%.2f, FOV=%.1f, TimeDilation=%.2f"),
+		CritScale, CriticalFOVChange, CriticalTimeDilation);
+}
+
+/**
+ * ComputeEffect - Calculate critical hit dramatic zoom each frame
+ * 
+ * Uses a punchy curve with hold:  quick in, brief hold, medium out. 
+ * This is the most dramatic of all zoom effects. 
+ */
+void UCameraModifier_Z04_Zoom_CriticalHit::ComputeEffect(float DeltaTime, const FStageExecutionContext& Context)
+{
+	// Calculate normalized time (0-1 over duration)
+	float NormalizedTime = 0.0f;
+	if (ActiveDuration > 0.0f)
+	{
+		NormalizedTime = FMath::Clamp(TotalActiveTime / ActiveDuration, 0.0f, 1.0f);
+	}
+	
+	// Critical hit curve:  fast in, brief hold, gradual out
+	// More dramatic than regular attack impact
+	float CritCurve;
+	if (NormalizedTime < 0.08f)
+	{
+		// Very fast zoom in (0-8%)
+		CritCurve = FMath::InterpEaseOut(0.0f, 1.0f, NormalizedTime / 0.08f, 3.0f);
+	}
+	else if (NormalizedTime < 0.25f)
+	{
+		// Hold at peak (8-25%)
+		CritCurve = 1.0f;
+	}
+	else if (NormalizedTime < 0.40f)
+	{
+		// Slight release from peak (25-40%)
+		float ReleaseProgress = (NormalizedTime - 0.25f) / 0.15f;
+		CritCurve = FMath:: Lerp(1.0f, 0.85f, ReleaseProgress);
+	}
+	else
+	{
+		// Gradual return to normal (40-100%)
+		float ReturnProgress = (NormalizedTime - 0.40f) / 0.60f;
+		CritCurve = FMath::InterpEaseIn(0.85f, 0.0f, ReturnProgress, 2.0f);
+	}
+	
+	// Calculate FOV change (negative = tighten)
+	TargetFOVChange = CriticalFOVChange * CritCurve;
+	
+	// Calculate distance pull (negative = closer)
+	CurrentDistanceChange = CriticalDistancePull * CritCurve;
+	
+	// Call base to apply interpolation and weight
+	Super::ComputeEffect(DeltaTime, Context);
+	
+	// Override vignette with critical-specific intensity
+	float VignetteCurve = CritCurve;
+	// Extra vignette punch at peak
+	if (NormalizedTime > 0.05f && NormalizedTime < 0.30f)
+	{
+		float PeakProgress = (NormalizedTime - 0.05f) / 0.25f;
+		float PeakBoost = FMath::Sin(PeakProgress * PI) * 0.08f;
+		VignetteCurve = FMath:: Min(1.0f, CritCurve + PeakBoost);
+	}
+	VignetteEffect = CriticalVignetteIntensity * VignetteCurve * CurrentWeight * CurrentIntensity;
+	
+	// Time dilation:  slow during impact, return to normal
+	if (NormalizedTime < 0.05f)
+	{
+		// Instant slow-mo
+		TimeDilationEffect = CriticalTimeDilation;
+	}
+	else if (NormalizedTime < 0.25f)
+	{
+		// Hold slow-mo during peak
+		TimeDilationEffect = CriticalTimeDilation;
+	}
+	else if (NormalizedTime < 0.40f)
+	{
+		// Gradual return to normal
+		float ReturnProgress = (NormalizedTime - 0.25f) / 0.15f;
+		TimeDilationEffect = FMath::Lerp(CriticalTimeDilation, 1.0f, FMath::InterpEaseIn(0.0f, 1.0f, ReturnProgress, 2.0f));
+	}
+	else
+	{
+		TimeDilationEffect = 1.0f;
+	}
+	
+	// Saturation reduction for dramatic effect during peak
+	if (NormalizedTime < 0.30f)
+	{
+		float SatProgress = NormalizedTime / 0.30f;
+		float SatCurve = FMath::Sin(SatProgress * PI);
+		SaturationEffect = FMath::Lerp(1.0f, CriticalSaturation, SatCurve);
+	}
+	else if (NormalizedTime < 0.50f)
+	{
+		// Gradual return
+		float ReturnProgress = (NormalizedTime - 0.30f) / 0.20f;
+		SaturationEffect = FMath::Lerp(CriticalSaturation, 1.0f, ReturnProgress);
+	}
+	else
+	{
+		SaturationEffect = 1.0f;
+	}
+	
+	// Slight chromatic aberration hint during peak (using color tint as approximation)
+	if (NormalizedTime > 0.03f && NormalizedTime < 0.20f)
+	{
+		float AberrationProgress = (NormalizedTime - 0.03f) / 0.17f;
+		float AberrationCurve = FMath::Sin(AberrationProgress * PI);
+		// Subtle red/blue shift
+		float Shift = AberrationCurve * 0.02f * CurrentWeight * CurrentIntensity;
+		ColorTintEffect = FLinearColor(1.0f + Shift, 1.0f, 1.0f - Shift * 0.5f, 1.0f);
+	}
+	else
+	{
+		ColorTintEffect = FLinearColor:: White;
+	}
+}
+```
+
+---
+
+【代码设计说明】
+
+### 1. Z04 Critical Hit特点
+
+```
+触发场景：
+├── 暴击命中
+├── 弱点攻击命中
+├── 背刺/处决前置
+├── Boss弱点打击
+└── 超高伤害命中
+
+效果特点：
+├── 持续时间：0.4秒
+├── FOV收紧：-10度（可缩放至-20度）
+├── 距离拉近：-40cm（可缩放至-80cm）
+├── 强晕影：0.18
+├── 时间膨胀：0.65（超级暴击0.5）
+├── 饱和度降低：0.85
+├── 色差效果（近似）
+└── 不可中断
+```
+
+### 2. 曲线设计
+
+```
+Z04 Critical曲线（0. 4秒）：
+0%──8%──25%──40%─────────100%
+│快│保持│轻放│  缓慢恢复  │
+  _____
+ /     \__
+/          \____
+
+时间分配：
+├── 0-8%：极快达到峰值
+├── 8-25%：保持峰值（戏剧性停顿）
+├── 25-40%：轻微释放
+└── 40-100%：渐进恢复
+```
+
+### 3. 与其他Zoom对比
+
+| 特性 | Z01攻击 | Z02蓄力 | Z03技能 | Z04暴击 |
+|------|---------|---------|---------|---------|
+| 持续 | 0.15s | 0.25s | 0.6s | 0.4s |
+| FOV | -5度 | +8度 | ±6度 | **-10度** |
+| 距离 | -15cm | +25cm | ±20cm | **-40cm** |
+| 晕影 | 无 | 无 | 0.12 | **0.18** |
+| 时间膨胀 | 无 | 短暂0.7 | 短暂0.85 | **持续0.65** |
+| 可中断 | 是 | 是 | 是 | **否** |
+| 优先级 | 150 | 155 | 158 | **165** |
+
+### 4. 缩放机制
+
+```cpp
+// CritScale从Intensity获取
+CritScale = Clamp(Intensity, 0.8, 2.0)
+
+// 普通暴击：CritScale = 1.0
+FOV = -10度, TimeDilation = 0.65
+
+// 超级暴击：CritScale = 1.5
+FOV = -15度, TimeDilation = 0.5
+
+// 终极暴击：CritScale = 2.0
+FOV = -20度, TimeDilation = 0.5
+```
+
+### 5. 多层效果叠加
+
+```
+Z04同时应用多个效果层：
+├── Layer 1: FOV收紧 (核心效果)
+├── Layer 2: 距离拉近 (空间感)
+├── Layer 3: 晕影加深 (聚焦)
+├── Layer 4: 时间膨胀 (戏剧性)
+├── Layer 5: 饱和度降低 (风格化)
+└── Layer 6: 色差暗示 (冲击感)
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过（0 errors）
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] Z04构造函数初始化所有成员
+   - [ ] OnTriggered根据强度缩放
+   - [ ] ComputeEffect实现多层效果
+   - [ ] 调用Super::OnTriggered和Super::ComputeEffect
+
+3. **效果验证：**
+   - [ ] 强烈FOV收紧
+   - [ ] 持续时间膨胀
+   - [ ] 晕影和饱和度变化
+   - [ ] 色差近似效果
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 4.5.4 完成报告
+================================================================================
+
+【更新的文件】
+- 文件：CameraModifier_Zoom.cpp
+- 添加位置：Z03实现之后
+
+【实现的修改器】
+- ✅ UCameraModifier_Z04_Zoom_CriticalHit
+  - 构造函数：CriticalFOV=-10, DistancePull=-40
+  - OnTriggered：根据暴击强度缩放
+  - ComputeEffect：多层效果（FOV+距离+晕影+时间膨胀+饱和度+色差）
+
+【关键特性】
+- 最戏剧性的Zoom效果
+- 多层视觉效果叠加
+- 持续时间膨胀
+- 不可中断
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【最终状态】
+✅ Z04实现完成
+✅ 全部4个Zoom修改器实现完成
+
+================================================================================
+```
+
+【Phase 4.5 Zoom进度】
+
+```
+Zoom修改器完成情况：
+├── Z01 AttackImpact     ✅ 完成
+├── Z02 ChargeRelease    ✅ 完成
+├── Z03 SkillActivate    ✅ 完成
+└── Z04 CriticalHit      ✅ 完成 ← 当前
+```
+
+【后续步骤】
+
+4. 5.4完成后：
+- [x] ✅ 4. 5.1:  CameraModifier_Zoom. h
+- [x] ✅ 4.5.2: ZoomBase + Z01实现
+- [x] ✅ 4.5.3: Z02 + Z03实现
+- [x] ✅ 4.5.4: Z04实现
+- [ ] ⏳ 4.5.5: CameraModifier_Effect. h
+- [ ] ⏳ 4.5.6: EffectBase + E01-E03实现
+- [ ] ⏳ 4.5.7: 注册Zoom + Effect
+
+**Phase 4.5进度：4/7 (Zoom完成，Effect待开发)**
+
+================================================================================

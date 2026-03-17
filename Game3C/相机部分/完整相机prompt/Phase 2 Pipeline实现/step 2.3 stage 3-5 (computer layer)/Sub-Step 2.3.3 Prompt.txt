@@ -1,0 +1,372 @@
+================================================================================
+任务：创建CameraStage_ModifierApply.h - Stage 4类声明
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Stage 4负责应用所有激活的相机修改器（可跳过）。
+
+【当前进度】
+Phase 2 Step 2.3 Sub-Step 2.3.3 (共190个Sub-Step中的第45个)
+**实现8个Stage中的第四个（第一个可跳过的Stage）**
+
+前置完成：
+- Phase 1 全部完成 ✅
+- Sub-Step 2.1. 1-2.1.3:  Pipeline骨架 ✅
+- Sub-Step 2.2.1-2.2.4: Stage 1-2 ✅
+- Sub-Step 2.3.1-2.3.2: Stage 3 (ModuleCompute) ✅
+
+【任务目标】
+创建文件：Source/[ProjectName]/Camera/Pipeline/CameraStage_ModifierApply. h
+定义Stage 4类（**骨架实现，修改器系统在Phase 4完成**）。
+
+【Stage 4概述】
+- **名称**：Modifier Apply（修改器应用）
+- **层级**：COMPUTE LAYER（计算层）
+- **索引**：4
+- **必需**：否
+- **可跳过**：是（当无激活修改器时）
+- **职责**：更新修改器生命周期，应用26个修改器效果
+
+【26个修改器分类】
+- Shake Modifiers (S01-S05): 相机震动效果
+- Reaction Modifiers (R01-R06): 战斗反馈反应
+- Cinematic Modifiers (C01-C05): 过场相机覆盖
+- Zoom Modifiers (Z01-Z04): FOV/距离脉冲
+- Effect Modifiers (E01-E03): 后处理效果
+- Special Modifiers (X01-X03): 慢动作、顿帧、死亡相机
+
+【具体要求】
+
+1. 文件路径：Source/[ProjectName]/Camera/Pipeline/CameraStage_ModifierApply. h
+
+2. 完整文件内容：
+
+```cpp
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "UObject/NoExportTypes.h"
+#include "ICameraStage.h"
+#include "Camera/Data/CameraStateEnums.h"
+#include "CameraStage_ModifierApply.generated. h"
+
+// Forward declarations
+class UCameraModifierManager;
+class UCameraModifierBase;
+
+/**
+ * UCameraStage_ModifierApply - Stage 4: Modifier Apply
+ * 阶段4：修改器应用
+ * 
+ * Fourth stage in the pipeline.  Applies active camera modifiers:
+ * Pipeline第四阶段，应用激活的相机修改器：
+ * 
+ * - Shake modifiers (S01-S05): Camera shake effects 相机震动效果
+ * - Reaction modifiers (R01-R06): Combat feedback reactions 战斗反馈反应
+ * - Cinematic modifiers (C01-C05): Cutscene camera overrides 过场相机覆盖
+ * - Zoom modifiers (Z01-Z04): FOV/distance pulses FOV/距离脉冲
+ * - Effect modifiers (E01-E03): Post-process effects 后处理效果
+ * - Special modifiers (X01-X03): Slow-mo, hit-stop, death cam 慢动作、顿帧、死亡相机
+ * 
+ * Each modifier produces FModifierOutput which is collected for application. 
+ * 每个修改器产生FModifierOutput，收集后应用到输出。
+ * 
+ * Layer: COMPUTE (计算层)
+ * Required: No (非必需)
+ * Skippable: Yes (可跳过 - 当无激活修改器时)
+ * 
+ * Note: This is a skeleton implementation. Full modifier system will be implemented in Phase 4.
+ * 注意：这是骨架实现，完整修改器系统将在Phase 4实现。
+ */
+UCLASS(BlueprintType)
+class MYPROJECT_API UCameraStage_ModifierApply : public UObject, public ICameraStage
+{
+    GENERATED_BODY()
+
+public:
+    /** Constructor */
+    UCameraStage_ModifierApply();
+
+    //========================================
+    // ICameraStage Interface 接口实现
+    //========================================
+
+    /** Get stage index (4 for ModifierApply) */
+    virtual int32 GetStageIndex() const override { return 4; }
+    
+    /** Get stage name for debugging */
+    virtual FName GetStageName() const override { return FName(TEXT("ModifierApply")); }
+    
+    /** This stage CAN be skipped (first skippable stage) */
+    virtual bool CanBeSkipped() const override { return true; }
+    
+    /** Check if this stage should execute (skip if no active modifiers) */
+    virtual bool ShouldExecute(const FStageExecutionContext& Context) const override;
+    
+    /** Execute the modifier apply stage */
+    virtual EStageResult Execute(FStageExecutionContext& Context) override;
+
+    /** Pre-execute hook for debugging */
+    virtual void OnPreExecute(const FStageExecutionContext& Context) override;
+
+    /** Post-execute hook for debugging */
+    virtual void OnPostExecute(const FStageExecutionContext& Context, EStageResult Result) override;
+
+    //========================================
+    // Modifier Manager Reference 修改器管理器引用
+    //========================================
+
+    /** 
+     * Set reference to modifier manager
+     * @param InManager Modifier manager instance
+     */
+    void SetModifierManager(UCameraModifierManager* InManager);
+
+    /**
+     * Get the modifier manager reference
+     * @return Modifier manager instance, or nullptr if not set
+     */
+    FORCEINLINE UCameraModifierManager* GetModifierManager() const { return ModifierManager; }
+
+    /** 
+     * Check if any modifiers are currently active
+     * @return True if at least one modifier is active
+     */
+    bool HasActiveModifiers() const;
+
+    /**
+     * Get count of active modifiers
+     * @return Number of active modifiers
+     */
+    int32 GetActiveModifierCount() const;
+
+protected:
+    //========================================
+    // Modifier Lifecycle 修改器生命周期
+    //========================================
+
+    /** 
+     * Update all modifier lifecycles (blend in/out, duration)
+     * 更新所有修改器生命周期
+     */
+    void UpdateModifierLifecycles(FStageExecutionContext& Context);
+
+    /**
+     * Update a single modifier's lifecycle
+     * 更新单个修改器的生命周期
+     */
+    void UpdateSingleModifierLifecycle(UCameraModifierBase* Modifier, float DeltaTime);
+
+    //========================================
+    // Modifier Execution 修改器执行
+    //========================================
+
+    /** 
+     * Apply all active modifier effects and collect outputs
+     * 应用所有激活修改器的效果并收集输出
+     */
+    void ApplyModifierEffects(FStageExecutionContext& Context);
+
+    /**
+     * Execute a single modifier and get its output
+     * 执行单个修改器并获取输出
+     * @param Context Execution context
+     * @param Modifier Modifier to execute
+     * @return True if modifier produced valid output
+     */
+    bool ExecuteSingleModifier(FStageExecutionContext& Context, UCameraModifierBase* Modifier);
+
+    //========================================
+    // Placeholder Methods (Phase 4) 占位方法
+    //========================================
+
+    /**
+     * Placeholder:  Apply shake modifier effects
+     * 占位：应用震动修改器效果
+     */
+    void ApplyShakeModifiers(FStageExecutionContext& Context);
+
+    /**
+     * Placeholder:  Apply reaction modifier effects
+     * 占位：应用反应修改器效果
+     */
+    void ApplyReactionModifiers(FStageExecutionContext& Context);
+
+    /**
+     * Placeholder: Apply cinematic modifier effects
+     * 占位：应用过场修改器效果
+     */
+    void ApplyCinematicModifiers(FStageExecutionContext& Context);
+
+    /**
+     * Placeholder:  Apply zoom modifier effects
+     * 占位：应用缩放修改器效果
+     */
+    void ApplyZoomModifiers(FStageExecutionContext& Context);
+
+    /**
+     * Placeholder: Apply effect modifiers (post-process)
+     * 占位：应用效果修改器（后处理）
+     */
+    void ApplyEffectModifiers(FStageExecutionContext& Context);
+
+    /**
+     * Placeholder:  Apply special modifiers (slow-mo, hit-stop, death cam)
+     * 占位：应用特殊修改器（慢动作、顿帧、死亡相机）
+     */
+    void ApplySpecialModifiers(FStageExecutionContext& Context);
+
+private:
+    //========================================
+    // Modifier Manager 修改器管理器
+    //========================================
+
+    /** Reference to modifier manager (will be set in Phase 4) */
+    UPROPERTY()
+    UCameraModifierManager* ModifierManager;
+
+    //========================================
+    // Execution Statistics 执行统计
+    //========================================
+
+    /** Number of modifiers updated this frame */
+    int32 ModifiersUpdatedCount;
+
+    /** Number of modifiers that produced output this frame */
+    int32 ModifiersAppliedCount;
+
+    /** Total modifier execution time (ms) for profiling */
+    float TotalModifierTimeMs;
+
+    //========================================
+    // Placeholder State 占位状态
+    //========================================
+
+    /** Placeholder:  Simulated active modifier count (for testing) */
+    int32 PlaceholderActiveModifierCount;
+};
+```
+
+3. 代码风格：
+   - 继承UObject和ICameraStage
+   - **CanBeSkipped()返回true** - 这是第一个可跳过的Stage
+   - **实现ShouldExecute()** - 检查是否有激活修改器
+   - 骨架实现，ModifierManager将在Phase 4创建
+   - 预留6个分类修改器执行方法（占位）
+   - 添加执行统计变量
+   - 中英文双语注释
+   - MYPROJECT_API宏
+
+【验证标准】
+- 编译通过（需要配合. cpp）
+- 类可在蓝图中看到
+- CanBeSkipped()返回true
+
+【注意事项】
+- 依赖ICameraStage. h和CameraStateEnums.h
+- 前向声明UCameraModifierManager和UCameraModifierBase
+- **这是骨架实现，完整修改器系统在Phase 4实现**
+- **这是第一个可跳过的Stage（CanBeSkipped = true）**
+- 下一个Sub-Step创建. cpp实现
+- 确保MYPROJECT_API替换为你的项目名称（大写）
+- **添加新文件后可能需要重新Generate Visual Studio project files**
+
+【输出要求】
+输出完整的CameraStage_ModifierApply. h文件代码。
+
+================================================================================
+                        上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+```
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：Sub-Step 2.3. 3 创建CameraStage_ModifierApply.h - Stage 4类声明
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断]
+
+【已完成内容】
+- [列出已完成的部分]
+
+【未完成内容】
+- [列出剩余部分]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存到CameraStage_ModifierApply.h，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Phase 2 Step 2.3 Sub-Step 2.3.3 续接任务。
+完成CameraStage_ModifierApply.h声明。
+**这是8个Stage中的第四个（第一个可跳过的Stage）。**
+
+【前置完成】
+- Phase 1 全部完成 ✅
+- Sub-Step 2.1.1-2.1.3:  Pipeline骨架 ✅
+- Sub-Step 2.2.1-2.2.4: Stage 1-2 ✅
+- Sub-Step 2.3.1-2.3.2: Stage 3 ✅
+- Sub-Step 2.3.3 部分完成 ✅
+
+【续接任务】
+继续完成CameraStage_ModifierApply.h
+
+【目标文件】
+Source/[ProjectName]/Camera/Pipeline/CameraStage_ModifierApply.h
+
+【Stage 4概述】
+- 名称：Modifier Apply
+- 层级：COMPUTE LAYER
+- 索引：4
+- 必需：否
+- 可跳过：是
+- 职责：更新修改器生命周期，应用26个修改器效果
+
+【重要说明】
+- 这是骨架实现，完整修改器系统在Phase 4实现
+- CanBeSkipped()必须返回true
+- ShouldExecute()检查是否有激活修改器
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================
+```
+
+【交接信息要求】
+1. 交接PROMPT必须是**完全自包含**的
+2. 明确标注这是第一个可跳过的Stage
+3. 标明这是骨架实现
+4. 包含Stage概述信息
+
+================================================================================

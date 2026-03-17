@@ -1,0 +1,450 @@
+Sub-Step 5.2.4 Prompt
+
+================================================================================
+任务：在CameraCollision_Detection.   cpp中实现Det04 CapsuleTrace + 注册到Resolver
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.    27 C++项目。
+Det04使用胶囊体扫描检测碰撞，更好地匹配相机视野占用的空间。
+
+【当前进度】
+Phase 5 Step 5.   2 Sub-Step 5. 2. 4 (共190个Sub-Step中的第156个)
+前置完成：
+- 5.2.1: CameraCollision_Detection.  h ✅
+- 5. 2.2: DetectionBase + Det01实现 ✅
+- 5.2.3: Det02 + Det03实现 ✅
+
+这是Step 5.2的最后一个Sub-Step！
+
+【任务目标】
+1. 在CameraCollision_Detection.cpp中实现Det04 CapsuleTrace
+2. 在CameraCollisionResolver.cpp中注册所有4个Detection策略
+
+【⚠️ 重要提醒】
+
+1. **本Sub-Step更新两个文件：**
+   - CameraCollision_Detection.cpp - 添加Det04实现
+   - CameraCollisionResolver.   cpp - 注册Detection策略
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **Execute方法签名：**
+   与头文件保持一致（3个参数，无StateConfig）
+
+4. **注册策略后需要添加include**
+
+【具体要求】
+
+---
+
+## 任务1：Det04 CapsuleTrace实现
+
+**文件：** `Source/MyProject/Private/Camera/Collision/CameraCollision_Detection.  cpp`
+
+**找到Det04的placeholder代码，替换为以下实现：**
+
+```cpp
+//========================================
+// Det04: Capsule Trace Implementation
+//========================================
+
+/**
+ * Constructor - Configure capsule trace detection parameters
+ * 
+ * Capsule trace is best for vertical clearance:  
+ * - Better matches the "volume" the camera occupies
+ * - Good for tight corridors and low ceilings
+ * - Can be oriented along camera direction or vertical
+ */
+UCameraCollision_Det04_CapsuleTrace::  UCameraCollision_Det04_CapsuleTrace()
+    : CapsuleRadius(12.0f)
+    , CapsuleHalfHeight(30.0f)
+    , bOrientAlongDirection(true)
+    , bVerticalCapsule(false)
+{
+    // Medium-high priority
+    Priority = 115;
+    SafetyMargin = 10.0f;
+}
+
+bool UCameraCollision_Det04_CapsuleTrace:: Execute(
+    const FStageExecutionContext& Context,
+    const FCollisionDetectionResult& DetectionResult,
+    FCollisionResponseOutput& OutResponse)
+{
+    // Calculate trace endpoints
+    FVector TraceStart, TraceEnd;
+    CalculateTraceEndpoints(Context, TraceStart, TraceEnd);
+    
+    FVector TraceDirection = (TraceEnd - TraceStart).GetSafeNormal();
+    float TraceDistance = (TraceEnd - TraceStart).Size();
+    
+    // Determine capsule orientation
+    FQuat CapsuleRotation;
+    
+    if (bVerticalCapsule)
+    {
+        // Vertical capsule (standing upright)
+        CapsuleRotation = FQuat::Identity;
+    }
+    else if (bOrientAlongDirection)
+    {
+        // Orient capsule along trace direction
+        CapsuleRotation = FQuat::FindBetweenNormals(FVector:: UpVector, TraceDirection);
+    }
+    else
+    {
+        // Use camera rotation
+        CapsuleRotation = Context.Output. Rotation. Quaternion();
+    }
+    
+    // Setup collision shape
+    FCollisionShape CapsuleShape;
+    CapsuleShape.SetCapsule(CapsuleRadius, CapsuleHalfHeight);
+    
+    // Setup trace parameters
+    FCollisionQueryParams Params = GetDefaultTraceParams();
+    
+    // Perform capsule sweep
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        SetActive(false);
+        return false;
+    }
+    
+    FHitResult Hit;
+    bool bHit = World->SweepSingleByChannel(
+        Hit,
+        TraceStart,
+        TraceEnd,
+        CapsuleRotation,
+        TraceChannel,
+        CapsuleShape,
+        Params
+    );
+    
+    // Debug visualization
+#if ENABLE_DRAW_DEBUG
+    if (bDrawDebugTraces)
+    {
+        FColor TraceColor = bHit ? FColor::Red : FColor::Green;
+        
+        // Draw start capsule
+        DrawDebugCapsule(World, TraceStart, CapsuleHalfHeight, CapsuleRadius, 
+            CapsuleRotation, FColor:: Cyan, false, 0.0f, 0, 0.5f);
+        
+        // Draw end capsule
+        DrawDebugCapsule(World, TraceEnd, CapsuleHalfHeight, CapsuleRadius, 
+            CapsuleRotation, TraceColor, false, 0.0f, 0, 0.5f);
+        
+        // Draw trace line
+        DrawDebugLine(World, TraceStart, TraceEnd, TraceColor, false, 0.0f, 0, 1.0f);
+        
+        if (bHit)
+        {
+            // Draw hit location
+            DrawDebugCapsule(World, Hit.Location, CapsuleHalfHeight, CapsuleRadius,
+                CapsuleRotation, FColor::Red, false, 0.0f, 0, 1.0f);
+            
+            // Draw impact normal
+            DrawDebugDirectionalArrow(World, Hit.ImpactPoint,
+                Hit.ImpactPoint + Hit.ImpactNormal * 40.0f,
+                15.0f, FColor::Blue, false, 0.0f, 0, 1.0f);
+        }
+    }
+#endif
+    
+    if (bHit)
+    {
+        // Modify detection result
+        FCollisionDetectionResult& MutableResult = const_cast<FCollisionDetectionResult&>(DetectionResult);
+        
+        // Fill basic hit info
+        MutableResult.bCollisionDetected = true;
+        MutableResult.HitResult = Hit;
+        MutableResult. CollisionNormal = Hit.ImpactNormal;
+        MutableResult.CollisionDistance = Hit.Distance;
+        
+        // Calculate safe distance (account for capsule size)
+        // Use the larger of radius or half-height for safety margin
+        float CapsuleSafetyOffset = FMath::Max(CapsuleRadius, CapsuleHalfHeight * 0.5f);
+        float TotalSafetyOffset = CapsuleSafetyOffset + SafetyMargin;
+        MutableResult.SafeDistance = FMath::Max(MinDistance, Hit.Distance - TotalSafetyOffset);
+        
+        // Calculate safe location
+        MutableResult.SafeLocation = TraceStart + TraceDirection * MutableResult.SafeDistance;
+        
+        // Store desired values
+        MutableResult. DesiredDistance = Context.Output.Distance;
+        MutableResult.DesiredLocation = TraceEnd;
+        
+        // Calculate adjustment ratio
+        float TotalAdjustableDistance = Context.Output.Distance - MinDistance;
+        if (TotalAdjustableDistance > 0.0f)
+        {
+            float AdjustmentNeeded = Context.Output.Distance - MutableResult.SafeDistance;
+            MutableResult.AdjustmentRatio = FMath::Clamp(AdjustmentNeeded / TotalAdjustableDistance, 0.0f, 1.0f);
+        }
+        
+        // Check for tight space (capsule significantly compressed)
+        if (MutableResult.AdjustmentRatio > 0.7f)
+        {
+            MutableResult.bInTightSpace = true;
+        }
+        
+        UE_LOG(LogTemp, Verbose, TEXT("Det04 CapsuleTrace:  Hit at %.1f (r=%.1f, h=%.1f), safe=%.1f, tight=%d"),
+            Hit.Distance, CapsuleRadius, CapsuleHalfHeight, 
+            MutableResult.SafeDistance, MutableResult.bInTightSpace ?  1 : 0);
+        
+        SetActive(true);
+        return true;
+    }
+    
+    SetActive(false);
+    return false;
+}
+```
+
+---
+
+## 任务2：在Resolver中注册Detection策略
+
+**文件：** `Source/MyProject/Private/Camera/Collision/CameraCollisionResolver. cpp`
+
+**步骤1：在文件顶部添加include（在现有include之后）：**
+
+```cpp
+// Detection Strategies (Step 5.2)
+#include "Camera/Collision/CameraCollision_Detection.h"
+```
+
+**步骤2：找到CreateAllStrategies()函数中的Detection策略TODO注释，替换为：**
+
+```cpp
+void UCameraCollisionResolver::CreateAllStrategies(UObject* Outer)
+{
+    UE_LOG(LogTemp, Log, TEXT("CameraCollisionResolver:  Creating all 20 collision strategies... "));
+
+    //========================================
+    // Detection Strategies (Det01-Det04) - 4 strategies
+    //========================================
+    
+    RegisterStrategy(NewObject<UCameraCollision_Det01_LineTrace>(Outer));
+    RegisterStrategy(NewObject<UCameraCollision_Det02_SphereTrace>(Outer));
+    RegisterStrategy(NewObject<UCameraCollision_Det03_MultiRayTrace>(Outer));
+    RegisterStrategy(NewObject<UCameraCollision_Det04_CapsuleTrace>(Outer));
+    
+    UE_LOG(LogTemp, Log, TEXT("  Detection strategies registered: 4"));
+
+    //========================================
+    // Response Strategies (Res01-Res04) - Step 5.3
+    //========================================
+    // TODO: Will be added after CameraCollision_Response.h/. cpp are created
+    // RegisterStrategy(NewObject<UCameraCollision_Res01_PullIn>(Outer));
+    // RegisterStrategy(NewObject<UCameraCollision_Res02_Slide>(Outer));
+    // RegisterStrategy(NewObject<UCameraCollision_Res03_Rotate>(Outer));
+    // RegisterStrategy(NewObject<UCameraCollision_Res04_Hybrid>(Outer));
+
+    //========================================
+    // Occlusion Strategies (Occ01-Occ04) - Step 5.4
+    //========================================
+    // TODO: Will be added after CameraCollision_Occlusion. h/.cpp are created
+    // RegisterStrategy(NewObject<UCameraCollision_Occ01_CharacterCheck>(Outer));
+    // RegisterStrategy(NewObject<UCameraCollision_Occ02_TargetCheck>(Outer));
+    // RegisterStrategy(NewObject<UCameraCollision_Occ03_Transparency>(Outer));
+    // RegisterStrategy(NewObject<UCameraCollision_Occ04_Outline>(Outer));
+
+    //========================================
+    // Recovery Strategies (Rec01-Rec04) - Step 5.5
+    //========================================
+    // TODO: Will be added after CameraCollision_Recovery.h/. cpp are created
+    // RegisterStrategy(NewObject<UCameraCollision_Rec01_Instant>(Outer));
+    // RegisterStrategy(NewObject<UCameraCollision_Rec02_Smooth>(Outer));
+    // RegisterStrategy(NewObject<UCameraCollision_Rec03_Delayed>(Outer));
+    // RegisterStrategy(NewObject<UCameraCollision_Rec04_Smart>(Outer));
+
+    //========================================
+    // Special Strategies (Spc01-Spc04) - Step 5.5
+    //========================================
+    // TODO:  Will be added after CameraCollision_Special.h/.cpp are created
+    // RegisterStrategy(NewObject<UCameraCollision_Spc01_TightSpace>(Outer));
+    // RegisterStrategy(NewObject<UCameraCollision_Spc02_Underwater>(Outer));
+    // RegisterStrategy(NewObject<UCameraCollision_Spc03_IndoorOutdoor>(Outer));
+    // RegisterStrategy(NewObject<UCameraCollision_Spc04_BossFight>(Outer));
+
+    UE_LOG(LogTemp, Log, TEXT("CameraCollisionResolver:  Registered %d strategies (20 when complete)"),
+        RegisteredStrategies. Num());
+        
+    // Current progress
+    UE_LOG(LogTemp, Log, TEXT("  Detection:  4/4 ✓"));
+    UE_LOG(LogTemp, Log, TEXT("  Response:   0/4"));
+    UE_LOG(LogTemp, Log, TEXT("  Occlusion:  0/4"));
+    UE_LOG(LogTemp, Log, TEXT("  Recovery:  0/4"));
+    UE_LOG(LogTemp, Log, TEXT("  Special:   0/4"));
+}
+```
+
+---
+
+【代码设计说明】
+
+### 1. Det04 CapsuleTrace 特性
+
+```
+胶囊体方向选项：
+├── bVerticalCapsule = true：垂直站立（检测低天花板）
+├── bOrientAlongDirection = true：沿射线方向（默认）
+└── 否则：使用相机旋转方向
+
+安全距离计算：
+├── CapsuleSafetyOffset = Max(Radius, HalfHeight * 0.5)
+├── TotalSafetyOffset = CapsuleSafetyOffset + SafetyMargin
+└── SafeDistance = Max(MinDistance, HitDistance - TotalSafetyOffset)
+
+狭窄空间检测：
+└── if (AdjustmentRatio > 0.7) → bInTightSpace = true
+```
+
+### 2. 四种Detection策略对比
+
+| 策略 | 形状 | 优先级 | 最佳场景 | 性能 |
+|------|------|--------|----------|------|
+| Det01 LineTrace | 射线 | 100 | 开阔区域、备用 | 最快 |
+| Det02 SphereTrace | 球体 | 120 | 通用、默认 | 快 |
+| Det03 MultiRayTrace | 多射线 | 110 | 复杂环境 | 中等 |
+| Det04 CapsuleTrace | 胶囊 | 115 | 走廊、低顶 | 中等 |
+
+### 3. 注册顺序
+
+```
+CreateAllStrategies()
+├── Det01 LineTrace     (Priority:  100)
+├── Det02 SphereTrace   (Priority: 120) ← 最高优先级
+├── Det03 MultiRayTrace (Priority: 110)
+└── Det04 CapsuleTrace  (Priority: 115)
+
+执行时按优先级降序：Det02 → Det04 → Det03 → Det01
+```
+
+【Step 5.2 完成验证】
+
+```
+Step 5.2 Detection策略：
+├── 5.2.1: CameraCollision_Detection.h    ✅ 头文件
+├── 5.2.2: DetectionBase + Det01          ✅ 基类 + LineTrace
+├── 5.2.3: Det02 + Det03                  ✅ SphereTrace + MultiRayTrace
+└── 5.2.4: Det04 + 注册                   ✅ CapsuleTrace + Resolver注册
+
+Detection策略清单：
+├── Det01_LineTrace     ✅ 实现完成
+├── Det02_SphereTrace   ✅ 实现完成
+├── Det03_MultiRayTrace ✅ 实现完成
+└── Det04_CapsuleTrace  ✅ 实现完成
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过（0 errors）
+   - [ ] 无链接错误
+
+2. **代码完整性：**
+   - [ ] Det04 CapsuleTrace完整实现
+   - [ ] 胶囊体方向选项正常工作
+   - [ ] bInTightSpace检测
+   - [ ] 调试可视化
+
+3. **注册验证：**
+   - [ ] CameraCollisionResolver. cpp包含Detection. h
+   - [ ] CreateAllStrategies()注册4个Detection策略
+   - [ ] 日志显示"Detection strategies registered: 4"
+
+4. **运行时验证：**
+   - [ ] Resolver初始化后有4个策略
+   - [ ] 日志显示 "Registered 4 strategies"
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 5.2.4 完成报告
+================================================================================
+
+【更新的文件】
+1. CameraCollision_Detection.cpp
+   - 添加Det04 CapsuleTrace完整实现
+
+2. CameraCollisionResolver.cpp
+   - 添加 #include "Camera/Collision/CameraCollision_Detection.h"
+   - 注册4个Detection策略
+
+【实现的内容】
+
+Det04 CapsuleTrace：
+- ✅ Execute() - 完整胶囊体扫描实现
+- ✅ 多种方向选项（垂直/沿方向/相机方向）
+- ✅ 狭窄空间检测 (bInTightSpace)
+- ✅ 调试可视化
+
+Resolver注册：
+- ✅ Det01_LineTrace
+- ✅ Det02_SphereTrace
+- ✅ Det03_MultiRayTrace
+- ✅ Det04_CapsuleTrace
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误数：0
+- 警告数：[数量]
+
+【运行时日志】
+- "Detection strategies registered: 4"
+- "Registered 4 strategies"
+
+【最终状态】
+✅ Step 5.2 Detection策略全部完成
+✅ 4个策略已注册到Resolver
+
+================================================================================
+```
+
+【Step 5.2 总结】
+
+```
+================================================================================
+           Step 5.2 Detection策略 - 100%完成
+================================================================================
+
+文件统计：
+├── 头文件：1个 (CameraCollision_Detection.h)
+└── 实现文件：1个 (CameraCollision_Detection. cpp)
+
+类统计：
+├── 基类：1个 (UCameraCollision_DetectionBase)
+└── 策略类：4个 (Det01-Det04)
+
+策略功能：
+├── Det01 LineTrace     - 单射线检测
+├── Det02 SphereTrace   - 球体扫描检测（默认）
+├── Det03 MultiRayTrace - 多射线锥形检测
+└── Det04 CapsuleTrace  - 胶囊体扫描检测
+
+================================================================================
+```
+
+【后续步骤】
+
+Step 5.2完成后：
+- [x] ✅ Step 5.1:  碰撞系统基础框架（4个Sub-Step）
+- [x] ✅ Step 5.2: Detection策略（4个Sub-Step）
+- [ ] ⏳ Step 5.3: Response策略（Res01-Res04）
+- [ ] ⏳ Step 5.4: Occlusion策略（Occ01-Occ04）
+- [ ] ⏳ Step 5.5: Recovery + Special策略
+
+**Phase 5进度：2/5 Steps = 40%**
+
+================================================================================

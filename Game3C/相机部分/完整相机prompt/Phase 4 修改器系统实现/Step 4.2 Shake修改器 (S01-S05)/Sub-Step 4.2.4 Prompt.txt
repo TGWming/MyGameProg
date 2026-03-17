@@ -1,0 +1,57 @@
+Sub-Step 4.2.4 Prompt
+
+================================================================================
+任务：在CameraModifier_Shake.cpp中添加S02 HitShake_Heavy实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+S02是重击时的相机抖动，更强烈更持久。
+
+【当前进度】
+Phase 4 Step 4.2 Sub-Step 4.2.4 (共190个Sub-Step中的第115个)
+前置完成：4.2.3 S01实现
+
+【任务目标】
+在CameraModifier_Shake.cpp中添加S02实现。
+
+【具体要求】
+
+在S01实现之后添加：
+
+//========================================
+// S02: Hit Shake Heavy
+//========================================
+
+UCameraModifier_S02_HitShake_Heavy::UCameraModifier_S02_HitShake_Heavy()
+{
+    // Heavy hit shake parameters - stronger than light
+    PositionAmplitude = 8.0f;
+    RotationAmplitude = 1.5f;
+    ShakeFrequency = 18.0f; // Slightly lower frequency for "heavier" feel
+}
+
+void UCameraModifier_S02_HitShake_Heavy::OnTriggered(const FModifierTriggerData& TriggerData)
+{
+    // Generate new random seed for variation
+    RandomSeed = FMath::FRand() * 1000.0f;
+    ShakeTime = 0.0f;
+
+    // Scale parameters based on intensity
+    float IntensityScale = FMath:: Clamp(TriggerData. Intensity, 0.5f, 2.0f);
+    PositionAmplitude = 8.0f * IntensityScale;
+    RotationAmplitude = 1.5f * IntensityScale;
+
+    // Heavy hits can also add a brief FOV punch
+    FOVEffect = -3.0f * IntensityScale; // Slight FOV reduction for impact feel
+
+    UE_LOG(LogTemp, Verbose, TEXT("S02 HitShake_Heavy:  Triggered with intensity %.2f"), TriggerData.Intensity);
+}
+
+【验证标准】
+- 编译通过
+- S02可触发强烈抖动效果
+
+【输出要求】
+输出S02的完整实现代码。
+================================================================================

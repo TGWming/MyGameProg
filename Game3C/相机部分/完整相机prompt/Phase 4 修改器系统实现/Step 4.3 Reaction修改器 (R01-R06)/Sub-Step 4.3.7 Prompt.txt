@@ -1,0 +1,122 @@
+Sub-Step 4.3.7 Prompt
+
+================================================================================
+任务：在CameraModifier_Reaction.cpp中添加R06 Dodge_React实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+R06是闪避/翻滚时的相机反应，提供流畅的跟随感。
+
+【当前进度】
+Phase 4 Step 4.3 Sub-Step 4.3.7 (共190个Sub-Step中的第125个)
+前置完成：4.3.6 R05实现
+这是Step 4.3的最后一个Sub-Step。
+
+【任务目标】
+在CameraModifier_Reaction.cpp中添加R06实现。
+
+【具体要求】
+
+在R05实现之后添加：
+
+//========================================
+// R06: Dodge React
+//========================================
+
+UCameraModifier_R06_Dodge_React::UCameraModifier_R06_Dodge_React()
+    : DodgeDirection(FVector::ZeroVector)
+    , LagAmount(15.0f)
+    , FOVIncrease(3.0f)
+{
+}
+
+void UCameraModifier_R06_Dodge_React::OnTriggered(const FModifierTriggerData& TriggerData)
+{
+    // Get dodge direction from source location or default
+    if (! TriggerData. SourceLocation.IsZero())
+    {
+        DodgeDirection = TriggerData.SourceLocation. GetSafeNormal();
+    }
+    else
+    {
+        // Default forward dodge
+        DodgeDirection = FVector(1.0f, 0.0f, 0.0f);
+    }
+
+    // Scale based on dodge type (roll vs quick step)
+    float IntensityScale = FMath:: Clamp(TriggerData.Intensity, 0.5f, 1.5f);
+    LagAmount = 15.0f * IntensityScale;
+    FOVIncrease = 3.0f * IntensityScale;
+
+    UE_LOG(LogTemp, Verbose, TEXT("R06 Dodge_React: Direction (%.2f, %.2f), intensity %.2f"),
+        DodgeDirection.X, DodgeDirection.Y, TriggerData.Intensity);
+}
+
+void UCameraModifier_R06_Dodge_React::ComputeEffect(float DeltaTime, const FStageExecutionContext& Context)
+{
+    float EffectiveWeight = CurrentWeight * CurrentIntensity;
+    float NormalizedTime = StateTime / ActiveDuration;
+
+    // Smooth lag curve - camera lags behind then catches up
+    float LagCurve;
+    if (NormalizedTime < 0.3f)
+    {
+        // Build up lag
+        LagCurve = FMath::InterpEaseOut(0.0f, 1.0f, NormalizedTime / 0.3f, 2.0f);
+    }
+    else if (NormalizedTime < 0.6f)
+    {
+        // Hold lag
+        LagCurve = 1.0f;
+    }
+    else
+    {
+        // Catch up
+        float CatchUpTime = (NormalizedTime - 0.6f) / 0.4f;
+        LagCurve = FMath::InterpEaseOut(1.0f, 0.0f, CatchUpTime, 1.5f);
+    }
+
+    // Position offset - camera lags in opposite direction of dodge
+    PositionEffect = -DodgeDirection * LagAmount * LagCurve * EffectiveWeight;
+
+    // Slight FOV increase during dodge for motion feel
+    float FOVCurve;
+    if (NormalizedTime < 0.2f)
+    {
+        FOVCurve = FMath::InterpEaseOut(0.0f, 1.0f, NormalizedTime / 0.2f, 2.0f);
+    }
+    else if (NormalizedTime < 0.7f)
+    {
+        FOVCurve = 1.0f;
+    }
+    else
+    {
+        float DecayTime = (NormalizedTime - 0.7f) / 0.3f;
+        FOVCurve = FMath:: Lerp(1.0f, 0.0f, DecayTime);
+    }
+
+    FOVEffect = FOVIncrease * FOVCurve * EffectiveWeight;
+
+    // Very subtle rotation tilt in dodge direction
+    float TiltAmount = 1.0f * LagCurve * EffectiveWeight;
+    RotationEffect.Roll = DodgeDirection.Y * TiltAmount; // Tilt based on lateral movement
+}
+
+【Step 4.3 完成验证】
+Reaction修改器（R01-R06）全部实现：
+- R01 Parry_Pull:  弹刀拉近效果
+- R02 Stagger_React: 硬直反应
+- R03 Knockback_React: 击退跟随
+- R04 GuardBreak_React: 破防冲击
+- R05 Counter_React: 反击奖励
+- R06 Dodge_React: 闪避跟随
+
+【验证标准】
+- 编译通过
+- 所有6个Reaction修改器可工作
+- 战斗反馈效果自然流畅
+
+【输出要求】
+输出R06的完整实现代码。
+================================================================================

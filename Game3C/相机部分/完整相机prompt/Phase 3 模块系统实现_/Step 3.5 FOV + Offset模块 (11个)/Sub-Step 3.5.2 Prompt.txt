@@ -1,0 +1,608 @@
+Sub-Step 3.5.2 Prompt
+
+================================================================================
+任务：创建CameraModule_FOV. cpp - F01 BaseFOV实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+F01是最基础的FOV模块，提供来自状态配置的基础视野角度。
+这是所有FOV模块的基础，其他模块在此基础上添加偏移。
+
+【Pipeline中的位置】
+```
+Stage 3 - Module Compute (FOV部分):
+├─ F01: BaseFOV = 90° (Override，基础值) ← 当前
+├─ F02: +10° (Additive，速度)
+├─ F03: -15° (Additive，瞄准)
+├─ F04: +5° (Additive，战斗)
+├─ F05: +10° (Additive，Boss)
+└─ F06: ±X° (Additive，冲击)
+```
+
+【当前进度】
+Phase 3 Step 3.5 Sub-Step 3.5.2 (共190个Sub-Step中的第88个)
+前置完成：3.5.1 CameraModule_FOV.h ✅
+
+【任务目标】
+创建文件：Source/[ProjectName]/Private/Camera/Modules/CameraModule_FOV.cpp
+本Sub-Step实现文件框架和F01 BaseFOV模块。
+同时为F02-F06添加占位符stub。
+
+【⚠️ 重要提醒】
+
+1. **必须Regenerate：**
+   本Sub-Step创建新的. cpp文件。
+   创建文件后：
+   - 保存所有文件
+   - 右键. uproject → Generate Visual Studio project files
+   - 重新加载解决方案
+   - 然后编译
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   确认StateConfig的字段路径与项目实际结构一致。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_FOV. cpp
+
+2. **完整文件内容：**
+
+```cpp
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#include "Camera/Modules/CameraModule_FOV.h"
+#include "Camera/Core/SoulsCameraManager. h"
+
+/**
+ * CameraModule_FOV. cpp
+ * 
+ * This file contains the implementations of 6 FOV modules (F01-F06).
+ * FOV modules are responsible for calculating the camera field of view (float),
+ * which determines the angular extent of the observable game world.
+ * 
+ * Output is passed through FModuleOutput. FOVOutput field.
+ * 
+ * FOV Blend Policies:
+ * - Override: Replace with this value (F01)
+ * - Additive:  Add offset to current value (F02-F06)
+ * 
+ * Typical FOV Values:
+ * - Narrow: 60-70 degrees (aiming, focused)
+ * - Standard: 80-90 degrees (exploration)
+ * - Wide: 100-110 degrees (sprinting)
+ * - Ultra Wide: 120+ degrees (impact effects)
+ * 
+ * Module List:
+ * - F01: Base FOV - Foundation FOV from state config (implemented)
+ * - F02: Speed FOV - Increase FOV when moving fast (TODO:  Sub-Step 3.5.3)
+ * - F03: Aim FOV - Reduce FOV when aiming (TODO: Sub-Step 3.5.4)
+ * - F04: Combat FOV - Combat-specific adjustment (TODO: Sub-Step 3.5.5)
+ * - F05: Boss FOV - Boss fight adjustment (TODO: Sub-Step 3.5.6)
+ * - F06: Impact FOV - Momentary pulse on impacts (TODO: Sub-Step 3.5.7)
+ */
+
+
+//========================================
+// F01: Base FOV - Foundation FOV from state config
+//========================================
+
+/**
+ * ShouldActivate - Base FOV is always active
+ * 
+ * F01 is the foundation FOV module.  It should always be active
+ * as long as the module is enabled, providing the starting point for
+ * all FOV calculations.
+ * 
+ * Other modules (F02-F06) build upon this base value using
+ * Additive policy.
+ */
+bool UCameraModule_F01_BaseFOV::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Base FOV is always active as the foundation
+	// Only check if module is enabled
+	return bIsEnabled;
+}
+
+/**
+ * Compute - Return base FOV from state configuration
+ * 
+ * This module reads the configured base FOV from StateConfig
+ * and outputs it directly. It serves as the starting point for
+ * FOV calculations. 
+ * 
+ * Steps:
+ * 1. Get base FOV from state config
+ * 2. Get min/max limits from config
+ * 3. Clamp FOV to valid range
+ * 4. Output the clamped FOV
+ * 
+ * The output uses Override policy, meaning this value will be
+ * the starting point that other modules modify. 
+ * 
+ * Typical base FOV values: 
+ * - Exploration state: 90 degrees
+ * - Combat state: 85 degrees
+ * - Cinematic state: 70 degrees
+ * 
+ * @param Context The current pipeline execution context
+ * @param StateConfig The current camera state configuration
+ * @param OutOutput Output structure to fill with computed values
+ * @return True if computation succeeded
+ */
+bool UCameraModule_F01_BaseFOV::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Step 1: Get base FOV from state configuration
+	// This is the foundation FOV that other modules will modify
+	float BaseFOV = StateConfig.StateBase. FOV.BaseFOV;
+	
+	// If BaseFOV not configured, use default
+	if (BaseFOV <= 0.0f)
+	{
+		BaseFOV = 90.0f;  // Default:  90 degrees (standard third-person)
+	}
+	
+	// Step 2: Get min/max FOV limits from config
+	float MinFOV = StateConfig.StateBase.FOV.MinFOV;
+	float MaxFOV = StateConfig.StateBase.FOV.MaxFOV;
+	
+	// Validate limits
+	if (MinFOV <= 0.0f)
+	{
+		MinFOV = 60.0f;  // Default min: 60 degrees
+	}
+	
+	if (MaxFOV <= 0.0f || MaxFOV <= MinFOV)
+	{
+		MaxFOV = 120.0f;  // Default max: 120 degrees
+	}
+	
+	// Step 3: Clamp FOV to valid range
+	BaseFOV = FMath::Clamp(BaseFOV, MinFOV, MaxFOV);
+	
+	// Step 4: Fill output structure
+	OutOutput. FOVOutput = BaseFOV;
+	OutOutput.bHasFOVOutput = true;
+	
+	return true;
+}
+
+
+//========================================
+// F02: Speed FOV
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.5.3
+// Increases FOV when moving fast
+
+/**
+ * Constructor - Initialize smooth offset state
+ */
+UCameraModule_F02_Speed_FOV::UCameraModule_F02_Speed_FOV()
+	: CurrentSpeedFOVOffset(0.0f)
+{
+}
+
+/**
+ * ShouldActivate - Placeholder implementation
+ */
+bool UCameraModule_F02_Speed_FOV::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Placeholder: Will be properly implemented in Sub-Step 3.5.3
+	// Should activate when character is moving fast
+	return false;
+}
+
+/**
+ * Compute - Placeholder implementation
+ */
+bool UCameraModule_F02_Speed_FOV::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Placeholder: Will be properly implemented in Sub-Step 3.5.3
+	OutOutput = CreateBaseOutput();
+	OutOutput.FOVOutput = 0.0f;  // Additive offset of 0 = no change
+	OutOutput. bHasFOVOutput = true;
+	return true;
+}
+
+
+//========================================
+// F03: Aim FOV
+//========================================
+
+// TODO:  Full implementation in Sub-Step 3.5.4
+// Reduces FOV when aiming
+
+/**
+ * Constructor - Initialize aim blend state
+ */
+UCameraModule_F03_Aim_FOV::UCameraModule_F03_Aim_FOV()
+	: CurrentAimFOVBlend(0.0f)
+{
+}
+
+/**
+ * ShouldActivate - Placeholder implementation
+ */
+bool UCameraModule_F03_Aim_FOV::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Placeholder: Will be properly implemented in Sub-Step 3.5.4
+	// Should activate when player is aiming
+	return false;
+}
+
+/**
+ * Compute - Placeholder implementation
+ */
+bool UCameraModule_F03_Aim_FOV:: Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Placeholder:  Will be properly implemented in Sub-Step 3.5.4
+	OutOutput = CreateBaseOutput();
+	OutOutput.FOVOutput = 0.0f;  // Additive offset of 0 = no change
+	OutOutput.bHasFOVOutput = true;
+	return true;
+}
+
+
+//========================================
+// F04: Combat FOV
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.5.5
+// Combat-specific FOV adjustment
+
+/**
+ * ShouldActivate - Placeholder implementation
+ */
+bool UCameraModule_F04_Combat_FOV:: ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Placeholder: Will be properly implemented in Sub-Step 3.5.5
+	// Should activate during combat
+	return false;
+}
+
+/**
+ * Compute - Placeholder implementation
+ */
+bool UCameraModule_F04_Combat_FOV::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Placeholder: Will be properly implemented in Sub-Step 3.5.5
+	OutOutput = CreateBaseOutput();
+	OutOutput. FOVOutput = 0.0f;  // Additive offset of 0 = no change
+	OutOutput.bHasFOVOutput = true;
+	return true;
+}
+
+
+//========================================
+// F05: Boss FOV
+//========================================
+
+// TODO:  Full implementation in Sub-Step 3.5.6
+// Boss fight FOV adjustment
+
+/**
+ * ShouldActivate - Placeholder implementation
+ */
+bool UCameraModule_F05_Boss_FOV::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Placeholder: Will be properly implemented in Sub-Step 3.5.6
+	// Should activate when fighting a boss
+	return false;
+}
+
+/**
+ * Compute - Placeholder implementation
+ */
+bool UCameraModule_F05_Boss_FOV::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Placeholder: Will be properly implemented in Sub-Step 3.5.6
+	OutOutput = CreateBaseOutput();
+	OutOutput. FOVOutput = 0.0f;  // Additive offset of 0 = no change
+	OutOutput.bHasFOVOutput = true;
+	return true;
+}
+
+
+//========================================
+// F06: Impact FOV
+//========================================
+
+// TODO:  Full implementation in Sub-Step 3.5.7
+// Momentary FOV pulse on impacts
+
+/**
+ * Constructor - Initialize impact state
+ */
+UCameraModule_F06_Impact_FOV::UCameraModule_F06_Impact_FOV()
+	: CurrentImpactIntensity(0.0f)
+	, bImpactActive(false)
+	, ImpactTimeRemaining(0.0f)
+{
+}
+
+/**
+ * ShouldActivate - Placeholder implementation
+ */
+bool UCameraModule_F06_Impact_FOV::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Placeholder: Will be properly implemented in Sub-Step 3.5.7
+	// Should activate when impact is triggered
+	return false;
+}
+
+/**
+ * Compute - Placeholder implementation
+ */
+bool UCameraModule_F06_Impact_FOV:: Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Placeholder: Will be properly implemented in Sub-Step 3.5.7
+	OutOutput = CreateBaseOutput();
+	OutOutput.FOVOutput = 0.0f;  // Additive offset of 0 = no change
+	OutOutput.bHasFOVOutput = true;
+	return true;
+}
+
+/**
+ * TriggerImpact - Placeholder implementation
+ */
+void UCameraModule_F06_Impact_FOV::TriggerImpact(float Intensity)
+{
+	// Placeholder: Will be properly implemented in Sub-Step 3.5.7
+	// Should trigger the impact FOV effect
+	CurrentImpactIntensity = FMath::Clamp(Intensity, 0.0f, 1.0f);
+	bImpactActive = true;
+	ImpactTimeRemaining = 0.2f;  // Default 0.2 seconds
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 文件头注释说明所有模块
+   - 每个方法前添加文档注释
+   - 说明FOV值的典型范围
+   - 所有注释使用英文
+
+2. **格式：**
+   - 使用Tab缩进（与现有代码一致）
+   - 每个模块用分隔注释分开
+   - 占位符标记清晰
+
+3. **占位符策略：**
+   - ShouldActivate返回false（不激活）
+   - Compute返回0.0f（Additive无影响）
+   - 构造函数初始化成员变量
+
+【技术说明】
+
+**F01的核心机制：**
+
+### 1. FOV模块的特点
+
+**与Distance模块的相似性：**
+```cpp
+// Distance模块
+OutOutput. DistanceOutput = 400.0f;  // 厘米
+OutOutput.bHasDistanceOutput = true;
+
+// FOV模块
+OutOutput.FOVOutput = 90.0f;  // 度数
+OutOutput.bHasFOVOutput = true;
+```
+
+### 2. 典型FOV值
+
+**常见FOV范围（单位：度）：**
+
+| 场景 | FOV | 说明 |
+|------|-----|------|
+| 瞄准/精确 | 60-70° | 缩小视野，聚焦目标 |
+| 标准探索 | 80-90° | 最常用，平衡视野 |
+| 战斗 | 85-95° | 稍宽，提高awareness |
+| 冲刺 | 100-110° | 速度感 |
+| 过场 | 70-80° | 电影感 |
+
+**默认值设计：**
+```cpp
+// F01默认值
+if (BaseFOV <= 0.0f)
+{
+    BaseFOV = 90.0f;  // 90度，标准第三人称
+}
+
+// 最小FOV
+if (MinFOV <= 0.0f)
+{
+    MinFOV = 60.0f;  // 60度，防止太窄
+}
+
+// 最大FOV
+if (MaxFOV <= 0.0f)
+{
+    MaxFOV = 120.0f;  // 120度，防止太宽
+}
+```
+
+### 3. 占位符的智慧设计
+
+**所有占位符都使用Additive策略：**
+
+```cpp
+// F02-F06都是Additive，占位符返回0
+OutOutput.FOVOutput = 0.0f;  // 加0 = 无变化
+OutOutput.bHasFOVOutput = true;
+```
+
+**这样设计的好处：**
+- 占位符不影响最终结果
+- 可以单独测试F01
+- 其他模块激活后才产生效果
+
+### 4. F06的特殊设计
+
+**TriggerImpact函数的占位符：**
+```cpp
+void UCameraModule_F06_Impact_FOV::TriggerImpact(float Intensity)
+{
+    CurrentImpactIntensity = FMath::Clamp(Intensity, 0.0f, 1.0f);
+    bImpactActive = true;
+    ImpactTimeRemaining = 0.2f;  // 0.2秒持续时间
+}
+```
+- 占位符设置基本状态
+- 完整实现时会添加更多逻辑
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] Regenerate执行
+   - [ ] 编译通过（0 errors, 0 warnings）
+   - [ ] 文件编码为UTF-8 Without BOM
+   - [ ] 所有注释为英文
+
+2. **代码完整性：**
+   - [ ] F01实现完整（ShouldActivate + Compute）
+   - [ ] F02-F06占位符完整
+   - [ ] F02、F03、F06构造函数初始化成员变量
+   - [ ] F06的TriggerImpact占位符实现
+   - [ ] 所有方法签名与. h一致
+
+3. **逻辑正确性：**
+   - [ ] F01总是激活（bIsEnabled）
+   - [ ] BaseFOV默认值正确（90度）
+   - [ ] MinFOV默认值正确（60度）
+   - [ ] MaxFOV默认值正确（120度）
+   - [ ] Clamp正确应用
+
+4. **字段访问：**
+   - [ ] StateConfig.StateBase. FOV.BaseFOV
+   - [ ] StateConfig. StateBase.FOV.MinFOV
+   - [ ] StateConfig.StateBase.FOV.MaxFOV
+
+**⚠️ 字段检查：**
+如果StateConfig中没有FOV结构，可能需要在CameraTypes.h中添加。
+参考Distance结构的定义格式。
+
+【注意事项】
+
+1. **必须Regenerate：**
+   创建新. cpp文件后必须Regenerate。
+
+2. **FOV字段处理：**
+   ```cpp
+   // 如果StateConfig. StateBase.FOV结构不存在
+   // 方案1：直接使用默认值
+   float BaseFOV = 90.0f;
+   float MinFOV = 60.0f;
+   float MaxFOV = 120.0f;
+   
+   // 方案2：在CameraTypes.h中添加FOV结构
+   // 参考Distance结构
+   ```
+
+3. **FModuleOutput字段：**
+   确认FModuleOutput结构中有：
+   - FOVOutput (float)
+   - bHasFOVOutput (bool)
+   
+   如果缺少，需要在定义处添加。
+
+4. **测试建议：**
+   编译通过后，测试：
+   - F01是否正确返回配置的FOV
+   - 默认值是否正确应用
+   - Min/Max限制是否生效
+
+【输出要求】
+
+完成修改后，请报告：
+
+```
+================================================================================
+Sub-Step 3.5.2 完成报告
+================================================================================
+
+【创建的文件】
+- 文件：CameraModule_FOV. cpp
+- 路径：Source/[ProjectName]/Private/Camera/Modules/
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ F01:  BaseFOV（完整实现）
+- ⏳ F02: Speed_FOV（占位符+构造函数）
+- ⏳ F03: Aim_FOV（占位符+构造函数）
+- ⏳ F04: Combat_FOV（占位符）
+- ⏳ F05: Boss_FOV（占位符）
+- ⏳ F06: Impact_FOV（占位符+构造函数+TriggerImpact）
+
+【编译结果】
+- Regenerate：[已执行/未执行]
+- 编译状态：[成功/失败]
+- 错误数：[数量]
+- 警告数：[数量]
+
+【遇到的问题】
+[如有字段路径问题，详细描述]
+
+【最终状态】
+✅ FOV模块. cpp创建完成，F01实现完毕
+
+================================================================================
+```
+
+【后续步骤】
+
+F01完成后，FOV模块进度：
+- [x] ✅ 3.5.1: CameraModule_FOV.h
+- [x] ✅ 3.5.2: F01 - Base FOV
+- [ ] ⏳ 3.5.3: F02 - Speed FOV（下一步）
+- [ ] ⏳ 3.5.4: F03 - Aim FOV
+- [ ] ⏳ 3.5.5: F04 - Combat FOV
+- [ ] ⏳ 3.5.6: F05 - Boss FOV
+- [ ] ⏳ 3.5.7: F06 - Impact FOV
+
+**FOV模块完成度：1/6 (16.7%)**
+
+完成后准备进入Sub-Step 3.5.3（F02: Speed FOV - 速度视野）。
+
+================================================================================

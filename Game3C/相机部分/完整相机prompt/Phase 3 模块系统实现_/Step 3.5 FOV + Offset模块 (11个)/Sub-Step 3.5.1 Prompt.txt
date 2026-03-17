@@ -1,0 +1,662 @@
+Sub-Step 3.5.1 Prompt
+
+================================================================================
+任务：创建CameraModule_FOV.h - FOV模块头文件
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4. 27 C++项目。
+FOV模块负责计算相机的视野角度(Field of View)。
+FOV影响画面的广角程度，较大FOV提供更宽视野但有透视变形，
+较小FOV提供更窄视野但更接近人眼自然感觉。
+
+【Pipeline中的位置】
+```
+Stage 3 - Module Compute: 
+├─ Position模块 → FVector (焦点位置) ✅ 已完成
+├─ Rotation模块 → FRotator (相机朝向) ✅ 已完成
+├─ Distance模块 → float (臂长距离) ✅ 已完成
+├─ FOV模块 → float (视野角度) ← 当前Step
+├─ Offset模块 → 各种偏移
+└─ Constraint模块 → 碰撞约束
+```
+
+【当前进度】
+Phase 3 Step 3.5 Sub-Step 3.5.1 (共190个Sub-Step中的第87个)
+前置完成：Step 3.4 Distance模块 (D01-D07) ✅
+
+【任务目标】
+创建文件：Source/[ProjectName]/Public/Camera/Modules/CameraModule_FOV.h
+定义所有6个FOV模块类（F01-F06）的声明。
+
+【⚠️ 重要提醒】
+
+1. **必须Regenerate：**
+   本Sub-Step创建新的. h文件。
+   创建文件后：
+   - 保存所有文件
+   - 右键. uproject → Generate Visual Studio project files
+   - 重新加载解决方案
+   - 然后编译
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+   - 创建后检查VS Code右下角编码
+
+3. **命名替换：**
+   - 将 MYPROJECT_API 替换为实际项目的API宏
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Public/Camera/Modules/CameraModule_FOV.h
+
+2. **文件结构：**
+
+```
+文件结构：
+├─ 版权声明
+├─ #pragma once
+├─ Include头文件
+├─ 文件整体说明注释
+├─ F01: Base FOV（基础视野）
+├─ F02: Speed FOV（速度视野）
+├─ F03: Aim FOV（瞄准视野）
+├─ F04: Combat FOV（战斗视野）
+├─ F05: Boss FOV（Boss战视野）
+└─ F06: Impact FOV（冲击视野）
+```
+
+3. **完整文件内容：**
+
+```cpp
+// Copyright Epic Games, Inc.  All Rights Reserved. 
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "CameraModuleBase. h"
+#include "CameraModule_FOV.generated.h"
+
+/**
+ * FOV Module Declarations (F01-F06)
+ * 
+ * This file contains the 6 FOV modules for the camera system. 
+ * FOV modules are responsible for calculating the camera field of view (float),
+ * which determines the angular extent of the observable game world.
+ * 
+ * These modules execute in Stage 3 (Module Compute) of the camera pipeline,
+ * and their outputs are combined in Stage 5 (Blend & Solve).
+ * 
+ * Output Field:  FOVOutput (float type, in degrees)
+ * 
+ * Typical FOV Values:
+ * - Narrow:  60-70 degrees (aiming, focused)
+ * - Standard: 80-90 degrees (exploration, general gameplay)
+ * - Wide: 100-110 degrees (sprinting, high speed)
+ * - Ultra Wide: 120+ degrees (special effects, impact moments)
+ * 
+ * FOV Effects on Gameplay:
+ * - Higher FOV:  Wider view, more peripheral vision, sense of speed
+ * - Lower FOV: Narrower view, more focus, precision aiming
+ * 
+ * Blend Policies for FOV: 
+ * - Override: Replace with this value (F01 base)
+ * - Additive: Add offset to base FOV (most adjustments)
+ * - Blend: Weighted average (smooth transitions)
+ * 
+ * Module List:
+ * - F01: Base FOV - Foundation FOV from state config
+ * - F02: Speed FOV - Increase FOV when moving fast
+ * - F03: Aim FOV - Reduce FOV when aiming/focusing
+ * - F04: Combat FOV - Combat-specific adjustments
+ * - F05: Boss FOV - Boss fight FOV adjustment
+ * - F06: Impact FOV - Momentary FOV pulse on impacts
+ */
+
+
+//========================================
+// F01: Base FOV
+//========================================
+
+/**
+ * UCameraModule_F01_BaseFOV
+ * 
+ * F01: Base FOV - Provides base field of view from state config
+ * 
+ * This is the foundation FOV module.  It reads the configured base
+ * FOV from StateConfig and outputs it directly.  Other FOV modules
+ * typically modify this base value using Additive policy.
+ * 
+ * Always active as the starting point for FOV calculations.
+ * Uses Override policy with priority 100 (base level).
+ * 
+ * Typical base FOV values: 
+ * - Exploration: 90 degrees
+ * - Combat: 85 degrees
+ * - Cinematic: 70 degrees
+ */
+UCLASS(BlueprintType, Blueprintable)
+class MYPROJECT_API UCameraModule_F01_BaseFOV :  public UCameraModuleBase
+{
+	GENERATED_BODY()
+
+public:
+	//========================================
+	// Module Identity
+	//========================================
+
+	virtual ECameraModuleType GetModuleType() const override { return ECameraModuleType:: Module_F01_BaseFOV; }
+	virtual EModuleCategory GetModuleCategory() const override { return EModuleCategory::FOV; }
+	virtual FString GetModuleDescription() const override { return TEXT("Base field of view from state configuration"); }
+
+	//========================================
+	// Priority & Blending
+	//========================================
+
+	/** Base priority - other modules build on top of this */
+	virtual int32 GetDefaultPriority() const override { return 100; }
+	virtual EBlendPolicy GetDefaultBlendPolicy() const override { return EBlendPolicy::Override; }
+
+	//========================================
+	// Activation & Computation
+	//========================================
+
+	virtual bool ShouldActivate(const FStageExecutionContext& Context, const FCameraStateConfig& StateConfig) const override;
+	virtual bool Compute(const FStageExecutionContext& Context, const FCameraStateConfig& StateConfig, FModuleOutput& OutOutput) override;
+};
+
+
+//========================================
+// F02: Speed FOV
+//========================================
+
+/**
+ * UCameraModule_F02_Speed_FOV
+ * 
+ * F02: Speed FOV - Increases FOV when moving fast
+ * 
+ * When the character is running or sprinting, FOV increases to create
+ * a sense of speed and provide better peripheral vision. 
+ * This is a common technique in action games. 
+ * 
+ * Uses Additive policy - adds offset to base FOV. 
+ * Offset is smoothed to prevent jarring FOV changes.
+ * 
+ * Example: 
+ * - Walking: offset = 0 degrees
+ * - Running: offset = +5 degrees
+ * - Sprinting:  offset = +15 degrees
+ */
+UCLASS(BlueprintType, Blueprintable)
+class MYPROJECT_API UCameraModule_F02_Speed_FOV : public UCameraModuleBase
+{
+	GENERATED_BODY()
+
+public:
+	/** Constructor - initializes smooth offset state */
+	UCameraModule_F02_Speed_FOV();
+
+	//========================================
+	// Module Identity
+	//========================================
+
+	virtual ECameraModuleType GetModuleType() const override { return ECameraModuleType:: Module_F02_Speed_FOV; }
+	virtual EModuleCategory GetModuleCategory() const override { return EModuleCategory::FOV; }
+	virtual FString GetModuleDescription() const override { return TEXT("FOV increase based on movement speed"); }
+
+	//========================================
+	// Priority & Blending
+	//========================================
+
+	/** Applied after base FOV */
+	virtual int32 GetDefaultPriority() const override { return 105; }
+	virtual EBlendPolicy GetDefaultBlendPolicy() const override { return EBlendPolicy:: Additive; }
+
+	//========================================
+	// Activation & Computation
+	//========================================
+
+	/** Activates when character is moving fast */
+	virtual bool ShouldActivate(const FStageExecutionContext& Context, const FCameraStateConfig& StateConfig) const override;
+	virtual bool Compute(const FStageExecutionContext& Context, const FCameraStateConfig& StateConfig, FModuleOutput& OutOutput) override;
+
+protected:
+	/** Current smoothed FOV offset (for smooth transitions) */
+	UPROPERTY()
+	float CurrentSpeedFOVOffset;
+};
+
+
+//========================================
+// F03: Aim FOV
+//========================================
+
+/**
+ * UCameraModule_F03_Aim_FOV
+ * 
+ * F03: Aim FOV - Reduces FOV when aiming/focusing
+ * 
+ * When the player is aiming (ranged weapons) or in focus mode,
+ * FOV decreases to provide a more zoomed-in, precise view.
+ * Common in shooter games and games with ranged combat.
+ * 
+ * Uses Additive policy with negative offset - reduces FOV. 
+ * Smooth transition when entering/exiting aim mode.
+ * 
+ * Example:
+ * - Normal: offset = 0 degrees
+ * - Aiming: offset = -15 to -25 degrees
+ * - Scoped: offset = -40 degrees or more
+ */
+UCLASS(BlueprintType, Blueprintable)
+class MYPROJECT_API UCameraModule_F03_Aim_FOV : public UCameraModuleBase
+{
+	GENERATED_BODY()
+
+public:
+	/** Constructor - initializes aim blend state */
+	UCameraModule_F03_Aim_FOV();
+
+	//========================================
+	// Module Identity
+	//========================================
+
+	virtual ECameraModuleType GetModuleType() const override { return ECameraModuleType:: Module_F03_Aim_FOV; }
+	virtual EModuleCategory GetModuleCategory() const override { return EModuleCategory::FOV; }
+	virtual FString GetModuleDescription() const override { return TEXT("FOV reduction for aiming/focus mode"); }
+
+	//========================================
+	// Priority & Blending
+	//========================================
+
+	/** Higher priority - aiming takes precedence */
+	virtual int32 GetDefaultPriority() const override { return 115; }
+	virtual EBlendPolicy GetDefaultBlendPolicy() const override { return EBlendPolicy:: Additive; }
+
+	//========================================
+	// Activation & Computation
+	//========================================
+
+	/** Activates when player is aiming */
+	virtual bool ShouldActivate(const FStageExecutionContext& Context, const FCameraStateConfig& StateConfig) const override;
+	virtual bool Compute(const FStageExecutionContext& Context, const FCameraStateConfig& StateConfig, FModuleOutput& OutOutput) override;
+
+protected:
+	/** Current aim FOV blend value (0 to 1, for smooth transitions) */
+	UPROPERTY()
+	float CurrentAimFOVBlend;
+};
+
+
+//========================================
+// F04: Combat FOV
+//========================================
+
+/**
+ * UCameraModule_F04_Combat_FOV
+ * 
+ * F04: Combat FOV - FOV adjustment during combat
+ * 
+ * Provides wider or tighter view based on combat state. 
+ * Typically slightly wider to improve situational awareness.
+ * 
+ * Uses Additive policy - adds/subtracts from base FOV.
+ * Activates when in combat state.
+ * 
+ * Example: 
+ * - Lock-on combat: offset = +5 degrees (slightly wider)
+ * - Defensive stance: offset = -5 degrees (more focused)
+ */
+UCLASS(BlueprintType, Blueprintable)
+class MYPROJECT_API UCameraModule_F04_Combat_FOV : public UCameraModuleBase
+{
+	GENERATED_BODY()
+
+public:
+	//========================================
+	// Module Identity
+	//========================================
+
+	virtual ECameraModuleType GetModuleType() const override { return ECameraModuleType:: Module_F04_Combat_FOV; }
+	virtual EModuleCategory GetModuleCategory() const override { return EModuleCategory::FOV; }
+	virtual FString GetModuleDescription() const override { return TEXT("Combat-specific FOV adjustment"); }
+
+	//========================================
+	// Priority & Blending
+	//========================================
+
+	/** Combat priority */
+	virtual int32 GetDefaultPriority() const override { return 110; }
+	virtual EBlendPolicy GetDefaultBlendPolicy() const override { return EBlendPolicy:: Additive; }
+
+	//========================================
+	// Activation & Computation
+	//========================================
+
+	/** Activates when in combat */
+	virtual bool ShouldActivate(const FStageExecutionContext& Context, const FCameraStateConfig& StateConfig) const override;
+	virtual bool Compute(const FStageExecutionContext& Context, const FCameraStateConfig& StateConfig, FModuleOutput& OutOutput) override;
+};
+
+
+//========================================
+// F05: Boss FOV
+//========================================
+
+/**
+ * UCameraModule_F05_Boss_FOV
+ * 
+ * F05: Boss FOV - FOV adjustment for boss fights
+ * 
+ * Typically provides wider FOV to capture large boss enemies
+ * and give the player better awareness of boss attacks.
+ * 
+ * Uses Additive policy - adds to base FOV. 
+ * Only activates when fighting a boss.
+ * 
+ * Example:
+ * - Small boss: offset = +5 degrees
+ * - Large boss: offset = +10 degrees
+ * - Giant boss: offset = +15 degrees
+ */
+UCLASS(BlueprintType, Blueprintable)
+class MYPROJECT_API UCameraModule_F05_Boss_FOV :  public UCameraModuleBase
+{
+	GENERATED_BODY()
+
+public:
+	//========================================
+	// Module Identity
+	//========================================
+
+	virtual ECameraModuleType GetModuleType() const override { return ECameraModuleType::Module_F05_Boss_FOV; }
+	virtual EModuleCategory GetModuleCategory() const override { return EModuleCategory::FOV; }
+	virtual FString GetModuleDescription() const override { return TEXT("Boss fight FOV adjustment"); }
+
+	//========================================
+	// Priority & Blending
+	//========================================
+
+	/** High priority for boss fights */
+	virtual int32 GetDefaultPriority() const override { return 120; }
+	virtual EBlendPolicy GetDefaultBlendPolicy() const override { return EBlendPolicy:: Additive; }
+
+	//========================================
+	// Activation & Computation
+	//========================================
+
+	/** Only activates for boss targets */
+	virtual bool ShouldActivate(const FStageExecutionContext& Context, const FCameraStateConfig& StateConfig) const override;
+	virtual bool Compute(const FStageExecutionContext& Context, const FCameraStateConfig& StateConfig, FModuleOutput& OutOutput) override;
+};
+
+
+//========================================
+// F06: Impact FOV
+//========================================
+
+/**
+ * UCameraModule_F06_Impact_FOV
+ * 
+ * F06: Impact FOV - Momentary FOV pulse on impacts
+ * 
+ * Provides a quick FOV change (usually decrease then return) when
+ * the player takes damage or lands a heavy hit.  This creates
+ * visceral impact feedback.
+ * 
+ * Uses Additive policy - adds momentary offset. 
+ * Triggered externally via TriggerImpact() function.
+ * 
+ * Behavior:
+ * - On impact: FOV quickly decreases (punch-in effect)
+ * - Recovery: FOV smoothly returns to normal
+ * - Duration: typically 0.1-0.3 seconds
+ */
+UCLASS(BlueprintType, Blueprintable)
+class MYPROJECT_API UCameraModule_F06_Impact_FOV : public UCameraModuleBase
+{
+	GENERATED_BODY()
+
+public:
+	/** Constructor - initializes impact state */
+	UCameraModule_F06_Impact_FOV();
+
+	//========================================
+	// Module Identity
+	//========================================
+
+	virtual ECameraModuleType GetModuleType() const override { return ECameraModuleType::Module_F06_Impact_FOV; }
+	virtual EModuleCategory GetModuleCategory() const override { return EModuleCategory:: FOV; }
+	virtual FString GetModuleDescription() const override { return TEXT("Impact/hit FOV pulse effect"); }
+
+	//========================================
+	// Priority & Blending
+	//========================================
+
+	/** Highest priority for immediate feedback */
+	virtual int32 GetDefaultPriority() const override { return 125; }
+	virtual EBlendPolicy GetDefaultBlendPolicy() const override { return EBlendPolicy:: Additive; }
+
+	//========================================
+	// Activation & Computation
+	//========================================
+
+	/** Activates when impact is triggered */
+	virtual bool ShouldActivate(const FStageExecutionContext& Context, const FCameraStateConfig& StateConfig) const override;
+	virtual bool Compute(const FStageExecutionContext& Context, const FCameraStateConfig& StateConfig, FModuleOutput& OutOutput) override;
+
+	//========================================
+	// Impact Trigger
+	//========================================
+
+	/**
+	 * Trigger an impact FOV pulse
+	 * Call this when player takes damage or lands a heavy hit
+	 * 
+	 * @param Intensity Strength of the effect (0.0 to 1.0, default 1.0)
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Camera|FOV")
+	void TriggerImpact(float Intensity = 1.0f);
+
+protected:
+	/** Current impact intensity (decays over time) */
+	UPROPERTY()
+	float CurrentImpactIntensity;
+
+	/** Is impact effect currently active */
+	UPROPERTY()
+	bool bImpactActive;
+
+	/** Time remaining for impact effect */
+	UPROPERTY()
+	float ImpactTimeRemaining;
+};
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 每个模块类前添加详细的文档注释
+   - 说明模块用途和典型FOV值
+   - 提供使用示例
+   - 所有注释使用英文
+
+2. **格式：**
+   - 使用Tab缩进（与现有代码一致）
+   - 每个模块用分隔注释分开
+   - Get方法内联实现
+
+3. **命名：**
+   - 类名：UCameraModule_F0X_[Name]
+   - 枚举值：Module_F0X_[Name]
+   - 遵循UE4命名约定
+
+【技术说明】
+
+**FOV模块的设计特点：**
+
+### 1. FOV的影响
+
+```
+低FOV (60-70°):
+- 视野窄
+- 放大效果
+- 适合瞄准/精确操作
+- 减少透视变形
+
+标准FOV (80-90°):
+- 平衡视野
+- 自然感觉
+- 适合一般游戏
+
+高FOV (100-120°):
+- 视野宽
+- 速度感
+- 更多周边视觉
+- 有透视变形
+```
+
+### 2. 优先级设计
+
+| 模块 | 优先级 | 混合策略 | 作用 |
+|------|--------|---------|------|
+| F01 | 100 | Override | 基础值 |
+| F02 | 105 | Additive | 速度FOV |
+| F04 | 110 | Additive | 战斗FOV |
+| F03 | 115 | Additive | 瞄准FOV |
+| F05 | 120 | Additive | Boss FOV |
+| F06 | 125 | Additive | 冲击FOV |
+
+### 3. 成员变量设计
+
+**需要平滑过渡的模块有成员变量：**
+- F02: `CurrentSpeedFOVOffset` - 速度FOV平滑
+- F03: `CurrentAimFOVBlend` - 瞄准混合值
+- F06: `CurrentImpactIntensity`, `bImpactActive`, `ImpactTimeRemaining` - 冲击效果状态
+
+### 4. F06的特殊设计
+
+**TriggerImpact函数：**
+```cpp
+// 外部调用触发冲击效果
+UFUNCTION(BlueprintCallable, Category = "Camera|FOV")
+void TriggerImpact(float Intensity = 1.0f);
+```
+- 可从蓝图调用
+- 用于受击/命中反馈
+- 强度参数控制效果强度
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] Regenerate执行
+   - [ ] 编译通过（0 errors, 0 warnings）
+   - [ ] 文件编码为UTF-8 Without BOM
+   - [ ] 所有注释为英文
+
+2. **代码完整性：**
+   - [ ] 6个模块类都声明完整
+   - [ ] 每个模块都有GetModuleType()
+   - [ ] 每个模块都有GetModuleCategory() = FOV
+   - [ ] 每个模块都有ShouldActivate()和Compute()声明
+   - [ ] F02、F03、F06有构造函数和成员变量
+
+3. **枚举值：**
+   确认ECameraModuleType中已定义：
+   - [ ] Module_F01_BaseFOV
+   - [ ] Module_F02_Speed_FOV
+   - [ ] Module_F03_Aim_FOV
+   - [ ] Module_F04_Combat_FOV
+   - [ ] Module_F05_Boss_FOV
+   - [ ] Module_F06_Impact_FOV
+
+**⚠️ 枚举值检查：**
+如果ECameraModuleType中没有F01-F06的枚举值，需要先在CameraTypes.h中添加。
+参考Position（P01-P08）、Rotation（R01-R09）、Distance（D01-D07）的枚举定义格式。
+
+【注意事项】
+
+1. **必须Regenerate：**
+   创建新. h文件后必须：
+   - 保存文件
+   - 右键.uproject → Generate Visual Studio project files
+   - 重新加载解决方案
+   - 编译
+
+2. **API宏替换：**
+   ```cpp
+   // 替换MYPROJECT_API为实际项目的API宏
+   class YOURPROJECT_API UCameraModule_F01_BaseFOV ... 
+   ```
+
+3. **枚举值添加：**
+   如果ECameraModuleType中缺少F01-F06枚举，需要在CameraTypes.h中添加：
+   ```cpp
+   // FOV模块枚举值
+   Module_F01_BaseFOV,
+   Module_F02_Speed_FOV,
+   Module_F03_Aim_FOV,
+   Module_F04_Combat_FOV,
+   Module_F05_Boss_FOV,
+   Module_F06_Impact_FOV,
+   ```
+
+4. **EModuleCategory检查：**
+   确认EModuleCategory枚举中包含`FOV`。
+
+【输出要求】
+
+完成修改后，请报告：
+
+```
+================================================================================
+Sub-Step 3.5.1 完成报告
+================================================================================
+
+【创建的文件】
+- 文件：CameraModule_FOV.h
+- 路径：Source/[ProjectName]/Public/Camera/Modules/
+- 代码行数：约XX行
+
+【定义的模块】
+- ✅ F01: Base FOV (Override, 100)
+- ✅ F02: Speed FOV (Additive, 105)
+- ✅ F03: Aim FOV (Additive, 115)
+- ✅ F04: Combat FOV (Additive, 110)
+- ✅ F05: Boss FOV (Additive, 120)
+- ✅ F06: Impact FOV (Additive, 125)
+
+【编译结果】
+- Regenerate：[已执行/未执行]
+- 编译状态：[成功/失败]
+- 错误数：[数量]
+- 警告数：[数量]
+
+【遇到的问题】
+[如有枚举值缺失或API宏问题，详细描述]
+
+【最终状态】
+✅ FOV模块头文件创建完成，6个模块声明完整
+
+================================================================================
+```
+
+【后续步骤】
+
+F01-F06声明完成后，FOV模块进度：
+- [x] ✅ 3. 5.1: CameraModule_FOV.h（声明）
+- [ ] ⏳ 3.5.2: F01 - Base FOV（下一步）
+- [ ] ⏳ 3.5.3: F02 - Speed FOV
+- [ ] ⏳ 3.5.4: F03 - Aim FOV
+- [ ] ⏳ 3.5.5: F04 - Combat FOV
+- [ ] ⏳ 3.5.6: F05 - Boss FOV
+- [ ] ⏳ 3.5.7: F06 - Impact FOV
+
+**FOV模块完成度：0/6 (0%) → 声明完成，待实现**
+
+完成后准备进入Sub-Step 3.5.2（F01: Base FOV - 基础视野）。
+
+================================================================================

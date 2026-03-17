@@ -1,0 +1,582 @@
+Sub-Step 3.4.3 Prompt
+
+================================================================================
+任务：在CameraModule_Distance. cpp中添加D02 TargetSize_Multiplier实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+D02根据锁定目标的尺寸动态调整相机距离乘数。
+当锁定大型敌人（Boss、巨型怪物）时，相机自动拉远以保持目标在画面内。
+
+【Pipeline中的位置】
+```
+Distance模块计算流程：
+1. D01: BaseDistance = 400cm (Override，基础值)
+2. D02: ×1.3 (Multiplicative，目标尺寸乘数) ← 当前
+   → 400 × 1.3 = 520cm
+3. D03-D07: 后续调整
+```
+
+【当前进度】
+Phase 3 Step 3.4 Sub-Step 3.4.3 (共190个Sub-Step中的第81个)
+前置完成：3.4.2 D01实现 ✅
+
+【任务目标】
+在CameraModule_Distance. cpp中完整实现D02模块，替换现有的占位符。
+
+【⚠️ 重要提醒】
+
+1. **编译前必做步骤：**
+   本Sub-Step只修改现有. cpp文件，不添加新文件。
+   因此**不需要Regenerate**，可以直接编译。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   确认StateConfig的字段路径与项目实际结构一致。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_Distance.cpp
+
+2. **定位修改位置：**
+
+在文件中找到D02的占位符实现部分：
+
+```cpp
+//========================================
+// D02: Target Size Multiplier
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.4.3
+// ... 占位符代码
+```
+
+**将上述占位符代码完整替换为下方的完整实现。**
+
+---
+
+3. **D02完整实现代码：**
+
+**A. ShouldActivate() 实现：**
+
+**当前占位符代码：**
+```cpp
+bool UCameraModule_D02_TargetSize_Multiplier::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Placeholder:  Will be properly implemented in Sub-Step 3.4.3
+	return false;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * ShouldActivate - Determine if target size multiplier should be active
+ * 
+ * D02 activates when: 
+ * - Module is enabled
+ * - Player has a locked target
+ * - Target size exceeds the threshold (significant size)
+ * 
+ * The threshold prevents small enemies from triggering distance changes. 
+ * Only when the target is noticeably larger than normal does the
+ * camera pull back.
+ * 
+ * Priority 110 (after D01), uses Multiplicative policy.
+ * 
+ * Use Cases:
+ * - Large bosses (dragons, giants)
+ * - Mini-bosses larger than regular enemies
+ * - Any enemy that needs more screen space
+ */
+bool UCameraModule_D02_TargetSize_Multiplier::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if player has a locked target
+	if (! Context.InputContext. bHasTarget)
+	{
+		return false;
+	}
+	
+	// Get target size threshold from config
+	float SizeThreshold = StateConfig.Module.Distance.TargetSizeThreshold;
+	
+	// If threshold not configured, use default
+	if (SizeThreshold <= 0.0f)
+	{
+		SizeThreshold = 150.0f;  // Default:  1.5 meters (larger than humanoid)
+	}
+	
+	// Check if target size exceeds threshold
+	float TargetSize = Context.InputContext. TargetSize;
+	if (TargetSize <= SizeThreshold)
+	{
+		return false;  // Target not large enough to trigger
+	}
+	
+	// All conditions met - activate target size multiplier
+	return true;
+}
+```
+
+**说明：**
+- 三个条件：启用 + 有目标 + 目标尺寸超过阈值
+- 阈值防止小敌人触发
+- 默认阈值150cm（大于人形）
+
+---
+
+**B.  Compute() 实现：**
+
+**当前占位符代码：**
+```cpp
+bool UCameraModule_D02_TargetSize_Multiplier:: Compute(...)
+{
+	// Placeholder
+	OutOutput = CreateBaseOutput();
+	OutOutput.DistanceOutput = 1.0f;
+	OutOutput.bHasDistanceOutput = true;
+	OutOutput.bDistanceIsMultiplier = true;
+	return true;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * Compute - Calculate distance multiplier based on target size
+ * 
+ * This module calculates a multiplier that increases camera distance
+ * for larger targets. The goal is to keep large enemies (bosses, giants)
+ * properly framed in the camera view.
+ * 
+ * Steps:
+ * 1. Validate target exists
+ * 2. Get target size and config values
+ * 3. Calculate size above threshold
+ * 4. Calculate multiplier based on size difference
+ * 5. Clamp multiplier to valid range
+ * 6. Calculate dynamic weight
+ * 7. Output with Multiplicative policy
+ * 
+ * Multiplier Calculation:
+ * - Every 100cm above threshold adds (Scale - 1.0) to multiplier
+ * - Example: Scale=1.5, Target=350cm, Threshold=150cm
+ *   - SizeAbove = 200cm
+ *   - MultiplierAdd = (200/100) × (1.5-1.0) = 1.0
+ *   - Multiplier = 1.0 + 1.0 = 2.0 (capped)
+ * 
+ * @param Context The current pipeline execution context
+ * @param StateConfig The current camera state configuration
+ * @param OutOutput Output structure to fill with computed values
+ * @return True if computation succeeded
+ */
+bool UCameraModule_D02_TargetSize_Multiplier:: Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Step 1: Validate target exists
+	if (!Context.InputContext.bHasTarget)
+	{
+		// No target - return multiplier of 1.0 (no change)
+		OutOutput.DistanceOutput = 1.0f;
+		OutOutput.bHasDistanceOutput = true;
+		OutOutput.bDistanceIsMultiplier = true;
+		return false;
+	}
+	
+	// Step 2: Get target size and config values
+	float TargetSize = Context. InputContext.TargetSize;
+	
+	// Get threshold from config
+	float SizeThreshold = StateConfig.Module.Distance.TargetSizeThreshold;
+	if (SizeThreshold <= 0.0f)
+	{
+		SizeThreshold = 150.0f;  // Default: 1.5 meters
+	}
+	
+	// Get distance scale factor from config
+	// This determines how much the multiplier increases per 100cm
+	float DistanceScale = StateConfig.Module.Distance.TargetSizeDistanceScale;
+	if (DistanceScale <= 0.0f)
+	{
+		DistanceScale = 1.5f;  // Default: 1.5x at 100cm above threshold
+	}
+	
+	// Step 3: Calculate how much larger target is than threshold
+	float SizeAboveThreshold = FMath:: Max(0.0f, TargetSize - SizeThreshold);
+	
+	// Step 4: Calculate multiplier addition
+	// Formula: Every 100cm above threshold adds (DistanceScale - 1.0) to multiplier
+	// 
+	// Example calculations:
+	// - Target=200cm, Threshold=150cm, Scale=1.5:
+	//   SizeAbove=50, Add=(50/100)×(1.5-1.0)=0.25, Mult=1.25
+	// - Target=350cm, Threshold=150cm, Scale=1.5:
+	//   SizeAbove=200, Add=(200/100)×(1.5-1.0)=1.0, Mult=2.0 (capped)
+	// - Target=500cm (large boss), Threshold=150cm, Scale=1.5:
+	//   SizeAbove=350, Add=(350/100)×(1.5-1.0)=1.75, Mult=2.0 (capped)
+	float MultiplierAdd = (SizeAboveThreshold / 100.0f) * (DistanceScale - 1.0f);
+	
+	// Step 5: Calculate final multiplier and clamp to valid range
+	// Minimum: 1.0 (no reduction)
+	// Maximum: 2.0 (double distance, prevents excessive pullback)
+	float Multiplier = 1.0f + MultiplierAdd;
+	Multiplier = FMath::Clamp(Multiplier, 1.0f, 2.0f);
+	
+	// Step 6: Calculate dynamic weight based on size significance
+	// Larger targets = higher weight = more influence
+	// Weight reaches 1.0 when target is 200cm above threshold
+	float Weight = FMath:: Clamp(SizeAboveThreshold / 200.0f, 0.0f, 1.0f);
+	
+	// Step 7: Fill output structure
+	OutOutput. DistanceOutput = Multiplier;
+	OutOutput.bHasDistanceOutput = true;
+	OutOutput.bDistanceIsMultiplier = true;  // Mark as multiplier for Stage 5
+	OutOutput.Weight = Weight;
+	
+	return true;
+}
+```
+
+**说明：**
+- 乘数计算基于尺寸超出阈值的部分
+- 每100cm超出增加(Scale-1.0)
+- 乘数范围1.0-2.0（最多双倍距离）
+- 动态权重基于尺寸差异
+
+---
+
+4. **完整的D02代码块（用于复制粘贴）：**
+
+```cpp
+//========================================
+// D02: Target Size Multiplier
+//========================================
+
+/**
+ * ShouldActivate - Activate when target exceeds size threshold
+ */
+bool UCameraModule_D02_TargetSize_Multiplier::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if player has a locked target
+	if (!Context.InputContext.bHasTarget)
+	{
+		return false;
+	}
+	
+	// Get target size threshold
+	float SizeThreshold = StateConfig. Module.Distance. TargetSizeThreshold;
+	if (SizeThreshold <= 0.0f)
+	{
+		SizeThreshold = 150.0f;  // Default: 1.5 meters
+	}
+	
+	// Check if target size exceeds threshold
+	float TargetSize = Context.InputContext.TargetSize;
+	if (TargetSize <= SizeThreshold)
+	{
+		return false;
+	}
+	
+	return true;
+}
+
+/**
+ * Compute - Calculate distance multiplier based on target size
+ */
+bool UCameraModule_D02_TargetSize_Multiplier::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output
+	OutOutput = CreateBaseOutput();
+	
+	// Validate target exists
+	if (!Context.InputContext.bHasTarget)
+	{
+		OutOutput. DistanceOutput = 1.0f;
+		OutOutput. bHasDistanceOutput = true;
+		OutOutput.bDistanceIsMultiplier = true;
+		return false;
+	}
+	
+	// Get target size
+	float TargetSize = Context.InputContext.TargetSize;
+	
+	// Get threshold
+	float SizeThreshold = StateConfig. Module.Distance. TargetSizeThreshold;
+	if (SizeThreshold <= 0.0f)
+	{
+		SizeThreshold = 150.0f;
+	}
+	
+	// Get distance scale factor
+	float DistanceScale = StateConfig.Module.Distance. TargetSizeDistanceScale;
+	if (DistanceScale <= 0.0f)
+	{
+		DistanceScale = 1.5f;
+	}
+	
+	// Calculate size above threshold
+	float SizeAboveThreshold = FMath::Max(0.0f, TargetSize - SizeThreshold);
+	
+	// Calculate multiplier
+	// Every 100cm above threshold adds (DistanceScale - 1.0)
+	float MultiplierAdd = (SizeAboveThreshold / 100.0f) * (DistanceScale - 1.0f);
+	
+	// Clamp multiplier (1.0 to 2.0)
+	float Multiplier = 1.0f + MultiplierAdd;
+	Multiplier = FMath:: Clamp(Multiplier, 1.0f, 2.0f);
+	
+	// Calculate dynamic weight
+	float Weight = FMath::Clamp(SizeAboveThreshold / 200.0f, 0.0f, 1.0f);
+	
+	// Fill output
+	OutOutput.DistanceOutput = Multiplier;
+	OutOutput.bHasDistanceOutput = true;
+	OutOutput.bDistanceIsMultiplier = true;
+	OutOutput.Weight = Weight;
+	
+	return true;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 说明乘数计算公式
+   - 提供具体数值示例
+   - 解释阈值的作用
+   - 所有注释英文
+
+2. **格式：**
+   - Tab缩进
+   - 清晰步骤标注
+   - 方法间空两行
+
+3. **防御性编程：**
+   - 验证目标存在
+   - 配置值默认值处理
+   - Clamp确保有效范围
+
+【技术说明】
+
+**D02的核心机制：**
+
+### 1. 乘数计算公式
+
+**数学公式：**
+```
+SizeAboveThreshold = max(0, TargetSize - Threshold)
+MultiplierAdd = (SizeAboveThreshold / 100) × (Scale - 1.0)
+Multiplier = clamp(1.0 + MultiplierAdd, 1.0, 2.0)
+```
+
+**计算示例：**
+
+| 目标类型 | TargetSize | 阈值 | Scale | 超出 | 乘数 | 最终距离(基础400cm) |
+|---------|-----------|------|-------|------|------|-------------------|
+| 人形敌人 | 100cm | 150cm | 1.5 | 0 | 1.0 | 400cm |
+| 大型敌人 | 200cm | 150cm | 1.5 | 50cm | 1.25 | 500cm |
+| 中型Boss | 300cm | 150cm | 1.5 | 150cm | 1.75 | 700cm |
+| 大型Boss | 500cm | 150cm | 1.5 | 350cm | 2.0(限制) | 800cm |
+
+### 2. 阈值的作用
+
+**为什么需要阈值？**
+
+```
+不使用阈值（假设）：
+- 所有敌人都触发乘数
+- 人形敌人(100cm) → 乘数1.x
+- 相机不断变化，体验差
+
+使用阈值（实际）：
+- 只有大于150cm的敌人触发
+- 人形敌人(100cm) → 不触发，保持400cm
+- 大型敌人(300cm) → 触发，乘数1.75
+- 只在需要时调整
+
+效果：
+- 小敌人：稳定距离
+- 大敌人：自动拉远
+- 平衡 ✅
+```
+
+### 3. 乘数上限的意义
+
+**为什么限制在2.0？**
+
+```
+无上限（假设）：
+- 巨型Boss(1000cm)
+- 超出=850cm
+- MultiplierAdd=(850/100)×0.5=4.25
+- Multiplier=5.25
+- 距离=400×5.25=2100cm（21米！）
+- 太远，看不清战斗
+
+上限2.0（实际）：
+- 任何大小的Boss
+- 最多Multiplier=2.0
+- 最大距离=400×2.0=800cm（8米）
+- 合理距离，Boss可见
+
+设计考虑：
+- 超大Boss另有特殊处理（D07）
+- 2.0是通用的安全上限
+```
+
+### 4. 动态权重
+
+**Weight的作用：**
+
+```cpp
+float Weight = FMath::Clamp(SizeAboveThreshold / 200.0f, 0.0f, 1.0f);
+```
+
+**计算：**
+```
+超出0cm → Weight=0
+超出100cm → Weight=0.5
+超出200cm → Weight=1.0（满权重）
+
+用途：
+- Stage 5混合时使用
+- 较大目标→更强影响
+- 渐变过渡，避免突变
+```
+
+### 5. 与D07(Boss Phase)的区别
+
+| 特性 | D02 (Target Size) | D07 (Boss Phase) |
+|------|-------------------|------------------|
+| **触发条件** | 任何大型目标 | 仅Boss目标 |
+| **基于** | 目标物理尺寸 | Boss战斗阶段 |
+| **优先级** | 110 | 125 |
+| **用途** | 自动适应目标大小 | 阶段性调整 |
+| **典型乘数** | 1.0-2.0 | 由阶段决定 |
+
+**配合使用：**
+```
+场景：锁定大型Boss
+
+D02 (Size): TargetSize=400cm → Multiplier=2.0
+D07 (Phase): Phase 2 → Multiplier=1.2
+
+最终距离(Multiplicative):
+400cm × 2.0 × 1.2 = 960cm
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] ShouldActivate()完整
+   - [ ] Compute()完整
+   - [ ] 所有方法签名与. h一致
+
+3. **逻辑正确性：**
+   - [ ] 检查bHasTarget
+   - [ ] 检查TargetSize > Threshold
+   - [ ] 乘数计算正确
+   - [ ] Clamp范围1.0-2.0
+   - [ ] bDistanceIsMultiplier = true
+   - [ ] 动态Weight计算
+
+4. **字段访问：**
+   - [ ] Context.InputContext.bHasTarget
+   - [ ] Context. InputContext.TargetSize
+   - [ ] StateConfig.Module.Distance.TargetSizeThreshold
+   - [ ] StateConfig.Module.Distance. TargetSizeDistanceScale
+
+【注意事项】
+
+1. **不需要Regenerate**
+
+2. **字段缺失处理：**
+   ```cpp
+   // 如果StateConfig. Module.Distance结构中缺少字段
+   // 直接使用默认值
+   float SizeThreshold = 150.0f;
+   float DistanceScale = 1.5f;
+   ```
+
+3. **默认值说明：**
+   - SizeThreshold = 150cm（大于人形敌人）
+   - DistanceScale = 1.5（每100cm超出增加0.5乘数）
+   - 乘数范围 = 1.0-2.0（最多双倍距离）
+
+4. **测试建议：**
+   - 锁定人形敌人（100cm）→ 不应触发
+   - 锁定大型敌人（250cm）→ 应触发，乘数≈1.5
+   - 锁定巨型Boss（500cm）→ 应触发，乘数=2.0（上限）
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 3.4.3 完成报告
+================================================================================
+
+【修改内容】
+- 文件：CameraModule_Distance.cpp
+- 修改位置：D02模块
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ ShouldActivate：检查目标+尺寸阈值
+- ✅ Compute：计算尺寸乘数
+
+【编译结果】
+- 编译状态：[成功/失败]
+
+【最终状态】
+✅ D02完成，根据目标尺寸调整相机距离
+
+================================================================================
+```
+
+【后续步骤】
+
+D02完成后：
+- [x] ✅ 3.4.2: D01 - BaseDistance
+- [x] ✅ 3.4.3: D02 - TargetSize_Multiplier
+- [ ] ⏳ 3.4.4: D03 - Speed_Offset（下一步）
+
+**Distance模块完成度：2/7 (28. 6%)**
+
+================================================================================

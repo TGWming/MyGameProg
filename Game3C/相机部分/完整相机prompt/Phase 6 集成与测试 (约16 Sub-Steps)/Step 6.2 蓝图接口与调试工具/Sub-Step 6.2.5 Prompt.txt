@@ -1,0 +1,189 @@
+Sub-Step 6.2.5 Prompt
+
+================================================================================
+任务：更新SoulsCameraManager - 添加便捷查询接口
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4. 27 C++项目。
+为Manager添加便捷查询函数，支持蓝图库和调试组件使用。
+
+【当前进度】
+Phase 6 Step 6.2 Sub-Step 6.2.5 (共190个Sub-Step中的第183个)
+前置完成：6.2.4 调试组件实现
+这是Step 6.2的最后一个Sub-Step。
+
+【任务目标】
+更新文件：
+- Source/MyProject/Camera/Core/SoulsCameraManager.h
+- Source/MyProject/Camera/Core/SoulsCameraManager. cpp
+
+添加便捷查询接口，使蓝图库和调试组件可以直接获取相机数据。
+
+【现有代码分析】
+SoulsCameraManager已有的相关接口：
+- GetCurrentOutput() -> FSoulsCameraOutput ✓ (已存在)
+
+已有的成员变量：
+- CurrentOutput (FSoulsCameraOutput) ✓
+- ModuleRegistry (UCameraModuleRegistry*) ✓
+- ModifierManager (UCameraModifierManager*) ✓
+- FrameCounter (uint64) ✓
+
+【需要检查并添加的函数】
+以下函数可能已存在，需要先检查：
+
+1. GetCurrentCameraLocation() -> FVector
+2. GetCurrentCameraRotation() -> FRotator
+3. GetCurrentFocusPoint() -> FVector
+4. GetCurrentDistance() -> float
+5. GetCurrentFOV() -> float
+6. GetDebugString() -> FString
+
+【具体要求】
+
+1. 首先读取当前的SoulsCameraManager. h，检查上述函数是否已存在
+
+2. 如果函数不存在，在SoulsCameraManager.h的public区域添加声明：
+
+```cpp
+//========================================
+// Convenience Query Functions
+// 这些函数提供对CurrentOutput数据的便捷访问
+//========================================
+
+/** Get current camera world location */
+UFUNCTION(BlueprintPure, Category = "Camera|Query")
+FVector GetCurrentCameraLocation() const;
+
+/** Get current camera rotation */
+UFUNCTION(BlueprintPure, Category = "Camera|Query")
+FRotator GetCurrentCameraRotation() const;
+
+/** Get current focus point (where camera looks at) */
+UFUNCTION(BlueprintPure, Category = "Camera|Query")
+FVector GetCurrentFocusPoint() const;
+
+/** Get current camera distance from focus point */
+UFUNCTION(BlueprintPure, Category = "Camera|Query")
+float GetCurrentDistance() const;
+
+/** Get current field of view */
+UFUNCTION(BlueprintPure, Category = "Camera|Query")
+float GetCurrentFOV() const;
+
+/** Get formatted debug information string */
+UFUNCTION(BlueprintPure, Category = "Camera|Debug")
+FString GetDebugString() const;
+```
+
+3. 如果函数不存在，在SoulsCameraManager. cpp中添加实现：
+
+```cpp
+//========================================
+// Convenience Query Functions Implementation
+//========================================
+
+FVector USoulsCameraManager:: GetCurrentCameraLocation() const
+{
+    return CurrentOutput.GetCameraLocation();
+}
+
+FRotator USoulsCameraManager:: GetCurrentCameraRotation() const
+{
+    return CurrentOutput. Rotation;
+}
+
+FVector USoulsCameraManager::GetCurrentFocusPoint() const
+{
+    return CurrentOutput.FocusPoint;
+}
+
+float USoulsCameraManager::GetCurrentDistance() const
+{
+    return CurrentOutput.Distance;
+}
+
+float USoulsCameraManager::GetCurrentFOV() const
+{
+    return CurrentOutput.FOV;
+}
+
+FString USoulsCameraManager::GetDebugString() const
+{
+    FString Result;
+
+    Result += TEXT("=== Souls Camera Debug ===\n");
+    Result += FString::Printf(TEXT("State: %s\n"), *GetCurrentStateName().ToString());
+    Result += FString::Printf(TEXT("Category: %s\n"), *UEnum::GetValueAsString(GetCurrentCategory()));
+    Result += FString::Printf(TEXT("In Transition:  %s\n"), IsInTransition() ? TEXT("Yes") : TEXT("No"));
+    Result += TEXT("\n");
+    
+    Result += TEXT("[Transform]\n");
+    Result += FString::Printf(TEXT("Focus: (%.1f, %. 1f, %.1f)\n"), 
+        CurrentOutput. FocusPoint. X, CurrentOutput. FocusPoint. Y, CurrentOutput. FocusPoint. Z);
+    Result += FString::Printf(TEXT("Rotation: (P: %. 1f, Y:  %.1f, R: %.1f)\n"), 
+        CurrentOutput. Rotation.Pitch, CurrentOutput. Rotation.Yaw, CurrentOutput. Rotation.Roll);
+    Result += FString::Printf(TEXT("Distance: %.2f\n"), CurrentOutput.Distance);
+    Result += FString:: Printf(TEXT("FOV: %. 2f\n"), CurrentOutput.FOV);
+    Result += TEXT("\n");
+    
+    Result += TEXT("[Lock-On]\n");
+    Result += FString:: Printf(TEXT("Has Target: %s\n"), HasLockOnTarget() ? TEXT("Yes") : TEXT("No"));
+    if (HasLockOnTarget())
+    {
+        AActor* Target = GetLockOnTarget();
+        Result += FString::Printf(TEXT("Target:  %s\n"), Target ?  *Target->GetName() : TEXT("Invalid"));
+    }
+    Result += TEXT("\n");
+    
+    Result += TEXT("[Collision]\n");
+    Result += FString::Printf(TEXT("Active: %s\n"), IsCollisionActive() ? TEXT("Yes") : TEXT("No"));
+    Result += FString:: Printf(TEXT("Recovery: %s\n"), IsInCollisionRecovery() ? TEXT("Yes") : TEXT("No"));
+    Result += FString::Printf(TEXT("Character Occluded:  %s\n"), IsCharacterOccluded() ? TEXT("Yes") : TEXT("No"));
+    Result += FString:: Printf(TEXT("Target Occluded:  %s\n"), IsTargetOccluded() ? TEXT("Yes") : TEXT("No"));
+    Result += FString:: Printf(TEXT("Adjusted Distance: %.2f\n"), GetCollisionAdjustedDistance());
+    Result += TEXT("\n");
+    
+    Result += TEXT("[System]\n");
+    Result += FString:: Printf(TEXT("Frame: %llu\n"), FrameCounter);
+    Result += FString::Printf(TEXT("Modules: %d\n"), ModuleRegistry ? ModuleRegistry->GetModuleCount() : 0);
+    Result += FString:: Printf(TEXT("Active Modifiers: %d\n"), ModifierManager ? ModifierManager->GetActiveModifierCount() : 0);
+
+    return Result;
+}
+```
+
+4. 添加位置说明：
+- . h文件：在 "Output Access" 或 "Debug" 区域之后添加新的 "Convenience Query Functions" 区域
+- .cpp文件：在文件末尾或 Debug 相关函数附近添加实现
+
+【执行步骤】
+
+1. 读取 Source/MyProject/Camera/Core/SoulsCameraManager.h
+2. 检查6个目标函数是否已存在
+3. 对于不存在的函数，添加声明
+4. 读取 Source/MyProject/Camera/Core/SoulsCameraManager. cpp
+5. 对于不存在的函数，添加实现
+6. 报告哪些函数已存在，哪些是新添加的
+
+【Step 6.2 完成验证清单】
+完成本Sub-Step后，Step 6.2应包含：
+- ✅ 6. 2.1:  SoulsCameraBlueprintLibrary.h - 蓝图函数库头文件
+- ✅ 6.2.2: SoulsCameraBlueprintLibrary.cpp - 蓝图函数库实现
+- ✅ 6.2.3: SoulsCameraDebugComponent. h - 调试组件头文件
+- ✅ 6.2.4: SoulsCameraDebugComponent.cpp - 调试组件实现
+- ✅ 6.2.5: SoulsCameraManager更新 - 便捷查询接口
+
+【验证标准】
+- 编译通过
+- 蓝图中可调用所有查询函数
+- GetDebugString()返回完整的调试信息
+- 不重复添加已存在的函数
+
+【输出要求】
+1. 首先报告检查结果（哪些函数已存在/不存在）
+2. 只输出需要添加的新代码
+3. 标明代码在文件中的添加位置
+4. 如果所有函数都已存在，输出"所有便捷查询函数已存在，无需修改"
+================================================================================

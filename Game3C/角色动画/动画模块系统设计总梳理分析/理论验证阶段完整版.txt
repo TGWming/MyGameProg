@@ -1,0 +1,3494 @@
+理论交叉验证/多方信息补充阶段详情：
+
+需求大致背景
+
+项目开发平台：虚幻引擎4.27
+项目类型：类魂
+对标操作机制参考作品：血源诅咒/匹诺曹谎言/黑魂3
+对标氛围营造参考作品：生化危机2重置版/寂静岭2/死魂曲
+项目开发方式：C++/蓝图
+代码蓝图负责部分：
+
+C++：角色相机系统组件，debug组件，锁定与切换锁定组件，敌人侦测组件，玩家角色数值组件
+蓝图：场景触碰盒子，天气系统，场景灯效，VFX相关逻辑，音乐系统逻辑，氛围音效逻辑，CAMERA_SEQUENCER（过长动画类）逻辑，UI逻辑
+
+目前开发程度：
+
+-场景进行中
+-玩家角色相机总组件大致完成，通过data table增加视角变化
+-DEBUG 组件大致完成，按需求添加
+-玩家控制，大致完成，会按照新需求添加映射
+-玩家角色动画，前后左右移动大概完成，其余所有需要重新做好blend space和状态机，开发程度10%
+
+核心需求：
+接下来需要开发游戏3C里的CHARACTER，目前普通的MOVEMENT已经大概有了，不过还需要细化动画，但是我现在缺少STATE MACHINE或者可能需要使用到的BLACK BOARD。
+
+根据之前我做过的搜查，角色动画，可能在一些判定上用代码可以但总体尽量被建议使用UE4.27里的状态机+BLACK BOARD之类的方式实现。
+
+而现在我处于比较乱的状态。我知道需要准备好不同动作所有的ANIM，也需要做好BLEND SPACE，然后在BLEND SPACE里做好这个属性（或者动作分类）所有的STATE MACHINE，最后通过角色在游戏内的判定，触发调用哪个BLEND SPACE等等。
+
+所以我需要给我设计一套管线，从角色ANIM开始，需要准备什么，准备多少，（例如移动，战斗，交互，爬楼梯等等），需要给他们进行什么设计，例如是否需要做BLEND SPACE，状态机如何制作，整理一套纲领，理论支撑以及计划，需要按照项目类型来设计。
+
+到最后是否需要用C++或者单纯蓝图来变换玩家角色不同的动作
+
+另外这个纲领还需要考虑到属于UE4.27一个通用性纲领和设计原则，因为敌人也会需要制作动画动作状态机，所以整个纲领是被延伸到不同游戏角色身上，敌人，可能敌对的角色，bOSS小怪，以及玩家自己，这一点需要注意。
+
+最后，整个纲领也需要做好清单列清楚，最好是表格形式让我一目了然，然后再拓展问题，等你给出纲领后，我会把你的纲领给另一个LLM做一下交叉验证，看看你们双方是否可以对齐方向。
+
+注意一点：给出的纲领时候，不要在一旁给出文件，我不需要下载，要直接在对话内给出TEXT或者CODE 框，支持一键复制的那种形式。
+
+======================================================================================================================================================
+==============================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================
+
+/////一阶段 交叉验证：
+
+下面我把**上一条完整纲领按原内容重发**，并把原先的“TEXT 框”全部改成**对话内可直接复制的 CODE 框**。  
+我尽量保持**内容与结构一致**，方便你整段复制。
+
+---
+
+# 一、先给结论：你现在最需要的不是“先做更多动作”，而是先统一“动作架构”
+
+你现在的问题，本质上不是缺某个动画，而是缺一套**统一角色动作管线**。  
+对于你这个项目（UE4.27、类魂、C++/蓝图混合开发），推荐采用这套核心原则：
+
+```text
+1. 不要把“每个动作”都直接写成分散逻辑
+2. 先建立统一的“角色动作分层架构”
+3. 玩家、敌人、Boss 共用同一套设计语言，但允许资产和细节不同
+4. 动画驱动表现，代码驱动规则，蓝图驱动拼装
+5. Locomotion（移动）/ Action（动作）/ HitReact（受击）/ State（状态）分层
+6. AnimBP 负责“怎么播”
+7. Character/Component/C++ 负责“为什么播”
+8. AI 决策用 Blackboard + Behavior Tree
+9. 玩家角色本身一般不依赖 Blackboard 做动作状态机
+10. 玩家和敌人都应有统一的 Gameplay State / Action State / Overlay State / Locomotion State
+11. 尽量减少“状态爆炸”，避免把每个动作都做成独立 State
+12. 优先使用 Montage 承载高优先级动作；State Machine 承载持续性状态
+```
+
+---
+
+# 二、先纠正一个关键认知：UE4.27 里玩家角色动画主线，不建议依赖 Blackboard
+
+这是很重要的一点。
+
+## 1）Blackboard 的主要用途
+Blackboard 主要是给 **AI 行为决策** 用的，通常配合：
+
+- Behavior Tree
+- AIController
+- 感知系统
+- 敌人战斗状态切换
+
+也就是说：
+
+- **敌人/BOSS**：很适合用 Blackboard
+- **玩家角色**：通常**不需要**依赖 Blackboard 做动画状态控制
+
+## 2）玩家角色动画应该怎么做
+玩家角色更推荐：
+
+- **Character / ActorComponent / C++** 维护状态
+- **AnimInstance / AnimBP** 读取状态并驱动动画
+- **Montage** 处理攻击、闪避、喝药、处决、交互等高优先动作
+- **State Machine + Blend Space** 处理持续状态，如移动、战斗移动、受伤硬直、倒地、攀爬等
+
+## 3）你这个项目最合理的分工
+```text
+玩家：
+- 输入 -> Character/C++ -> Gameplay State / Action State
+- AnimBP 根据这些状态切换 Locomotion、战斗姿态、回避、攻击、受击等
+- 不需要 Blackboard 作为主状态来源
+
+敌人/Boss：
+- 感知/距离/仇恨/阶段 -> Blackboard
+- AIController / BT 决策“追击、绕圈、攻击、撤步、转阶段”
+- Character / Components 执行动作
+- AnimBP 同样读取统一状态变量
+- Blackboard 不直接等于动画状态机，但可以提供动画决策输入
+```
+
+---
+
+# 三、推荐的总架构：适合类魂项目的“角色动画系统四层模型”
+
+我建议你把所有角色统一拆成 4 层：
+
+```text
+第一层：Locomotion Layer（移动层）
+- Idle / Walk / Jog / Run / Sprint
+- Start / Stop / Pivot / Turn In Place
+- Strafe / Lock-on Move
+- Crouch / Ladder / Fall / Land
+
+第二层：Action Layer（动作层）
+- Light Attack
+- Heavy Attack
+- Charged Attack
+- Dodge / Step / Roll
+- Guard / Parry / Backstab / Execution
+- Use Item / Interact / Lever / Door
+
+第三层：Reaction Layer（反应层）
+- Hit React（轻/中/重）
+- Stagger
+- Knockdown
+- Launch / Wall Hit
+- Death
+- Recovery / Get Up
+
+第四层：State/Mode Layer（模式层）
+- Normal Exploration
+- Combat
+- Lock-on Combat
+- Aiming / Special Weapon Mode
+- Climb / Ladder
+- Interaction
+- Cinematic / Disabled Input
+```
+
+### 为什么这样拆
+因为类魂游戏不是普通动作游戏，它的动作不是单一“播放动画”，而是**模式切换 + 动作覆盖 + 判定窗口 + 资源消耗**的组合。
+
+---
+
+# 四、你现在最该先建立的“统一状态字典”
+
+先不要急着搭状态机，先统一所有角色通用的状态枚举。  
+这是整个系统是否会乱掉的关键。
+
+---
+
+## 4.1 推荐统一枚举
+
+```cpp
+ECharacterMainState
+- Normal
+- Combat
+- Interaction
+- Climb
+- HitReact
+- Dead
+- Disabled
+- Cinematic
+
+ELocomotionState
+- Idle
+- Start
+- Move
+- Stop
+- Pivot
+- TurnInPlace
+- JumpStart
+- InAir
+- Land
+- Sprint
+- DodgeMove
+- LadderMove
+
+EOverlayState
+- Unarmed
+- OneHandedWeapon
+- TwoHandedWeapon
+- Firearm
+- Torch
+- Special
+
+EActionState
+- None
+- LightAttack
+- HeavyAttack
+- ChargedAttack
+- Dodge
+- StepBack
+- Guard
+- Parry
+- UseItem
+- Interact
+- Execution
+- Skill
+- Heal
+
+EHitReactState
+- None
+- LightHit
+- MediumHit
+- HeavyHit
+- Stagger
+- Knockdown
+- GetUp
+- Death
+
+EMovementStyle
+- FreeMove
+- LockOnStrafe
+- CautiousWalk
+- Sprint
+- Ladder
+
+ERotationMode
+- OrientToMovement
+- OrientToTarget
+- ManualControl
+
+EGait
+- Walk
+- Run
+- Sprint
+```
+
+---
+
+## 4.2 这些状态不要全部塞进一个枚举
+你最容易犯的错误是：
+
+```text
+Idle
+Run
+Attack
+Hit
+Dead
+CombatIdle
+CombatRun
+CombatAttack
+CombatHit
+LockOnRun
+LockOnAttack
+...
+```
+
+这样会状态爆炸。
+
+正确做法是拆开：
+
+```text
+MainState = Combat
+LocomotionState = Move
+OverlayState = OneHandedWeapon
+MovementStyle = LockOnStrafe
+ActionState = None
+```
+
+AnimBP 再根据多个变量组合决定播放什么动画。
+
+---
+
+# 五、类魂项目下，从 ANIM 资源准备开始，你应该准备什么
+
+下面给你一个**玩家/敌人/Boss 通用的动作资源筹备表**。  
+这不是绝对最小值，而是比较合理、可扩展、符合类魂项目的资产规划。
+
+---
+
+## 5.1 动作资产大类总表
+
+```text
+【A. 基础移动类】
+1. Idle（站立）
+2. Walk/Run 前后左右
+3. Start/Stop
+4. Pivot / 急停转向
+5. Turn In Place（原地转身）
+6. Jump/Drop/Fall/Land（如果项目保留）
+7. Stair / Slope 适配
+8. Lock-on Strafe 移动
+9. Sprint
+10. Crouch（如有）
+11. Ladder（如有）
+
+【B. 战斗姿态类】
+1. 战斗待机
+2. 武器持有姿态
+3. 锁定移动姿态
+4. 防御姿态
+5. 蓄力准备姿态
+6. 受威胁警戒姿态（敌人可用）
+
+【C. 攻击动作类】
+1. 轻攻击 1/2/3 连段
+2. 重攻击 1/2
+3. 跑攻
+4. 闪避攻击
+5. 背刺/处决
+6. 蓄力攻击
+7. 空间位移动作（突进、后撤斩）
+8. 技能动作
+9. 特殊武器动作
+
+【D. 防御/回避类】
+1. Dodge 前/后/左/右
+2. Step 前/后/左/右
+3. Guard Start/Loop/End
+4. Parry Start/Success/Fail
+5. Perfect Guard（如有）
+
+【E. 受击反馈类】
+1. 轻受击（前后左右）
+2. 中受击（前后��右）
+3. 重受击（前后左右）
+4. Stagger
+5. Knockdown
+6. Wall Hit
+7. Launch/Fall
+8. Get Up
+
+【F. 交互类】
+1. 拉杆
+2. 开门
+3. 拾取
+4. 调查
+5. 推物/搬运（如有）
+6. 对话进入/退出
+
+【G. 生存与氛围类】
+1. 喝药/使用消耗品
+2. 疲惫/低血
+3. 中毒/异常状态循环
+4. 恐惧/惊吓/观察（敌人/NPC 可用）
+5. 处决被命中者的被动演出
+
+【H. 死亡类】
+1. 普通死亡
+2. 重击死亡
+3. 击飞死亡
+4. 处决死亡
+5. 倒地死亡循环
+```
+
+---
+
+## 5.2 对“准备多少”的建议：按优先级分批做
+
+不要一次性把所有动画做完。  
+建议按 **P0 / P1 / P2** 三阶段筹备。
+
+### P0：必须先做，才能开始真正验证 3C
+```text
+【P0 基础验证包】
+- Idle
+- Walk/Run 8方向或至少前后左右
+- Start / Stop
+- Turn In Place
+- Lock-on Strafe 8方向
+- 战斗待机
+- 轻攻击 3段
+- 重攻击 1~2段
+- Dodge 4方向
+- 轻受击 4方向
+- Stagger
+- Death
+- Heal/Use Item
+- Interact
+- Land
+```
+
+### P1：进入正式战斗体验
+```text
+【P1 战斗完善包】
+- Sprint
+- Run Attack
+- Dodge Attack
+- Guard Start/Loop/End
+- Parry Start/Success/Fail
+- Heavy Hit
+- Knockdown / Get Up
+- Backstab / Execution
+- Combat Turn / Combat Pivot
+- Weapon Equip / Unequip
+- 空挥恢复动作区分
+```
+
+### P2：内容深化与敌人扩展
+```text
+【P2 拓展内容包】
+- Ladder
+- 特殊武器形态动作
+- Boss phase transition
+- 特殊异常状态动作
+- 惊吓/搜查/巡逻/警戒（敌人）
+- 处决双人同步演出
+- 更细的命中方向
+- 更复杂的环境交互
+```
+
+---
+
+# 六、是否所有动作都要做 Blend Space？答案：不是
+
+这是第二个关键点。
+
+## 6.1 适合做 Blend Space 的
+**连续变化、参数驱动** 的动作适合 Blend Space：
+
+```text
+适合 Blend Space：
+- 普通移动（Speed + Direction）
+- 锁定移动（Forward/Right 或 Speed + Direction）
+- 战斗待机移动
+- 受伤移动（如果有）
+- 爬梯移动
+- 警戒巡逻移动（敌人）
+```
+
+## 6.2 不适合做 Blend Space 的
+**离散事件、高优先级行为** 更适合 Montage / 单独 State：
+
+```text
+不适合 Blend Space：
+- 攻击连段
+- 处决
+- 背刺
+- 喝药
+- 拉杆开门
+- 受击大硬直
+- 倒地
+- 起身
+- 死亡
+- 特殊技能
+- Boss 转阶段
+```
+
+---
+
+# 七、推荐的 AnimBP 结构：UE4.27 类魂项目标准模板
+
+我建议你每个角色类型都遵循同一套 AnimBP 组织结构。  
+不是完全共用一个 AnimBP，而是**共用结构模板**。
+
+---
+
+## 7.1 AnimBP 建议分区
+
+```text
+AnimBP 建议分为：
+
+1. Event Graph
+- 从 Character / Components 拉取状态
+- 缓存速度、方向、是否锁定、是否在空中、是否战斗中、是否受击等
+
+2. AnimGraph
+- Base Locomotion State Machine
+- Combat Locomotion State Machine
+- Overlay / Additive Layer
+- Slot（Montage）
+- Aim/Look Offset（如果需要）
+- IK / Foot Placement（后期）
+- Turn In Place
+- Layered Blend Per Bone（上半身覆盖）
+- Cached Pose
+
+3. State Machine 分层
+- Grounded
+- InAir
+- Locomotion
+- Combat Locomotion
+- HitReact
+- Ladder
+- Dead
+
+4. Montage Slot 规划
+- FullBody
+- UpperBody
+- HitReact
+- Additive
+- Execution/Cinematic
+```
+
+---
+
+## 7.2 一个非常重要的原则：State Machine 承载“持续状态”，Montage 承载“动作事件”
+
+```text
+State Machine 适合：
+- Idle/Move/LockOnMove
+- Combat Idle / Combat Move
+- InAir / Land
+- Ladder
+- Downed / GetUp（也可混合）
+- Guard Loop（看需求）
+
+Montage 适合：
+- 轻重攻击
+- 闪避
+- 喝药
+- 交互
+- 受击（尤其需要窗口控制时）
+- 处决
+- 技能
+- 武器切换
+```
+
+### 对你这个项目的建议
+类魂项目里，**攻击、闪避、受击、交互** 大多建议用 **Montage**。  
+因为这些动作通常需要：
+
+- 精准时机
+- 根运动 / 位移控制
+- 命中窗口
+- 霸体窗口
+- 可打断窗口
+- 输入缓存
+- 连段窗口
+
+这些都比纯 State Machine 更适合 Montage 管理。
+
+---
+
+# 八、推荐的“状态机最小集合”
+
+你现在需要的是**最小可控状态机**，不要一开始做得太大。
+
+---
+
+## 8.1 玩家角色状态机最小集合
+
+```text
+Player AnimBP State Machines
+
+1. Grounded
+- Idle/Move（非战斗）
+- Combat Idle/Move（战斗）
+- LockOn Strafe Move
+- Sprint
+- Turn In Place
+- Start/Stop/Pivot（可先简化）
+
+2. InAir
+- JumpStart（可选）
+- Fall
+- Land
+
+3. Ladder（如果有）
+- Enter
+- Loop
+- Exit
+
+4. Downed
+- Knockdown Loop
+- GetUp
+
+5. Dead
+- Death Pose / Loop
+```
+
+### 其中攻击/闪避/受击不强制塞进 State Machine
+而是让它们走 Montage Slot。
+
+---
+
+## 8.2 敌人/Boss 状态机最小集合
+
+```text
+Enemy/Boss AnimBP State Machines
+
+1. Grounded
+- Idle
+- Patrol Move
+- Alert Move
+- Combat Move
+- Strafe Move（精英/Boss）
+
+2. InAir（若需要）
+- Fall
+- Land
+
+3. HitReact
+- Light
+- Heavy
+- Stagger
+- Knockdown
+
+4. Special State
+- Phase Change
+- Enraged
+- Summon
+- Cast
+
+5. Dead
+```
+
+---
+
+# 九、推荐的角色动画开发顺序
+
+这个顺序很重要。  
+你现在如果顺序错了，会在 2~3 周后陷入完全不可维护。
+
+---
+
+## 9.1 正确顺序
+```text
+阶段1：统一动作设计语言
+- 定义所有状态枚举
+- 定义命名规范
+- 定义动作分类
+- 定义 AnimBP 输入变量
+
+阶段2：建立最小 Locomotion
+- 非战斗移动 Blend Space
+- 战斗待机/战斗移动 Blend Space
+- Lock-on Strafe Blend Space
+- Turn In Place
+- Start/Stop（先简化也行）
+
+阶段3：接入核心动作 Montage
+- Light Attack
+- Heavy Attack
+- Dodge
+- HitReact
+- Heal
+- Interact
+
+阶段4：建立动作规则系统
+- 输入缓存
+- 连段窗口
+- 耐力消耗
+- 动作锁定/可打断
+- 受击中断
+- 无敌帧/霸体帧
+
+阶段5：扩展敌人和 Boss
+- 复用统一状态结构
+- 用 Blackboard/BT 控制决策
+- 保持 AnimBP 变量接口一致
+
+阶段6：后期增强
+- IK
+- Foot Placement
+- Distance Matching（UE4.27 受限，谨慎）
+- Motion Warping（4.27 原生不足，谨慎）
+- 更复杂转向与位移修正
+```
+
+---
+
+# 十、你最需要的“角色动作数据驱动表”
+
+你说你已经在相机上通过 DataTable 增加视角变化。  
+很好。动作系统也建议部分数据驱动。
+
+---
+
+## 10.1 推荐数据驱动的内容
+```text
+建议 DataTable / DataAsset 驱动：
+- 动作ID
+- 动作类型（攻击/闪避/交互/受击）
+- 对应 Montage
+- 消耗耐力
+- 是否锁定朝向
+- 是否允许转向修正
+- 是否可被中断
+- 可取消窗口
+- 连段输入窗口
+- 命中帧窗口
+- 根运动开关
+- 位移倍率
+- 播放速率
+- AI 可用性
+- 武器类型限制
+- Overlay 限制
+```
+
+---
+
+## 10.2 这会极大帮助你后面扩展武器与敌人
+因为类魂项目最终不是“角色会不会播动画”，而是：
+
+- 哪把武器用哪套动作
+- 哪个敌人共享哪套动作
+- 哪个 Boss 哪个阶段换动作规则
+- 哪些动作能被打断 / 取消 / 派生
+
+---
+
+# 十一、C++ 和蓝图到底怎么分工最合理
+
+你问得很关键：  
+**最后是否需要用 C++，或者单纯蓝图来变换玩家角色不同动作？**
+
+我的结论是：
+
+```text
+结论：
+1. 可以纯蓝图做，但你的项目不建议
+2. 你的项目类型���适合“C++管理规则 + 蓝图/AnimBP管理表现”
+3. 动画切换本身不一定必须写C++
+4. 但动作状态、输入缓存、战斗规则、组件化接口，强烈建议用C++
+```
+
+---
+
+## 11.1 推荐分工表
+
+```text
+【C++ 更适合负责】
+- 角色基础状态枚举与状态流转
+- 输入解析与输入缓存
+- 动作请求系统（TryAttack / TryDodge / TryInteract）
+- 耐力、韧性、硬直、霸体等规则
+- 锁定组件、敌人检测组件与动作联动
+- 动作可执行性判断（CanAttack / CanDodge）
+- 命中、受击、打断逻辑
+- 动作数据读取（DataTable/DataAsset）
+- 对 AnimBP 暴露统一变量接口
+
+【蓝图更适合负责】
+- AnimBP 状态机搭建
+- Blend Space 组织
+- Montage 通知事件对接
+- 特效、音效、镜头震动、屏幕反馈
+- 关卡交互动画拼装
+- Boss 特殊演出逻辑
+- 美术和设计频繁调参内容
+
+【一定不要让蓝图独占的部分】
+- 核心战斗规则
+- 耐力扣减与恢复
+- 动作打断规则
+- 连段许可规则
+- 无敌帧/霸体帧
+- 角色主状态切换条件
+```
+
+---
+
+# 十二、推荐的“动作请求制”而不是“直接播放制”
+
+你后续一定要采用这个思想。
+
+不要这���：
+
+```text
+按下攻击键 -> 直接在蓝图里 Play Montage Attack_01
+```
+
+应该这样：
+
+```text
+按下攻击键
+-> Character/C++ 发起 TryDoAction(EActionState::LightAttack)
+-> 检查当前状态是否允许
+-> 检查耐力是否足够
+-> 检查是否在可连段窗口
+-> 选择正确的动作数据
+-> 通知 AnimInstance / 播放对应 Montage
+-> Montage Notify 回传命中窗口 / 连段窗口 / 结束事件
+-> Character 更新状态
+```
+
+### 优点
+- 玩家、敌人、Boss 都能统一
+- 后期加武器不崩
+- 后期加敌人不崩
+- 易于调试
+- 易于复用
+
+---
+
+# 十三、你需要的 Blackboard 该怎么用
+
+再���调一次：**Blackboard 重点是给 AI，不是给玩家主动作系统。**
+
+---
+
+## 13.1 敌人/Boss Blackboard 推荐字段
+
+```text
+TargetActor
+HomeLocation
+SpawnLocation
+DistanceToTarget
+HasLineOfSight
+IsAlerted
+IsInCombat
+CanAttack
+CanStrafe
+CanUseSkill
+IsPhase2
+CurrentPhase
+LastKnownTargetLocation
+DesiredRange
+IsStunned
+IsDead
+PatrolIndex
+InvestigationLocation
+```
+
+---
+
+## 13.2 Blackboard 与动画系统的关系
+```text
+Blackboard 不直接控制“播哪一帧动画”
+而是控制：
+- 当前是否进入战斗
+- 是否接近目标
+- 是否使用技能
+- 是否需要撤退
+- 是否转阶段
+
+然后：
+AIController / Character / Component
+-> 修改角色状态
+-> AnimBP 读取状态
+-> State Machine / Montage 播放对应动作
+```
+
+---
+
+# 十四、玩家/敌人/Boss 的统一通用纲领
+
+这是你最需要拿去和另一个 LLM 对齐的部分。  
+我给你一套“**可扩展到所有角色的统一模板**”。
+
+---
+
+## 14.1 通用角色动画架构模板
+
+```text
+任何角色（玩家/敌人/Boss/NPC敌对角色）都统一具备：
+
+一、基础数据层
+- Skeleton
+- Physics Asset
+- Animation Sequences
+- Blend Space
+- Montage
+- AnimBP
+- DataTable / DataAsset（动作数据）
+
+二、逻辑层
+- Character Base（C++）
+- Character Components（Combat / Stats / Targeting / Detection）
+- AnimInstance Base（C++可选）
+- AIController + BehaviorTree + Blackboard（AI角色）
+
+三、状态层
+- MainState
+- LocomotionState
+- ActionState
+- OverlayState
+- HitReactState
+- MovementStyle
+- RotationMode
+
+四、播放层
+- State Machine 处理持续状态
+- Blend Space 处理连续移动
+- Montage 处理离散动作
+- Additive 处理上半身/细节修正
+- Notify 处理时机回调
+
+五、反馈层
+- VFX
+- SFX
+- Camera Shake
+- Hit Pause
+- UI 提示
+- Debug 可视化
+```
+
+---
+
+# 十五、推荐命名规范
+
+你现在项目会越来越大，命名一定要先定下来。
+
+```text
+动画序列：
+AN_Character_Action_Direction_Variant
+例：
+AN_Player_LightAttack_01
+AN_Player_Dodge_F
+AN_Enemy_Grunt_HitReact_B
+AN_Boss_PhaseShift_01
+
+Blend Space：
+BS_Character_Locomotion_Type
+例：
+BS_Player_Locomotion
+BS_Player_LockOnStrafe
+BS_Enemy_CombatMove
+
+Montage：
+AM_Character_Action_Category
+例：
+AM_Player_LightCombo
+AM_Player_Dodge
+AM_Enemy_AttackSet_A
+AM_Boss_Execution
+
+AnimBP：
+ABP_CharacterName
+例：
+ABP_Player
+ABP_EnemyBase
+ABP_BossHunter
+
+状态枚举：
+ECharacterMainState
+EActionState
+ELocomotionState
+
+DataTable：
+DT_ActionData_Player
+DT_ActionData_Enemy_Grunt
+DT_WeaponActionMap
+
+Notify：
+ANS_EnableHitbox
+AN_EnableComboWindow
+AN_DisableInputBuffer
+AN_PlayFootstepSFX
+```
+
+---
+
+# 十六、你最关心的“从 ANIM 开始，到最后角色调用”的完整管线
+
+下面给你一个完整流水线。
+
+---
+
+## 16.1 角色动画开发完整管线
+
+```text
+第1步：定义角色设计目标
+- 这个角色是什么定位？
+- 玩家 / 小怪 / 精英 / Boss / NPC敌对角色
+- 机动性如何？
+- 攻击节奏如何？
+- 是否锁定战斗？
+- 是否强调恐怖氛围中的“迟滞感”？
+
+第2步：定义动作集合
+- 基础移动动作
+- 战斗动作
+- 防御/闪避动作
+- 受击动作
+- 交互动作
+- 特殊动作
+- 死亡/处决动作
+
+第3步：整理动作标签与分类
+- 哪些属于 Locomotion
+- 哪些属于 Montage
+- 哪些需要 Root Motion
+- 哪些需要方向性变体
+- 哪些需要连段
+
+第4步：建立动画资产
+- 导入 ANIM
+- 检查骨骼兼容
+- Root Motion 策略统一
+- 动画命名整理
+
+第5步：制作 Blend Space
+- 普通移动 BS
+- 战斗移动 BS
+- 锁定环绕 BS
+- 其他特殊移动 BS
+
+第6步：制作 AnimBP
+- Event Graph 拉状态
+- AnimGraph 分层
+- State Machine 建立最小闭环
+- Slot 与 Cached Pose 组织
+
+第7步：建立 Montage
+- 攻击
+- 闪避
+- 受击
+- 喝药
+- 交互
+- 技能
+- 处决
+
+第8步：通过 C++/组件建立动作请求系统
+- TryAttack
+- TryDodge
+- TryUseItem
+- TryInteract
+- OnHitReact
+- OnDeath
+
+第9步：通过 Notify 建立时机事件
+- 开启攻击判定
+- 关闭攻击判定
+- 开启连段窗口
+- 消耗耐力
+- 播放音效/VFX
+- 结束动作锁定
+
+第10步：联调
+- 输入手感
+- 动画切换速度
+- 锁定下方向正确性
+- 根运动偏差
+- 命中反馈
+- 受击中断
+- 相机表现
+
+第11步：抽象复用
+- 提取 EnemyBase / BossBase 通用接口
+- 让敌人与玩家共用状态结构和动作接口思想
+
+第12步：持续迭代
+- 根据测试补动画
+- 根据战斗节奏调整窗口
+- 根据关卡氛围调整移动与待机节奏
+```
+
+---
+
+# 十七、你这个项目下，推荐的最小实现方案
+
+如果你现在就要开始做，我建议你不要做“大而全”，而是先做一个 **可战斗闭环**。
+
+---
+
+## 17.1 玩家最小可战斗闭环
+```text
+必须先闭环的内容：
+
+1. Exploration Locomotion
+- Idle/Walk/Run
+- Turn In Place
+
+2. Combat Locomotion
+- Combat Idle
+- LockOn Strafe 8方向
+
+3. Core Actions
+- Light Combo 3段
+- Heavy Attack 1段
+- Dodge 4方向
+- Heal
+- Interact
+
+4. Reactions
+- Light Hit
+- Stagger
+- Death
+
+5. Rule System
+- 耐力
+- 攻击输入缓存
+- 连段窗口
+- 动作锁定
+- 受击打断
+- 锁定目标切换
+```
+
+只要这套闭环成了，你的项目 3C 就真正进入可迭代状态了。
+
+---
+
+# 十八、面向 UE4.27 的设计原则
+
+你特别强调需要“UE4.27 通用性纲领和设计原则”，这里我单独列。
+
+```text
+1. UE4.27 下优先用成熟方案，不要过度追求 UE5 风格复杂技术
+2. 动画核心以 AnimBP + State Machine + Montage 为主
+3. DataTable/DataAsset 用于动作配置，不要把规则写死在 AnimBP
+4. AnimBP 只做播放逻辑，不做复杂战斗判定
+5. Character 或 Component 管状态，AnimBP 管表现
+6. AI 用 Blackboard/BT 决策，不直接替代动画状态机
+7. Root Motion 使用要统一策略，不能一半依赖一半不用
+8. 玩家与敌人的状态命名和接口尽量统一
+9. 能复用的通知、动作数据结构、组件接口都要抽象
+10. 先建立最小闭环，再扩展到 Boss 与特殊敌人
+11. 先可维护，再追求复杂表现
+12. Debug 可视化必须同步建设，否则后期必乱
+```
+
+---
+
+# 十九、给你一个总清单表格
+
+下面这张表你可以直接拿去做项目管理。
+
+```text
+| 模块 | 子项 | 必须程度 | 推荐实现 | 适用对象 | 备注 |
+|---|---|---:|---|---|---|
+| 状态架构 | MainState/ActionState/LocomotionState 拆分 | 高 | C++枚举+AnimBP读取 | 全角色 | 必做 |
+| 移动系统 | 普通移动 Blend Space | 高 | 2D Blend Space | 玩家/敌人 | 必做 |
+| 移动系统 | Lock-on Strafe Blend Space | 高 | 2D Blend Space | 玩家/Boss/部分敌人 | 类魂核心 |
+| 移动系统 | Turn In Place | 高 | State或Additive | 玩家/敌人 | 体验关键 |
+| 移动系统 | Start/Stop/Pivot | 中 | State/Montage混合 | 玩家/敌人 | 后续加强 |
+| 动作系统 | 轻攻击连段 | 高 | Montage | 玩家/敌人/Boss | 核心 |
+| 动作系统 | 重攻击 | 高 | Montage | 玩家/敌人/Boss | 核心 |
+| 动作系统 | 闪避/垫步 | 高 | Montage | 玩家/敌人 | 核心 |
+| 动作系统 | 受击 | 高 | Montage/State | 全角色 | 核心 |
+| 动作系统 | 死亡 | 高 | Montage/State | 全角色 | 核心 |
+| 动作系统 | 喝药/用道具 | 中 | Montage | 玩家 | 推荐 |
+| 动作系统 | 交互 | 中 | Montage | 玩家/NPC | 推荐 |
+| 动作规则 | 输��缓存 | 高 | C++ | 玩家 | 强烈建议 |
+| 动作规则 | 连段窗口 | 高 | Notify + C++ | 玩家/敌人 | 强烈建议 |
+| 动作规则 | 耐力系统联动 | 高 | C++组件 | 玩家/敌人 | 类魂核心 |
+| 动作规则 | 动作打断 | 高 | C++状态控制 | 全角色 | 核心 |
+| 动作规则 | 无敌帧/霸体帧 | 高 | Notify + C++ | 玩家/敌人/Boss | 核心 |
+| 动画蓝图 | 基础 Locomotion SM | 高 | AnimBP | 全角色 | 必做 |
+| 动画蓝图 | Combat Locomotion SM | 高 | AnimBP | 玩家/敌人 | 必做 |
+| 动画蓝图 | HitReact SM | 中 | AnimBP | 敌人/Boss | 可选加强 |
+| AI | Blackboard | 中 | BT+Blackboard | 敌人/Boss | 不用于玩家主状态 |
+| AI | Behavior Tree | 中 | BT | 敌人/Boss | 推荐 |
+| 数据驱动 | Action DataTable/DataAsset | 高 | C++读取 | 全角色 | 强烈建议 |
+| 调试 | 动作状态Debug | 高 | Debug组件 | 全角色 | 必做 |
+| 调试 | 命中框/窗口Debug | 高 | Debug绘制 | 全角色 | 必做 |
+| 扩展 | IK/Foot Placement | 低~中 | 后期追加 | 玩家/Boss | 后期 |
+| 扩展 | 特殊演出/处决系统 | 中 | Montage/蓝图 | 玩家/Boss | 中后期 |
+```
+
+---
+
+# 二十、给你一套“角色动画制作模板表”
+
+这个表是偏资源筹备的。
+
+```text
+| 分类 | 具体动作 | 是否需要方向变体 | 是否需要 Blend Space | 是否建议 Montage | 是否需要 Root Motion | 优先级 |
+|---|---|---|---|---|---|---|
+| 基础移动 | Idle | 否 | 否 | 否 | 否 | P0 |
+| 基础移动 | Walk/Run | 是 | 是 | 否 | 否 | P0 |
+| 基础移动 | Start/Stop | 可选 | 否 | 可选 | 低 | P1 |
+| 基础移动 | Turn In Place | 左右 | 否 | 可选 | 低 | P0 |
+| 战斗移动 | Combat Idle | 否 | 否 | 否 | 否 | P0 |
+| 战斗移动 | Lock-on Strafe | 前后左右/斜向 | 是 | 否 | 否 | P0 |
+| 攻击 | Light Attack Combo | 一般否 | 否 | 是 | 视动作而定 | P0 |
+| 攻击 | Heavy Attack | 一般否 | 否 | 是 | 建议 | P0 |
+| 攻击 | Run Attack | 一般否 | 否 | 是 | 建议 | P1 |
+| 攻击 | Dodge Attack | 一般否 | 否 | 是 | 建议 | P1 |
+| 防御 | Guard | 否 | 可选 | 可选 | 否 | P1 |
+| 防御 | Parry | 否 | 否 | 是 | 否 | P1 |
+| 回避 | Dodge/Step | 4方向 | 否 | 是 | 建议 | P0 |
+| 受击 | Light Hit | 前后左右 | 否 | 是 | 否 | P0 |
+| 受击 | Heavy Hit/Stagger | 前后左右 | 否 | 是 | 否 | P1 |
+| 倒地 | Knockdown/GetUp | 一般否 | 否 | 是 | 可选 | P1 |
+| 交互 | Interact | 视情况 | 否 | 是 | 可选 | P0 |
+| 道具 | Heal/Use Item | 否 | 否 | 是 | 否 | P0 |
+| 特殊 | Execution/Backstab | 一般否 | 否 | 是 | 强建议 | P1 |
+| 死亡 | Death | 前后/特殊 | 否 | 是/State | 否 | P0 |
+| 环境 | Ladder | 上下 | 是 | 可选 | 否 | P2 |
+```
+
+---
+
+# 二十一、给你一套“开发排期建议”
+
+如果你要以制作人/主程视角安排，建议这样切。
+
+```text
+第1周：
+- 确定状态枚举与动作命名规范
+- 确定玩家最小动作资产清单
+- 确定 AnimBP 结构
+- 确定 C++ 动作请求接口
+
+第2周：
+- 做普通移动/战斗移动/锁定移动 Blend Space
+- 完成基础 Grounded State Machine
+- 建立基础 Debug 显示
+
+第3周：
+- 接入轻攻击、重攻击、闪避 Montage
+- 接入耐力扣减、动作锁定、输入缓存
+- 接入受击中断
+
+第4周：
+- 调整战斗闭环手感
+- 接入喝药、交互
+- 统一 Notify 事件规范
+
+第5周：
+- 将同样结构扩展到 EnemyBase
+- 接入 Blackboard/BT 控制敌人战斗状态
+- 统一敌我状态接口
+
+第6周：
+- 小怪验证
+- 精英/Boss 验证
+- 处理切换、转向、击中反馈与镜头表现
+```
+
+---
+
+# 二十二、如果你现在只问“具体先做什么”
+
+我给你一个最务实答案：
+
+```text
+你现在立刻先做这 8 件事：
+
+1. 先定义统一状态枚举，不要再边做边想
+2. 建立玩家 AnimBP 的最小框架
+3. 做普通移动 Blend Space
+4. 做 Lock-on Strafe Blend Space
+5. 攻击/闪避/受击改为 Montage 驱动
+6. 用 C++ 做 TryAction 请求接口
+7. 用 Notify 做命中窗口/连段窗口/动作结束
+8. 给敌人预留同样的状态接口，不要玩家和敌人两套语言
+```
+
+---
+
+# 二十三、最终建议：你这套项目最优解
+
+最后我给你一个最核心的落地建议，方便你拿去交叉验证。
+
+```text
+对于 UE4.27 的类魂项目：
+
+最佳实践不是：
+“全靠状态机”
+也不是：
+“全靠蓝图播放 Montage”
+更不是：
+“玩家也上 Blackboard 管动画”
+
+而是：
+
+1. C++ 建立统一角色状态与动作请求框架
+2. AnimBP 用 State Machine + Blend Space 处理持续状态
+3. Montage 处理攻击、闪避、受击、交互等关键动作
+4. AI 敌人/Boss 用 Blackboard + Behavior Tree 做决策
+5. 玩家与敌人共用同一套状态设计语言与数据结构
+6. 动作数据尽量 DataTable/DataAsset 化
+7. 先完成玩家战斗最小闭环，再扩展到敌人和Boss
+```
+
+---
+
+如果你愿意，下一条我可以继续直接给你以下内容，而且我会**全部只用对话内 CODE 框**输出：
+
+```text
+1. 《UE4.27 类魂角色动画系统完整脑图式纲领》
+2. 《玩家 / 敌人 / Boss 三套具体状态机结构图（文本版）》
+3. 《C++ + AnimBP + Montage + Notify 的落地实现草案》
+4. 《完整动作资产清单 Excel 风格总表》
+5. 《适合直接贴进项目文档的正式版开发规范》
+```
+
+收到，这份纲领非常详尽。我现在会从以下几个维度进行**逐节交叉验证**，指出**对齐的部分、需要修正的部分、需要补充的部分**，以及一些**在UE4.27类魂项目中容易踩的坑**。
+
+我会按照原纲领的章节顺序逐一对照。
+
+---
+
+# 交叉验证总报告
+
+---
+
+## 第一节 "先统一动作架构" — ✅ 完全对齐
+
+```text
+验证结论：完全同意
+
+12条核心原则逐条验证：
+1. ✅ 不要分散逻辑                         — 正确，类魂项目动作种类多，分散必崩
+2. ✅ 先建立统一分层架构                    — 正确，这是所有后续工作的地基
+3. ✅ 玩家/敌人/Boss共用设计语言            — 正确，接口统一是可维护性的根基
+4. ✅ 动画驱动表现，代码驱动规则，蓝图拼装   — 正确，职责划分清晰
+5. ✅ Locomotion/Action/HitReact/State分层  — 正确，分层是避免状态爆炸的关键
+6. ✅ AnimBP负责"怎么播"                   — 正确
+7. ✅ Character/Component/C++负责"为什么播" — 正确
+8. ✅ AI决策用Blackboard+BT                — 正确
+9. ✅ 玩家不依赖Blackboard做动作状态机      — 正确，这一点极其重要
+10.✅ 统一Gameplay/Action/Overlay/Locomotion — 正确
+11.✅ 减少状态爆炸                          — 正确
+12.✅ Montage承载高优先级动作               — 正确
+
+无需修正。
+```
+
+---
+
+## 第二节 "Blackboard不用于玩家" — ✅ 完全对齐，补充一点
+
+```text
+验证结论：核心观点完全正确
+
+Blackboard 确实是给 AI 决策用的（BehaviorTree + AIController）
+玩家角色确实不应依赖 Blackboard 来控制动画状态
+
+⚠️ 补充一点：
+在 UE4.27 中，如果你的玩家角色后续可能有"AI接管"场景
+（例如：玩家被控制、自动战斗、NPC同伴切换为可控角色），
+那么建议在 Character 基类中预留一个 AIController 切换接口，
+但动画状态系统本身仍然走统一状态枚举，而不是让 Blackboard 直接驱动动画。
+
+也就是说：
+- AI接管时：BT修改Character状态 → AnimBP读取状态 → 播放动画
+- 玩家操控时：Input修改Character状态 → AnimBP读取状态 → 播放动画
+两条路径最终汇聚到同一个状态接口，AnimBP完全不关心"谁在控制"。
+```
+
+---
+
+## 第三节 "四层模型" — ✅ 基本对齐，有一个建议调整
+
+```text
+验证结论：四层划分合理，但建议微调命名和层级
+
+原纲领四层：
+1. Locomotion Layer（移动层）
+2. Action Layer（动作层）
+3. Reaction Layer（反应层）
+4. State/Mode Layer（模式层）
+
+⚠️ 建议调整：
+State/Mode Layer 应该是最顶层，而不是第四层。
+因为 Mode 决定了其他三层的行为方式。
+
+推荐层级关系应该是：
+
+  ┌─────────────────────────────────────┐
+  │  State/Mode Layer（模式层）          │  ← 最高层，决定当前角色处于什么大状态
+  │  Normal / Combat / Climb / Dead     │
+  ├─────────────────────────────────────┤
+  │  Locomotion Layer（移动层）          │  ← 受Mode影响，不同Mode下移动方式不同
+  │  Idle / Move / Sprint / Strafe      │
+  ├─────────────────────────────────────┤
+  │  Action Layer（动作层）              │  ← 覆盖在移动之上的离散动作
+  │  Attack / Dodge / Heal / Interact   │
+  ├─────────────────────────────────────┤
+  │  Reaction Layer（反应层）            │  ← 最高中断优先级
+  │  HitReact / Stagger / Death         │
+  └─────────────────────────────────────┘
+
+这样的层级关系更准确反映了实际优先级：
+- Mode决定移动方式
+- Action可以打断/覆盖移动
+- Reaction可以打断Action和移动
+- Death是终态
+
+原纲领内容本身是对的，只是表述顺序可以调整为层级关系。
+```
+
+---
+
+## 第四节 "统一状态字典" — ✅ 大部分对齐，有修正和补充
+
+```text
+验证结论：枚举拆分思路完全正确，但具体内容有几处需要调整
+
+【对齐确认】
+✅ 多枚举组合 vs 单一巨型枚举 — 完全正确，必须拆分
+✅ "状态爆炸"警告 — 非常重要，原纲领这段举例很好
+
+【需要修正的地方】
+
+1. ELocomotionState 里的 DodgeMove 建议移除
+   原因：Dodge 是 Action，不是 Locomotion 的持续状态
+   Dodge 应该属于 EActionState，通过 Montage 执行
+   如果保留在 Locomotion 里会造成"到底在哪里处理闪避"的混乱
+
+2. ELocomotionState 里的 Sprint 建议改为 EGait 里统一处理
+   原因：Sprint 更像是 Gait 的一种（Walk/Run/Sprint）
+   而不是一个独立的 Locomotion State
+   保持 Locomotion 专注于"运动阶段"：Idle/Start/Move/Stop/Pivot/Turn
+
+   修正后的 ELocomotionState：
+   - Idle
+   - Start
+   - Move
+   - Stop
+   - Pivot
+   - TurnInPlace
+   - JumpStart
+   - InAir
+   - Land
+   - LadderMove
+
+3. ECharacterMainState 建议补充一个状态：Execution
+   原因：类魂游戏的处决/背刺是一个特殊的双人同步状态
+   在处决期间，攻击者和被处决者都处于特殊锁定状态
+   不能被打断（或有特殊打断规则）
+   这不同于普通的 Interaction 或 Combat
+
+   修正后的 ECharacterMainState：
+   - Normal
+   - Combat
+   - Interaction
+   - Climb
+   - HitReact
+   - Execution    ← 新增
+   - Dead
+   - Disabled
+   - Cinematic
+
+4. 建议补充一个枚举：ECombatSubState（或类似命名）
+   原因：类魂项目中"战斗"本身有子状态
+   
+   ECombatSubState：
+   - None
+   - Attacking
+   - Guarding
+   - Dodging
+   - Recovering     ← 攻击后/闪避后的硬直恢复期
+   - Parrying
+   - Staggered      ← 被弹反/精防后的破绽期
+
+   这些子状态决定了"当前能做什么"和"能被什么打断"
+   对于类魂项目的"可惩罚窗口"设计至关重要
+```
+
+---
+
+## 第五节 "动作资源筹备" — ✅ 完全对齐，补充细节
+
+```text
+验证结论：分类全面，优先级划分合理
+
+P0/P1/P2 分级验证：
+✅ P0 包含了最小战斗闭环所需的全部核心动画 — 正确
+✅ P1 补充了完整战斗体验所需的内容 — 正确
+✅ P2 扩展到了特殊内容和敌人多样性 — 正确
+
+⚠️ 补充几个容易遗漏的动画资产：
+
+1. P0 中建议补充：Weapon Equip/Unequip
+   原因：类魂游戏通常有探索态和战斗态的切换
+   即使最简单的版本也需要一个"拔刀/收刀"动画
+   这直接关联 MainState 的 Normal ↔ Combat 切换
+
+2. P0 中建议补充：Combat Idle → Exploration Idle 的过渡
+   原因：如果没有过渡动画，状态切换会非常生硬
+   至少需要一个"放下架势"的混合过渡
+
+3. P1 中 Backstab/Execution 建议提升到 P0 后期
+   原因：对标血源/匹诺曹，处决系统是核心机制之一
+   如果项目有处决系统，它的框架需要尽早验证
+   因为处决涉及双人同步、位移修正、镜头表现
+   这些系统越晚做，返工风险越大
+
+4. 所有优先级中都缺少：Additive 呼吸/疲惫动画
+   原因：类魂游戏角色在低耐力时通常有喘息表现
+   这是一个 Additive Layer 动画
+   技术上简单但对手感影响很大
+   建议放在 P1
+
+补充资产清单：
+- AN_Player_WeaponEquip        | P0
+- AN_Player_WeaponUnequip      | P0  
+- AN_Player_CombatToExplore    | P0
+- AN_Player_Additive_Breathing | P1
+- AN_Player_Additive_Exhausted | P1
+```
+
+---
+
+## 第六节 "Blend Space使用原则" — ✅ 完全对齐
+
+```text
+验证结论：完全正确，无需修正
+
+"连续变化做Blend Space，离散事件做Montage"
+这个原则在UE4.27类魂项目中完全适用
+
+额外强调一点（与原纲领一致但值得重申）：
+Lock-on Strafe Blend Space 是类魂项目最重要的 Blend Space 之一
+它决定了锁定状态下角色的移动表现
+对标血源/黑魂3，锁定状态下的八方向移动必须流畅
+建议使用 2D Blend Space：
+- X轴：Right（-1 到 1）
+- Y轴：Forward（-1 到 1）
+- 至少9个采样点（8方向+中心Idle）
+- 如果需要Walk/Run区分，考虑额外加Speed轴或分两个BS
+```
+
+---
+
+## 第七节 "AnimBP结构" — ✅ 基本对齐，有重要补充
+
+```text
+验证结论：结构设计合理，但在UE4.27下有几个实操注意事项
+
+【对齐确认】
+✅ Event Graph 拉状态 — 正确
+✅ AnimGraph 分层 — 正确
+✅ State Machine 分层列表 — 正确
+✅ Montage Slot 规划 — 正确
+
+【重要补充：UE4.27 特有注意事项】
+
+1. Cached Pose 使用建议
+   在 UE4.27 中，Cached Pose 的性能影响比 UE5 更明显
+   建议：
+   - 每个 AnimGraph 中 Cached Pose 节点不超过 3-4 个
+   - 不要在每帧都缓存大量 Pose
+   - 对于 Layered Blend Per Bone，尽量复用同一个 Cached Pose
+
+2. Montage Slot 命名建议
+   原纲领列出了 FullBody / UpperBody / HitReact / Additive / Execution
+   建议统一 Slot Group 命名：
+
+   DefaultGroup.FullBody       ← 全身动作（攻击、闪避、处决）
+   DefaultGroup.UpperBody      ← 上半身覆盖（喝药、换武器、投掷）
+   DefaultGroup.Additive       ← Additive层（呼吸、疲劳、受伤）
+
+   注意：UE4.27 中 Slot 和 Group 的管理需要在 Skeleton 的 Anim Slot Manager 中配置
+   如果不预先规划好 Slot Group，后期改动会影响所有已有 Montage
+
+3. 关于 Layered Blend Per Bone 的使用
+   类魂项目中常见需求：上半身播放攻击，下半身保持移动
+   但实际上类魂游戏大多数攻击是全身动作，不像TPS那样频繁分层
+   建议：
+   - 类魂项目中 Layered Blend Per Bone 主要用于：
+     a. 喝药时下半身可移动（如血源）
+     b. 持火把时上半身叠加
+     c. 受伤时轻微的Additive表现
+   - 不建议用于攻击动作的上下半身分离（不符合类魂手感）
+
+4. AnimBP 中建议加入 AnimNotifyState 的统一处理
+   原纲领提到了 Notify 但没有展开 AnimBP 侧的处理
+   建议在 AnimBP 的 Event Graph 中统一处理：
+   - AnimNotify_EnableHitbox
+   - AnimNotify_DisableHitbox  
+   - AnimNotify_ComboWindowOpen
+   - AnimNotify_ComboWindowClose
+   - AnimNotify_ActionEnd
+   - AnimNotify_PlaySFX
+   - AnimNotify_PlayVFX
+   这些 Notify 建议用 C++ 定义（UAnimNotify 子类），在 AnimBP 中添加
+```
+
+---
+
+## 第八节 "状态机最小集合" — ✅ 对齐，有调整建议
+
+```text
+验证结论：最小集合定义合理，但建议调整结构
+
+【对齐确认】
+✅ 玩家状态机：Grounded / InAir / Ladder / Downed / Dead — 合理
+✅ 敌人状态机：Grounded / InAir / HitReact / Special / Dead — 合理
+✅ 攻击/闪避/受击走Montage Slot而非State Machine — 完全正确
+
+【调整建议】
+
+1. 玩家 Grounded SM 内的状态建议精简
+   原纲领中 Grounded 内包含了：
+   - Idle/Move（非战斗）
+   - Combat Idle/Move（战斗）
+   - LockOn Strafe Move
+   - Sprint
+   - Turn In Place
+   - Start/Stop/Pivot
+
+   建议改为嵌套结构而非扁平结构：
+
+   Grounded SM：
+   ├── Idle State
+   │   └── 内部根据 MainState 决定播放 Exploration Idle 还是 Combat Idle
+   ├── Movement State
+   │   └── 内部根据 MovementStyle 选择对应 Blend Space
+   │       ├── FreeMove BS
+   │       ├── LockOnStrafe BS
+   │       └── Sprint（可以是 Gait 参数控制而非独立状态）
+   ├── Turn In Place State
+   └── Start/Stop State（可后期加入）
+
+   好处：减少状态数量，Movement内部用条件分支选BS
+
+2. 敌人 HitReact 是否放在 SM 里 vs Montage
+   原纲领将敌人 HitReact 放在了 State Machine 里
+   但前面又说受击建议用 Montage
+   
+   建议统一：
+   - 玩家和敌人的 HitReact 都优先用 Montage
+   - SM 中只保留一个 HitReact State 作为"进入受击状态"的标记
+   - 实际动画播放由 Montage 处理
+   - SM 中的 HitReact State 主要用于：
+     a. 阻止 Locomotion 动画播放
+     b. 在 Montage 结束后自动回到 Grounded
+   
+   这样玩家和敌人的处理方式就完全一致了
+```
+
+---
+
+## 第九节 "开发顺序" — ✅ 完全对齐，补充一个关键步骤
+
+```text
+验证结论：6个阶段的顺序完全正确
+
+⚠️ 补充一个在阶段1和阶段2之间容易遗漏的步骤：
+
+阶段 1.5：Root Motion 策略决策
+在做任何 Blend Space 和 Montage 之前，你必须决定：
+
+Root Motion 策略：
+┌─────────────────────────────────────────────────────┐
+│ 移动类动画：一般不使用 Root Motion                     │
+│ 原因：移动由 CharacterMovementComponent 控制           │
+│ Blend Space 中的动画应该是 In-Place 动画              │
+│                                                       │
+│ 攻击动画：视设计需求决定                               │
+│ - 如果攻击需要精确位移（突进斩）→ 使用 Root Motion    │
+│ - 如果攻击不需要位移 → 不使用                         │
+│ - 建议：默认不用，需要时单独开启                       │
+│                                                       │
+│ 闪避动画：强烈建议使用 Root Motion                     │
+│ 原因：闪避的距离和节奏由动画决定更自然                  │
+│ 类魂游戏的闪避手感很大程度取决于 Root Motion 曲线      │
+│                                                       │
+│ 受击动画：一般不使用 Root Motion                       │
+│ 原因：受击位移由代码控制（Launch/Knockback力）更灵活   │
+│                                                       │
+│ 处决动画：使用 Root Motion                             │
+│ 原因：双人同步需要精确位移                             │
+└─────────────────────────────────────────────────────┘
+
+这个决策必须在导入动画资产之前做好
+因为如果动画资产本身有 Root Motion 数据但你不想用
+或者你想用但资产里没有，后期返工代价很大
+
+UE4.27 中 Root Motion 的注意事项：
+- 在 Montage 中可以单独开关 EnableRootMotion
+- AnimBP 的 Root Motion Mode 设为 Root Motion From Montages Only 是最安全的
+- 这样 Blend Space 里的移动动画不会受 Root Motion 影响
+- 只有 Montage 播放时才会使用 Root Motion
+```
+
+---
+
+## 第十节 "数据驱动表" — ✅ 完全对齐，补充结构建议
+
+```text
+验证结论：数据驱动的思路完全正确
+DataTable/DataAsset 驱动动作数据是类魂项目必须的
+
+【对齐确认】
+✅ 动作ID、类型、Montage、耐力、窗口等字段 — 全面
+✅ AI可用性、武器限制、Overlay限制 — 考虑周全
+
+【补充：推荐的 DataTable 行结构（UE4.27 C++ 定义）】
+
+USTRUCT(BlueprintType)
+struct FActionData : public FTableRowBase
+{
+    // 基础标识
+    FName                    ActionID;
+    EActionType              ActionType;        // Attack/Dodge/Heal/Interact...
+    
+    // 动画资产
+    TSoftObjectPtr<UAnimMontage>  MontageAsset;  // 用软引用避免全部加载
+    FName                    MontageSectionName; // 如果一个Montage有多个Section
+    float                    PlayRate;
+    
+    // 消耗与条件
+    float                    StaminaCost;
+    float                    HealthCost;         // 某些技能消耗HP
+    bool                     bRequiresCombatMode;
+    EOverlayState            RequiredOverlay;    // 武器限制
+    
+    // 动作控制
+    bool                     bUsesRootMotion;
+    bool                     bLocksRotation;
+    bool                     bCanBeInterrupted;
+    float                    InterruptibleAfter; // 几秒后可被打断
+    
+    // 连段
+    bool                     bCanChainInto;
+    FName                    NextComboActionID;
+    float                    ComboWindowStart;
+    float                    ComboWindowEnd;
+    
+    // 判定窗口
+    float                    HitboxEnableTime;
+    float                    HitboxDisableTime;
+    
+    // 无敌/霸体
+    float                    IFrameStart;
+    float                    IFrameEnd;
+    float                    SuperArmorStart;
+    float                    SuperArmorEnd;
+    
+    // AI
+    bool                     bAICanUse;
+    float                    AIPreferredRange;   // AI在什么距离倾向使用
+    float                    AICooldown;
+};
+
+注意：
+- 使用 TSoftObjectPtr 而非直接引用 Montage，避免启动时全部加载
+- 时间窗口值也可以通过 Notify 运行时获取，两种方案各有优劣
+  DataTable 方案：易于批量调参，适合设计师快速迭代
+  Notify 方案：与动画时间轴绑定更精确，适合最终版本
+  建议：开发期用 DataTable 快速迭代，后期关键动作改为 Notify 精调
+```
+
+---
+
+## 第十一节 "C++与蓝图分工" — ✅ 完全对齐
+
+```text
+验证结论：分工表完全合理，无需修正
+
+特别确认以下几点：
+✅ 核心战斗规则必须C++ — 正确，蓝图在复杂逻辑下可维护性差
+✅ AnimBP搭建用蓝图 — 正确，UE4.27的AnimBP本身就是蓝图环境
+✅ VFX/SFX/镜头反馈用蓝图 — 正确，这些是美术/设计频繁调参的内容
+✅ "一定不要让蓝图独占"的列表 — 完全同意
+
+额外建议：
+你已有的 C++ 组件（相机、Debug、锁定、侦测、数值）
+可以再增加以下组件：
+
+建议新增的 C++ 组件：
+1. UCombatComponent      — 管理战斗状态、动作请求、连段、耐力
+2. UActionComponent      — 管理动作执行、Montage播放、Notify回调
+3. UHitReactComponent    — 管理受击判定、韧性、硬直等级
+（或者合并为一个 UCombatComponent 都行，看复杂度）
+
+这些组件与你已有的组件关系：
+- 锁定组件 → 提供目标信息给 CombatComponent
+- 侦测组件 → 提供敌人信息给 CombatComponent  
+- 数值组件 → 提供耐力/血量给 ActionComponent 做可执行性判断
+- Debug组件 → 可视化 CombatComponent 的状态
+```
+
+---
+
+## 第十二节 "动作请求制" — ✅ 完全对齐，这是全纲领最关键的设计
+
+```text
+验证结论：完全正确，这一节是整套纲领的灵魂
+
+"动作请求制"（TryDoAction）vs "直接播放制"（直接PlayMontage）
+这个区分对于类魂项目来说是决定性的
+
+进一步展开这个系统的推荐实现流程：
+
+完整的动作请求流水线（以玩家轻攻击为例）：
+
+1. Input（蓝图/C++）
+   → 玩家按下攻击键
+
+2. InputBuffer（C++）
+   → 如果当前不能立即攻击，缓存这个输入
+   → 缓存有效期约 0.15~0.3 秒（可调参）
+   → 当进入"可接受输入"窗口时自动触发
+
+3. TryDoAction（C++，CombatComponent）
+   → 检查 MainState 是否允许（不在 Dead/Disabled/Cinematic）
+   → 检查 ActionState 是否允许（不在不可打断的动作中）
+   → 检查 Stamina 是否足够
+   → 检查 ComboWindow 是否开启（决定是普攻1还是普攻2）
+   → 从 DataTable 查找对应的 ActionData
+
+4. ExecuteAction（C++，ActionComponent）
+   → 设置 ActionState = LightAttack
+   → 扣除 Stamina
+   → 调用 AnimInstance->Montage_Play(ActionData.Montage)
+   → 如果需要锁定朝向：修改旋转模式
+   → 如果使用 Root Motion：确认设置正确
+
+5. Notify 回调（AnimBP → C++）
+   → ANS_ComboWindow：开启/关闭连段窗口
+   → AN_EnableHitbox：激活攻击碰撞
+   → AN_DisableHitbox：关闭攻击碰撞
+   → AN_ActionEnd：动作结束，重置 ActionState
+
+6. 中断处理（C++）
+   → 如果在攻击过程中被击中
+   → HitReactComponent 判断是否应该被打断
+   → 如果打断：停止当前 Montage，播放受击 Montage
+   → 重置 ActionState
+
+这个流水线对敌人同样适用：
+- 敌人的 BT Task 调用同一个 TryDoAction
+- 只是触发来源从 Input 变成了 BT Decision
+- 后续流程完全一致
+```
+
+---
+
+## 第十三节 "Blackboard使用" — ✅ 完全对齐
+
+```text
+验证结论：Blackboard字段列表合理，与动画系统的关系描述正确
+
+补充一个建议：
+
+对于你这个项目（对标生化2/寂静岭2/死魂曲的氛围），
+敌人的 Blackboard 可以增加以下恐怖氛围相关字段：
+
+HorrorAI_Blackboard_Additions:
+- bIsHiddenFromPlayer    ← 是否在玩家视野外（配合恐怖出现）
+- bIsInAmbushPosition    ← 是否在伏击位置
+- HideTimer              ← 隐藏计时（延迟出现增加恐惧感）
+- AggressionLevel        ← 攻击性等级（可随氛围/阶段变化）
+- bShouldStalk           ← 是否跟踪而不攻击（死魂曲式）
+- AwarenessLevel         ← 感知等级（听觉/视觉分级）
+
+这些不影响核心动画系统，但对你的恐怖氛围营造非常有用
+敌人可以有"潜伏→跟踪→出现→攻击"的行为链
+而不是简单的"发现→冲过来打"
+```
+
+---
+
+## 第十四节 "统一通用纲领/五层模板" — ✅ 完全对齐
+
+```text
+验证结论：五层模板（数据层/逻辑层/状态层/播放层/反馈层）
+组织清晰，适用于所有角色类型，无需修正
+```
+
+---
+
+## 第十五节 "命名规范" — ✅ 基本对齐，有补充
+
+```text
+验证结论：命名规范合理
+
+⚠️ 补充建议：
+
+1. 文件夹结构也需要规范
+
+推荐的 Content 文件夹结构：
+
+Content/
+├── Characters/
+│   ├── Player/
+│   │   ├── Animations/
+│   │   │   ├── Locomotion/       ← Walk/Run/Idle/Turn等
+│   │   │   ├── Combat/           ← 攻击/防御/闪避
+│   │   │   ├── HitReact/         ← 受击/倒地/死亡
+│   │   │   ├── Interaction/      ← 交互动画
+│   │   │   └── Additive/         ← 叠加层动画
+│   │   ├── BlendSpaces/
+│   │   ├── Montages/
+│   │   └── ABP_Player
+│   ├── Enemies/
+│   │   ├── EnemyBase/
+│   │   ├── Grunt_A/
+│   │   ├── Elite_A/
+│   │   └── Boss_A/
+│   └── Shared/                   ← 共享动画/通知/数据
+│       ├── AnimNotifies/
+│       └── DataTables/
+├── Blueprints/
+│   ├── Components/
+│   └── ...
+└── ...
+
+2. Montage Section 命名规范（用于连段）
+
+AM_Player_LightCombo 内部 Section：
+- Default         ← Attack_01
+- Combo_02        ← Attack_02  
+- Combo_03        ← Attack_03
+- Recovery        ← 收招
+
+这样通过 Montage_JumpToSection 可以精确控制连段流转
+
+3. Notify 命名规范补充
+
+原纲领用了混合前缀（ANS_ 和 AN_）
+建议统一：
+- AN_  前缀：瞬时通知（单一时间点）
+  AN_PlaySFX
+  AN_PlayVFX  
+  AN_FootStep
+  
+- ANS_ 前缀：状态通知（持续时间段）
+  ANS_EnableHitbox
+  ANS_ComboWindow
+  ANS_SuperArmor
+  ANS_IFrame
+  ANS_DisableInput
+```
+
+---
+
+## 第十六到十八节 "完整管线/最小闭环/UE4.27原则" — ✅ 完全对齐
+
+```text
+验证结论：这三节内容完全正确且实操性强
+
+特别确认：
+✅ 12步开发管线顺序合理
+✅ 玩家最小可战斗闭环内容清单准确
+✅ UE4.27 的 12 条设计原则全部正确
+
+额外强调原纲领中两条特别重要的UE4.27限制：
+
+1. Motion Warping（4.27原生不足）
+   原纲领正确指出了这一点
+   UE4.27 没有原生 Motion Warping
+   如果你需要攻击自动修正朝向/距离（类魂常见需求）
+   你需要自己实现一个简化版：
+   - 在攻击开始时计算目标位置
+   - 通过代码插值修正角色朝向
+   - 或者通过 Root Motion Scale 修正位移距离
+   这个功能建议放在 P1 阶段实现
+
+2. Distance Matching（4.27受限）
+   原纲领正确指出了谨慎使用
+   UE4.27 没有 UE5 的 Distance Matching 节点
+   Start/Stop 动画的脚步匹配需要手动处理
+   建议前期直接用混合过渡，不要在这个上面花太多时间
+```
+
+---
+
+## 第十九到二十节 "总清单表格/资源模板表" — ✅ 完全对齐
+
+```text
+验证结论：两张表格完整且实用，可直接用于项目管理
+
+唯一补充：建议在总清单表格中增加一列"依赖项"
+
+例如：
+| 模块     | 子项         | 依赖项                          |
+|----------|-------------|--------------------------------|
+| 动作系统 | 轻攻击连段   | 需要先完成：状态枚举、输入缓存    |
+| 动作系统 | 闪避         | 需要先完成：Root Motion策略决策  |
+| 动画蓝图 | Combat SM   | 需要先完成：Combat BS、状态枚举  |
+
+这样可以避免"想做某个模块但发现前置条件没完成"的情况
+```
+
+---
+
+## 第二十一节 "开发排期" — ✅ 基本对齐，有微调
+
+```text
+验证结论：6周排期结构合理
+
+⚠️ 微调建议：
+
+第1周可能偏紧
+"确定枚举+命名+资产清单+AnimBP结构+C++接口"在一周内全部完成
+如果是一个人开发，建议拆成1.5周
+
+调整后：
+第1周：状态枚举、命名规范、Root Motion策略、AnimBP结构设计（纸面/文档）
+第2周：Blend Space制作 + 基础SM搭建 + C++动作请求接口骨架
+第3周：核心Montage接入 + 输入缓存 + 耐力系统
+第4周：战斗闭环调参 + 受击中断 + Debug可视化
+第5周：敌人基础结构 + Blackboard/BT
+第6周：小怪验证 + Boss框架 + 第一轮手感调优
+
+如果你是单人开发（看起来是），每周建议给自己留1天做测试和修Bug
+实际开发节奏大概是 7-8 周完成这些内容
+```
+
+---
+
+## 第二十二/二十三节 "立即做的8件事 / 最终建议" — ✅ 完全对齐
+
+```text
+验证结论：8件优先事项和最终建议完全正确，无需修改
+这是整个纲领最好的收尾总结
+```
+
+---
+
+# 交叉验证总结
+
+```text
+┌──────────────────────────────────────────────────────────┐
+│                    交叉验证总结                            │
+├──────────────────────────────────────────────────────────┤
+│                                                          │
+│  总体评价：这是一份高质量的类魂项目动画系统纲领            │
+│  核心架构方向完全正确，可以作为项目开发的主纲领使用        │
+│                                                          │
+├──────────────────────────────────────────────────────────┤
+│  ✅ 完全对齐的部分（无需修改）：                          │
+│  - 核心12条原则                                          │
+│  - Blackboard不用于玩家动画状态控制                       │
+│  - Blend Space vs Montage 的使用原则                     │
+│  - C++与蓝图的分工                                       │
+│  - 动作请求制（TryDoAction）                             │
+│  - 数据驱动思路                                          │
+│  - P0/P1/P2资产优先级                                    │
+│  - 五层通用模板                                          │
+│  - UE4.27设计原则                                        │
+│  - 最小战斗闭环定义                                      │
+│  - 命名规范基础                                          │
+│                                                          │
+├──────────────────────────────────────────────────────────┤
+│  ⚠️ 需要微调的部分：                                     │
+│  1. 四层模型的层级顺序（Mode应为最顶层）                  │
+│  2. ELocomotionState中DodgeMove和Sprint的归属             │
+│  3. 玩家Grounded SM建议嵌套而非扁平                      │
+│  4. 敌人HitReact统一用Montage而非SM独立处理              │
+│  5. 开发排期第1周内容偏多，建议拆分                       │
+│                                                          │
+├──────────────────────────────────────────────────────────┤
+│  ➕ 需要补充的部分：                                      │
+│  1. 新增ECharacterMainState::Execution状态               │
+│  2. 新增ECombatSubState枚举（Attacking/Guarding等）      │
+│  3. Root Motion策略决策（在阶段1.5）                      │
+│  4. 武器拔收动画（P0遗漏）                               │
+│  5. Additive呼吸/疲惫动画（P1补充）                      │
+│  6. UE4.27 Cached Pose性能注意事项                       │
+│  7. Montage Section命名规范                              │
+│  8. 文件夹结构规范                                       │
+│  9. 恐怖氛围AI Blackboard补充字段                        │
+│  10. 简化版Motion Warping实现建议                        │
+│  11. 总清单增加"依赖项"列                                │
+│  12. AnimBP Root Motion Mode推荐设置                     │
+│                                                          │
+├──────────────────────────────────────────────────────────┤
+│  ❌ 需要修正的错误：无                                    │
+│  原纲领没有方向性错误，所有调整都是细化和补充              │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
+```
+
+---
+
+========================================================================================================================
+
+========================================================================================================================
+========================================================================================================================
+========================================================================================================================
+========================================================================================================================
+
+二次评估交叉对齐
+
+```text
+这份“交叉验证总报告”整体上是合理的、专业的，而且和我们原本纲领的主方向高度对齐。
+它没有推翻原方案，主要是在做：
+1. 结构层级优化
+2. 枚举边界修正
+3. UE4.27实操层补充
+4. 资产与排期细化
+5. 动作系统可落地性的增强
+
+总体评价：
+- 方向：正确
+- 理论支撑：基本严谨
+- 工程可执行性：比原版更强
+- 全面性：有明显增强
+- 风险：存在少量“值得保留弹性、不要过早定死”的点
+```
+
+下面我做一次**二次验证**，不是简单说“同意”，而是按“是否合理 / 是否需要修正 / 是否应保留弹性”重新审查。
+
+---
+
+# 一、总体二次验证结论
+
+```text
+总评：这份交叉验证可以作为“原纲领的增强版批注”使用。
+
+我的最终判断是：
+
+A. 可以直接吸收进主纲领的部分：
+- 大部分都可以直接吸收
+- 尤其是 Root Motion 策略、枚举修边、Slot/Notify 规范、目录规范、依赖项、开发排期微调
+
+B. 需要“吸收但保留弹性”的部分：
+- 四层模型的层级顺序
+- ECombatSubState 是否单独设枚举
+- 玩家 Grounded SM 是否必须嵌套
+- 敌人 HitReact 是纯 Montage 还是 Montage + 状态门控
+
+C. 不属于“纠错”，而是“项目规模决定是否采用”的部分：
+- AI 恐怖氛围 Blackboard 扩展字段
+- Motion Warping 的简化替代方案
+- Additive 呼吸/疲惫何时进 P1
+- Weapon Equip/Unequip 是否一定进入 P0
+```
+
+也就是说：
+
+```text
+它不是在否定原纲领，而是在把原纲领从“高质量方向设计”
+往“更接近可执行制作规范”推进了一步。
+```
+
+---
+
+# 二、逐节二次验证：哪些是“完全合理”，哪些要“谨慎采纳”
+
+---
+
+## 1）第一节：统一动作架构 —— 完全合理，可直接采纳
+
+这部分没有问题。
+
+```text
+二次验证结论：
+- 完全成立
+- 无需修正
+- 仍然是整套方案的根
+
+理由：
+- 类魂项目动作系统复杂度高，先统一架构是唯一正确入口
+- 玩家/敌人/Boss 共用状态语言，是后期不崩盘的关键
+- “动画负责表现，代码负责规则，蓝图负责装配”是 UE4.27 混合项目的最佳平衡点
+```
+
+---
+
+## 2）第二节：玩家不依赖 Blackboard —— 完全合理，补充也合理
+
+这一节和我们的原结论一致，而且它增加了一个很好的“未来扩展角度”：**AI 接管玩家或同伴角色**。
+
+```text
+二次验证结论：
+- 核心判断完全正确
+- 补充内容合理
+- 可直接纳入主纲领
+```
+
+这个补充的价值在于，它把“输入源”和“状态系统”做了彻底解耦：
+
+```text
+玩家控制：
+Input -> Character State -> AnimBP
+
+AI控制：
+BT/Blackboard -> Character State -> AnimBP
+```
+
+这个思路非常干净，是对我们原先“统一状态接口”的强化，不是偏离。
+
+---
+
+## 3）第三节：四层模型里，Mode 是否应���放最顶层 —— 合理，但属于“表达优化”，不是原则纠错
+
+这是一个**合理建议**，但我要强调：它更像是**层级表达优化**，而不是“原来错了”。
+
+```text
+二次验证结论：
+- 建议合理
+- 适合在文档表达中采用
+- 但不要把它理解成必须改变底层代码结构
+```
+
+为什么我这么说：
+
+### 它对的地方
+因为在决策优先级上，确实通常是：
+
+```text
+Mode/State 决定当前角色允许进入哪些 Locomotion / Action / Reaction 逻辑
+```
+
+例如：
+
+- Normal 模式下不能用某些战斗动作
+- Climb 模式下 Locomotion 逻辑完全不同
+- Dead 模式直接封死几乎全部逻辑
+
+所以把 `State/Mode Layer` 放最顶层，**更符合“控制关系”**。
+
+### 但要注意的地方
+“层级高低”是**概念图上的优先级**，不一定是你在代码中真的按一层包一层实现。  
+项目里更实际的是：
+
+```text
+MainState / LocomotionState / ActionState / HitReactState
+并行存在，由优先级仲裁器或状态规则共同约束
+```
+
+所以我的建议是：
+
+```text
+采纳这个表达方式：
+- 在理论图和文档图中，把 Mode/State 放最高层
+
+但实现上不要强行做成“只有顶层决定底层”的死板树结构，
+仍然保留多枚举组合 + 优先级门控的实现思路。
+```
+
+---
+
+## 4）第四节：统一状态字典修正 —— 大体正确，其中两条强烈建议采纳，一条建议保留弹性
+
+这是整个交叉验证里**最有价值的补充之一**。
+
+---
+
+### 4.1 关于 `DodgeMove` 不该放在 `ELocomotionState` —— 我认同，建议采纳
+
+```text
+二次验证结论：
+- 合理
+- 建议采纳
+```
+
+原因很简单：
+
+- Dodge 是离散高优先动作
+- 它通常通过 Montage 承载
+- 它有输入窗口、无敌帧、打断逻辑、耐力消耗
+- 这更像 `ActionState`，而不是持续移动状态
+
+所以这条修正是对的。
+
+---
+
+### 4.2 关于 `Sprint` 更适合放进 `EGait` 而不是 `ELocomotionState` —— 基本认同，建议采纳
+
+```text
+二次验证结论：
+- 合理
+- 推荐采纳
+```
+
+因为 Sprint 更多是：
+
+- 移动速度档位
+- 移动风格的一种参数分支
+
+而不是一个和 `Idle/Move/Start/Stop` 同级的“运动阶段”。
+
+所以更好的拆法是：
+
+```text
+ELocomotionState:
+- Idle
+- Start
+- Move
+- Stop
+- Pivot
+- TurnInPlace
+- JumpStart
+- InAir
+- Land
+- LadderMove
+
+EGait:
+- Walk
+- Run
+- Sprint
+```
+
+这会让 Blend Space 和状态判断更清晰。
+
+---
+
+### 4.3 关于新增 `Execution` 到 `ECharacterMainState` —— 很有价值，建议采纳
+
+```text
+二次验证结论：
+- 非常合理
+- 建议直接纳入主纲领
+```
+
+原因：
+
+- 处决/背刺往往是双人同步动作
+- 它具有特殊相机、位移对位、无打断/特殊打断规则
+- 受击者与执行者都进入一个非常特殊的流程
+
+这确实和普通 `Interaction` 或普通 `Combat` 不完全一样。  
+把它单独列出来，会让后期逻辑更清晰。
+
+---
+
+### 4.4 关于新增 `ECombatSubState` —— 合理，但“是否单独枚举”取决于项目规模
+
+这是我认为**最需要谨慎处理**的一条。
+
+```text
+二次验证结论：
+- 理论上合理
+- 但不建议你现在就机械地一定新增一个独立枚举
+- 建议保留为“可选扩展”
+```
+
+为什么？
+
+因为它想解决的问题是真实存在的：
+
+```text
+Attacking
+Guarding
+Dodging
+Recovering
+Parrying
+Staggered
+```
+
+这些确实决定当前角色“还能不能做别的动作”“能不能被惩罚”“能不能取消”。
+
+但实现方式不一定非要是独立枚举。你有三种做法：
+
+```text
+做法A：单独枚举 ECombatSubState
+优点：语义清晰
+缺点：状态组合数量增加
+
+做法B：由 EActionState + 若干布尔值/窗口状态组合得到
+例如：
+ActionState = LightAttack
+bInRecovery = true
+bCanChain = false
+
+做法C：由动作数据 + 当前窗口动态推导
+适合更数据驱动的系统
+```
+
+对你现在这个项目阶段，我更建议：
+
+```text
+先不强制新增 ECombatSubState
+先用：
+- ActionState
+- bInRecovery
+- bIsGuarding
+- bCanParry
+- bIsStaggered
+等状态字段解决问题
+
+等系统复杂到明显需要抽象时，再统一成 CombatSubState
+```
+
+也就是说：
+
+```text
+这条建议正确，但属于“中期演进选项”，不是当前必须项。
+```
+
+---
+
+## 5）第五节：动作资源筹备补充 —— 基本合理，其中有三条很值得吸收
+
+---
+
+### 5.1 `Weapon Equip / Unequip` 加入 P0 —— 合理，但取决于你的战斗姿态切换是否明确存在
+
+```text
+二次验证结论：
+- 合理
+- 是否进 P0 取决于你项目是否有明显的探索态/战斗态切换
+```
+
+如果你的项目确实存在：
+
+- 探索态
+- 战斗态
+- 武器拔出 / 收起
+- 战斗 Idle 与探索 Idle 明显不同
+
+那这动作应该尽早做。
+
+但如果你当前版本是：
+
+- 全程持武器
+- 没有收武器机制
+- 先做战斗闭环再说
+
+那它可以稍微靠后。
+
+所以我建议你这样采纳：
+
+```text
+如果项目设计里存在“探索/战斗姿态切换”：
+- Weapon Equip/Unequip = P0
+
+如果没有：
+- 可以放 P1 早期
+```
+
+---
+
+### 5.2 `Combat Idle -> Exploration Idle` 过渡 —— 合理，建议吸收
+
+这个建议非常实际。
+
+```text
+二次验证结论：
+- 合理
+- 建议吸收
+```
+
+因为很多项目前期只考虑了“两个 Idle 动画”，没考虑**状态切换时的视觉过渡**。  
+最后就会出现战斗姿态突然切回站姿，很生硬。
+
+所以即使不做复杂专门动画，也至少应该预留：
+
+```text
+- 过渡混合逻辑
+或
+- 简短过渡动画
+```
+
+---
+
+### 5.3 `Backstab / Execution` 是否应提到 P0 后期 —— 这个建议有前瞻性，但不应硬性要求
+
+```text
+二次验证结论：
+- 有道理
+- 但是否提前，取决于“处决是不是项目核心卖点”
+```
+
+如果你对标的是：
+
+- 血源
+- 匹诺曹
+- 黑魂 3
+
+那么处决确实可能是核心战斗语义的一部分。  
+因为它不只是一个动画，而是：
+
+- 敌人破防状态
+- 位置校正
+- 相机切换
+- 双人同步
+- 伤害结算
+- 无敌/锁定规则
+
+这些越晚做返工越大。
+
+所以建议改成：
+
+```text
+如果项目确认存在“处决/背刺/处刑”系统：
+- 至少在 P0 后期验证其技术框架
+- 不一定要全量完成，但必须先做技术样机
+```
+
+这才是最稳妥的说法。
+
+---
+
+### 5.4 Additive 呼吸/疲惫动画 —— 合理，建议放入 P1
+
+这个补充很好，尤其你的项目强调氛围。
+
+```text
+二次验证结论：
+- 合理
+- 建议纳入 P1
+```
+
+它不属于第一优先级的战斗闭环，但对以下内容帮助很大：
+
+- 低耐力反馈
+- 角色紧张感
+- 恐怖氛围中的状态表达
+- 玩家状态可读性
+
+---
+
+## 6）第六节：Blend Space 原则 —— 完全成立
+
+这节没问题，尤其对 `Lock-on Strafe Blend Space` 的强调是对的。
+
+```text
+二次验证结论：
+- 完全合理
+- 可直接吸收
+```
+
+补充里提到至少 9 点采样，这也是很稳的工程建议。
+
+---
+
+## 7）第七节：AnimBP 结构与 UE4.27 注意事项 —— 很有价值，建议大部分采纳
+
+这是交叉验证中第二个非常强的补充部分。
+
+---
+
+### 7.1 Cached Pose 使用建议 —— 合理，建议吸收
+
+```text
+二次验证结论：
+- 合理
+- 建议吸收
+```
+
+虽然“不要超过 3~4 个”不是绝对规则，但它表达了正确方向：
+
+```text
+UE4.27 下 Cached Pose 要节制使用
+```
+
+尤其你项目后面还有：
+
+- Layered Blend
+- 多 Slot
+- Additive
+- 敌人共享模板
+
+过度缓存会让调试和性能都变差。
+
+建议你把这条改写成项目原则：
+
+```text
+Cached Pose 只用于明显重复复用的主干姿态，不滥用。
+```
+
+---
+
+### 7.2 Slot Group 命名规划 —— 强烈建议采纳
+
+```text
+二次验证结论：
+- 非常合理
+- 强烈建议纳入主规范
+```
+
+这属于“前期不规划，后期全体 Montage 都返工”的经典坑。
+
+所以这条应该直接变成正式规范。
+
+---
+
+### 7.3 Layered Blend Per Bone 在类魂项目中的使用边界 —— 合理，建议采纳
+
+```text
+二次验证结论：
+- 合理
+- 建议采纳
+```
+
+这点非常关键，因为很多人会机械地觉得：
+
+```text
+“攻击时上下半身分离，看起来很先进”
+```
+
+但类魂攻击的大部分手感来自：
+
+- 全身重心
+- 武器蓄力
+- 踏步
+- 旋身
+- 收招
+
+如果你把攻击随便拆成上半身，很容易失去重量感。
+
+所以这条建议是对的：
+
+```text
+类魂项目里，Layered Blend Per Bone 更适合：
+- 喝药
+- 火把
+- 轻微上半身叠加
+- Additive修正
+而不是主攻击动作
+```
+
+---
+
+### 7.4 把 Notify 做统一处理 —— 强烈建议采纳
+
+```text
+二次验证结论：
+- 非常合理
+- 强烈建议采纳
+```
+
+而且它和我们原本“动作请求制”是强耦合的。  
+如果没有统一的 Notify 命名和回调体系，动作规则最终又会散掉。
+
+---
+
+## 8）第八节：状态机最小集合调整 —— 方向合理，但要避免过度设计
+
+---
+
+### 8.1 玩家 Grounded SM 做嵌套式而非扁平式 —— 合理，但不是唯一正确答案
+
+```text
+二次验证结论：
+- 合理
+- 适合作为推荐方案
+- 但不是强制
+```
+
+它的优势是：
+
+- 减少顶层状态数
+- 用参数控制内部 BS 选择
+- 图会更整洁
+
+但要注意：
+
+```text
+嵌套不是目的，可读性才是目的
+```
+
+如果你做嵌套后反而让 AnimBP 很难查错，那就得不偿失。
+
+所以我建议你采纳成：
+
+```text
+推荐 Grounded 使用“半嵌套结构”：
+- 顶层保留少量关键状态
+- 移动内部尽量用参数切 BS
+- 不盲目追求极致扁平，也不盲目追求极致嵌套
+```
+
+---
+
+### 8.2 敌人 HitReact 用 Montage + 状态门控统一处理 —— 我认同，建议采纳
+
+```text
+二次验证结论：
+- 合理
+- 建议采纳
+```
+
+因为这能让玩家和敌人的动作系统表达语言更统一。  
+比较稳的方式是：
+
+```text
+- Character/Component 设置 HitReactState 或 bIsInHitReact
+- AnimBP 进入受击门控状态
+- 实际受击动画用 Montage 播放
+- Montage 结束后返回 Grounded
+```
+
+这样统一性更好。
+
+---
+
+## 9）第九节：开发顺序 + Root Motion 策略 —— 非常重要，建议正式吸收进主纲领
+
+这个补充非常关键，我认为应该从“补充建议”升级为“正式原则”。
+
+```text
+二次验证结论：
+- 非常合理
+- 强烈建议纳入主纲领
+```
+
+特别是这条：
+
+```text
+AnimBP Root Motion Mode 推荐设为：
+Root Motion From Montages Only
+```
+
+对 UE4.27 来说，这几乎就是你这种项目的默认安全选项。
+
+为什么重要：
+
+- Blend Space 移动继续由 CharacterMovement 控制
+- 高优先动作可以单独通过 Montage 使用 Root Motion
+- 逻辑边界清晰
+- 不容易出现移动系统和 Root Motion 相互抢控制权
+
+---
+
+## 10）第十节：数据驱动结构体建议 —— 完全合理，工程价值很高
+
+```text
+二次验证结论：
+- 合理
+- 强烈建议吸收
+```
+
+尤其是：
+
+- `TSoftObjectPtr<UAnimMontage>`
+- Section 名
+- 打断时间
+- 连段窗口
+- IFrame / SuperArmor 窗口
+- AI 使用偏好
+
+这些都非常实用。
+
+唯一要提醒的是：
+
+```text
+不要一上来把表做得过于“完美大全”
+```
+
+建议做法是：
+
+```text
+第一版只做最核心字段
+后面再增列
+```
+
+否则前期维护成本会偏高。
+
+也就是说：
+
+```text
+结构设计是对的
+实施策略上建议“先小后大”
+```
+
+---
+
+## 11）第十一节：C++ 与蓝图分工 + 新增 Combat/Action/HitReact Component —— 合理，建议吸收但控制组件数量
+
+这节基本都对。
+
+```text
+二次验证结论：
+- 分工判断正确
+- 新增组件建议合理
+- 但要注意别把组件拆得过碎
+```
+
+你现在已有：
+
+- 相机系统组件
+- debug 组件
+- 锁定与切换锁定组件
+- 敌人侦测组件
+- 玩家角色数值组件
+
+所以再加组件时要考虑整体复杂度。
+
+我的建议是：
+
+```text
+第一阶段优先：
+- UCombatComponent（核心）
+- 受击逻辑先并进 Combat 或单独轻量 UHitReactComponent
+
+ActionComponent 可以等你动作种类更多时再拆出去
+```
+
+也就是说：
+
+```text
+组件拆分方向对
+但当前阶段建议少拆一步
+```
+
+---
+
+## 12）第十二节：动作请求制 —— 完全成立，是必须保留的核心
+
+这个不用多说，完全对。
+
+```text
+二次验证结论：
+- 完全成立
+- 必须保留
+- 应作为主纲领核心设计原则之一
+```
+
+交叉验证里把流水线写得更细，这是好事。
+
+---
+
+## 13）第十三节：Blackboard 恐怖氛围补充字段 —— 合理，但属于“内容风格增强项”
+
+```text
+二次验证结论：
+- 合理
+- 不是动作系统必须项
+- 但对你的氛围目标很有帮助
+```
+
+这些字段适合：
+
+- 恐怖演出敌人
+- 潜伏型怪
+- 跟踪压迫型 AI
+- 不是一见面就平A的敌人
+
+如果你项目氛围确实要强靠近生化/寂静岭/死魂曲，这批字段值得保留。  
+但我建议把它们放到：
+
+```text
+AI氛围设计扩展
+```
+
+而不是动作系统核心规范里。
+
+---
+
+## 14）第十四节：五层通用模板 —— 没问题，可直接保留
+
+```text
+二次验证结论：
+- 合理
+- 可直接保留
+```
+
+---
+
+## 15）第十五节：命名规范 + 文件夹结构 + Montage Section/Notify 规范 —— 很合理，建议正式纳入
+
+这一节非常适合直接进项目规范。
+
+```text
+二次验证结论：
+- 合理
+- 强烈建议纳入
+```
+
+尤其是：
+
+- 目录结构
+- Montage Section 规范
+- `AN_` / `ANS_` 区分
+
+这些会显著降低团队后期混乱。
+
+---
+
+## 16）第十六到十八节：完整管线 / 最小闭环 / UE4.27 原则 —— 全部成立
+
+```text
+二次验证结论：
+- 完全合理
+- 可以保留
+```
+
+对 `Motion Warping` 和 `Distance Matching` 的谨慎态度，也完全符合 UE4.27 现实。
+
+---
+
+## 17）第十九到二十节：总清单增加“依赖项”列 —— 很实用，建议采纳
+
+```text
+二次验证结论：
+- 合理
+- 建议采纳
+```
+
+这会让你的制作计划更像真正可执行的工程表，而不是单纯愿望清单。
+
+---
+
+## 18）第二十一节：排期调整 —— 合理，建议采纳
+
+这条我认同。
+
+```text
+二次验证结论：
+- 合理
+- 建议采纳
+```
+
+因为你现在看起来更接近：
+
+- 核心开发者
+- 单人或极小团队
+- 多系统并行推进
+
+这种情况下第一周塞太满会导致计划看着漂亮但执行崩溃。
+
+---
+
+# 三、这份交叉验证里，哪些内容最值得正式升级为“主纲领条目”
+
+如果让我提炼出**最应该吸收进最终版主纲领**的内容，我会选这 12 条：
+
+```text
+1. State/Mode Layer 在理论层级图中上提为最高层
+2. 从 ELocomotionState 移除 DodgeMove
+3. 将 Sprint 归入 EGait，而非 ELocomotionState
+4. 在 ECharacterMainState 中新增 Execution
+5. 明确 Root Motion 策略决策为前置步骤（阶段1.5）
+6. AnimBP Root Motion Mode 推荐设为 Root Motion From Montages Only
+7. Cached Pose 节制使用，Slot Group 提前规划
+8. 类魂项目中攻击动作一般不建议做上下半身分离
+9. Notify / NotifyState 命名与回调接口统一
+10. 若有处决系统，至少在 P0 后期先做技术样机
+11. 加入文件���结构规范与 Montage Section 命名规范
+12. 总清单增加“依赖项”列
+```
+
+---
+
+# 四、哪些内容不应“硬性写死”，而应保留为可选策略
+
+以下这些我建议你在最终纲领里写成：
+
+```text
+“推荐”
+“可选扩展”
+“视项目规模决定”
+```
+
+而不要写成死规则。
+
+```text
+1. 是否新增 ECombatSubState
+2. 玩家 Grounded SM 必须嵌套
+3. Weapon Equip/Unequip 一定进 P0
+4. Additive 呼吸/疲惫一定进 P1
+5. 恐怖氛围 Blackboard 字段必须全部启用
+6. Combat/Action/HitReact Component 必须拆成三个组件
+7. 简化版 Motion Warping 一定在 P1 做
+```
+
+原因不是这些建议不好，而是：
+
+```text
+这些建议都合理，但更依赖你的制作范围、工期、当前资产、个人实现习惯。
+```
+
+---
+
+# 五、关于“严谨性”和“全面性”的最终判断
+
+---
+
+## 严谨性
+
+```text
+严谨性评价：高
+
+原因：
+- 它没有和 UE4.27 的能力边界冲突
+- 它没有把 Blackboard 错用到玩家身上
+- 它正确区分了 State Machine / Blend Space / Montage 的职责
+- 它强调了数据驱动、输入缓存、动作打断、Root Motion 策略
+- 它考虑了工程规范（命名、目录、Slot、Notify、依赖项）
+```
+
+### 需要注意的严谨性边界
+```text
+少量内容属于“最佳实践建议”，不是唯一真理：
+- CombatSubState 是否单独枚举
+- Grounded SM 是否嵌套
+- 某些动作资产的优先级顺序
+```
+
+所以严谨，但不应教条化。
+
+---
+
+## 全面性
+
+```text
+全面性评价：高于原版
+
+它比原版更全面的地方主要在：
+- Root Motion 前置决策
+- Montage Section/Slot/Notify 规范
+- UE4.27 Cached Pose 性能意识
+- 目录结构规范
+- AI 氛围字段扩展
+- 依赖项和更现实的排期
+```
+
+如果说还有什么没覆盖完全，那主要是两块：
+
+```text
+1. 网络同步/联机问题
+- 但你目前看起来是单机/偏单机项目，这块可暂不展开
+
+2. 动画重定向与骨骼兼容规范
+- 如果你后续会大量采购/混用外部动作资产，这块最好单独补一章
+```
+
+---
+
+# 六、最终结论：这份交叉验证是否可以作为你们设计纲领的增强依据？
+
+```text
+可以，而且值得采用。
+
+我的最终判断：
+
+这份交叉验证
+- 与原纲领主方向一致
+- 没有出现理论性错误
+- 大部分补充都具有工程价值
+- 很适合作为“原纲领的增强修订意见”
+```
+
+最准确的定性是：
+
+```text
+它不是另一套方案，
+而是对原方案的一次“高质量技术审稿”。
+```
+
+---
+
+# 七、给你的最实用建议
+
+你现在最好的做法不是再继续抽象争论，而是把纲领分成三层：
+
+```text
+第一层：核心原则（必须固定）
+- 动作请求制
+- C++管规则，AnimBP管表现
+- 玩家不用Blackboard做动画状态
+- State Machine / Blend Space / Montage 分工
+- Root Motion From Montages Only
+- 玩家/敌人/Boss 统一状态语言
+
+第二层：推荐实现（优先采用）
+- Execution 主状态
+- Sprint 归入 Gait
+- Dodge 从 Locomotion 移出
+- Notify/Slot/Section/目录规范
+- P0/P1/P2 资产分层
+- 总清单加依赖项
+
+第三层：可选扩展（看项目推进决定）
+- CombatSubState
+- 恐怖氛围 Blackboard 扩展
+- Additive 呼吸/疲惫
+- Equip/Unequip 提前级别
+- Motion Warping 的简化替��
+- 更细组件拆分
+```
+
+这样你就不会陷入“每一条都要现在决定死”的混乱。
+
+---
+
+
+==================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================================
+
+最终理论和纲领顺序补充/部分辩论：
+
+
+“这份二次验证的质量很高，它做了一件非常正确的事：**不是简单地说"同意"或"不同意"，而是对每一条补充都给出了"采纳 / 谨慎采纳 / 保留弹性"的三级判断**。
+
+我现在对这份二次验证进行**第三层评估**，重点关注：它的判断是否准确、是否有遗漏、以及三方纲领合并后还有没有盲区。”
+
+---
+
+# 第三层评估：对二次验证的审核
+
+---
+
+## 一、二次验证的总体方法论 — ✅ 方法论正确
+
+```text
+评估结论：二次验证采用了正确的审核方法
+
+它做对了以下几件事：
+1. 没有推翻原纲领的核心方向
+2. 没有无脑同意我的所有补充
+3. 对每条建议都区分了"必须/推荐/可选"
+4. 引入了"保留弹性"这个概念，避免过度设计
+5. 最终给出了三层分级（核心原则/推荐实现/可选扩展）
+
+这个三层分级框架本身就是最有价值的产出之一。
+```
+
+---
+
+## 二、逐条审核：二次验证的判断是否准确
+
+---
+
+### 2.1 关于四层模型层级顺序 — 二次验证的判断 ✅ 准确
+
+```text
+二次验证说：
+"合理，但属于表达优化，不是原则纠错"
+"采纳表达方式，但实现上不要强行做成死板树结构"
+
+我的评估：这个判断完全准确
+
+它正确识别了一个很容易犯的错误：
+把"概念层级图"和"代码实现结构"混淆
+
+在文档/设计图中：Mode 放最顶层 ✅
+在代码中：多枚举并行 + 优先级门控 ✅
+不要因为概念图是层级的，就在代码中做成嵌套if-else树 ✅
+
+无需修正。
+```
+
+---
+
+### 2.2 关于 ECombatSubState — 二次验证的判断 ✅ 准确且务实
+
+```text
+二次验证说：
+"理论上合理，但不建议现在就机械地新增独立枚举"
+"先用 ActionState + 布尔值解决，等系统复杂到需要时再抽象"
+
+我的评估：这是整份二次验证里最务实的判断之一
+
+原因：
+1. 我提出 ECombatSubState 时，确实是从"完备性"角度出发
+2. 但对于当前开发阶段，过早引入会增加状态组合复杂度
+3. 用 ActionState + bInRecovery + bCanChain 等字段
+   在 P0 阶段完全够用
+4. 当后续武器种类增多、敌人类型增多时
+   如果发现这些布尔值开始互相冲突
+   那时再统一成枚举是更安全的做法
+
+修正我之前的建议：
+将 ECombatSubState 从"需要补充"降级为"可选扩展"
+在最终纲领中标注为"中期演进选项"
+```
+
+---
+
+### 2.3 关于 Weapon Equip/Unequip 的优先级 — 二次验证的判断 ✅ 准确
+
+```text
+二次验证说：
+"是否进 P0 取决于你项目是否有明显的探索态/战斗态切换"
+
+我的评估：这个判断正确
+
+它补充了一个我忽略的前提条件：
+如果项目全程持武器（类似血源的变形武器始终在手），
+那拔收武器动画确实不是 P0 必须项
+
+所以最终建议应该是：
+- 如果设计确认有探索/战斗姿态切换 → P0
+- 如果全程持武器 → P1
+- 由项目设计决定，不是技术纲领硬性规定
+```
+
+---
+
+### 2.4 关于处决系统提前验证 — 二次验证的判断 ✅ 准确
+
+```text
+二次验证说：
+"有道理，但应改为'至少在 P0 后期验证技术框架'"
+"不一定要全量完成，但必须先做技术样机"
+
+我的评估：这比我原来的建议更精确
+
+我原来说"建议提升到 P0 后期"
+二次验证细化为"验证技术框架，不是全量完成"
+这个区分很重要
+
+因为处决系统涉及：
+- 双人同步定位
+- Motion Warping（或替代方案）
+- 特殊相机
+- 状态锁定
+
+这些技术点的可行性需要早期验证
+但处决动画本身的完善度可以后续迭代
+
+最终建议维持二次验证的表述。
+```
+
+---
+
+### 2.5 关于 Grounded SM 嵌套 vs 扁平 — 二次验证的判断 ✅ 准确
+
+```text
+二次验证说：
+"合理但不是唯一正确答案"
+"推荐半嵌套，以可读性为目标"
+
+我的评估：这个判断准确
+
+补充一个实操经验：
+在 UE4.27 的 AnimBP 编辑器中
+过深的嵌套会导致：
+1. 调试时需要反复点进点出子状态机
+2. 过渡规则分散在多层中，不易总览
+3. 团队成员（如果有的话）理解成本上升
+
+所以"半嵌套"是正确的折中：
+- 顶层保持清晰的状态分区
+- Movement 内部用参数选 BS 而非再嵌套一层 SM
+- 不追求极致扁平，也不追求极致嵌套
+```
+
+---
+
+### 2.6 关于敌人 HitReact 统一用 Montage — 二次验证说"认同" — ⚠️ 需要补充一个注意事项
+
+```text
+二次验证说：
+"认同，建议采纳"
+
+我的评估：方向正确，但需要补充一个 UE4.27 实操注意事项
+
+注意事项：
+当敌人在移动状态中被击中时
+如果 HitReact 完全通过 Montage 处理（FullBody Slot）
+Montage 会覆盖 Locomotion State Machine 的输出
+
+这本身是期望行为：被击中时停止移动动画，播放受击动画
+
+但问题出在 Montage 结束后的回到移动状态的过渡：
+- Montage 结束 → Slot 输出为空 → 回到 SM 输出
+- 如果 SM 当前仍在 Move 状态但角色实际已停下
+- 会出现一帧的"滑步"或"动画闪烁"
+
+解决方案：
+1. HitReact Montage 结束时，通过 Notify 通知 Character
+2. Character 重新评估当前状态并更新 SM 输入变量
+3. 或者在 Montage 末尾加一个短 BlendOut 到 Idle
+4. 或者在 SM 中确实保留一个 HitReact State 作为门控
+   这个 State 不播放动画，只是阻止 Locomotion 输出
+   等 Montage 结束后再过渡回正确的 Locomotion State
+
+所以二次验证的结论没错，但需要注意这个过渡细节。
+这也是为什么原纲领给敌人保留了 HitReact SM 的原因。
+
+修正后的建议：
+- 受击动画本身 → Montage 处理 ✅
+- SM 中保留一个 HitReact 门控状态 → 推荐保留 ✅
+- 这个门控状态不播放动画，只是阻止 Locomotion 输出
+- 两者配合使用是最稳的方案
+```
+
+---
+
+### 2.7 关于组件数量控制 — 二次验证的判断 ✅ 准确
+
+```text
+二次验证说：
+"组件拆分方向对，但当前阶段建议少拆一步"
+"先做 CombatComponent，受击并入或轻量单独"
+
+我的评估：务实且正确
+
+过度拆分组件在 UE4.27 中会带来：
+1. 组件间通信开销（Event/Delegate/Interface）
+2. 调试时需要跳转多个组件查状态
+3. 初始化顺序管理变复杂
+
+当前阶段推荐：
+- UCombatComponent（核心，包含动作请求+战斗规则+连段+受击）
+- 如果 CombatComponent 超过 1500 行再考虑拆分
+- 拆分时优先把 HitReact 独立出去
+
+这个判断和二次验证完全一致。
+```
+
+---
+
+### 2.8 关于恐怖氛围 Blackboard 字段 — 二次验证说"放到AI氛围设计扩展" — ✅ 正确
+
+```text
+我的评估：正确
+
+这些字段确实不属于"动作系统核心规范"
+它们属于"AI行为设计"范畴
+应该在单独的AI设计文档中展开
+而不是混进动画系统主纲领
+
+在最终合并纲领中：
+提及其存在 → 是
+详细展开 → 放到专门的AI设计章节
+```
+
+---
+
+### 2.9 关于 DataTable "先小后大" — 二次验证的判断 ✅ 非常准确
+
+```text
+二次验证说：
+"结构设计是对的，实施策略上建议先小后大"
+
+我的评估：这是非常重要的工程判断
+
+我之前给出的 FActionData 结构体有 20+ 个字段
+如果第一版就全部实现，会出现：
+1. 大部分字段初期用不到但必须填
+2. 调参效率低
+3. 容易因为字段太多而忽略真正重要的参数
+
+推荐的分阶段字段：
+
+P0 阶段 FActionData 最小字段集：
+- ActionID
+- ActionType
+- MontageAsset
+- PlayRate
+- StaminaCost
+- bUsesRootMotion
+- bCanBeInterrupted
+
+P1 阶段追加：
+- ComboWindowStart / End
+- HitboxEnableTime / DisableTime
+- IFrameStart / End
+- SuperArmorStart / End
+- NextComboActionID
+
+P2 阶段追加：
+- bAICanUse
+- AIPreferredRange
+- AICooldown
+- RequiredOverlay
+- HealthCost
+- 位移倍率等
+
+这样每个阶段只关注当前需要的字段。
+```
+
+---
+
+## 三、二次验证的三层分级框架 — ✅ 这是最终纲领应该采用的组织方式
+
+```text
+评估结论：二次验证提出的三层分级是最终纲领的最佳组织方式
+
+第一层：核心原则（必须固定）     → 6条 ✅ 全部准确
+第二层：推荐实现（优先采用）     → 6条 ✅ 全部准确  
+第三层：可选扩展（看项目推进）   → 6条 ✅ 全部准确
+
+这18条的分级没有任何一条放错层级。
+```
+
+---
+
+## 四、三方纲领合并后仍存在的盲区
+
+二次验证最后提到了两个未覆盖的领域，我对此进行补充：
+
+```text
+盲区1：网络同步/联机
+二次验证说"你目前看起来是单机项目，可暂不展开"
+我的评估：同意，但加一条预防建议
+
+即使当前是单机，在状态系统设计时注意：
+- 状态变更集中在 Character/Component 中，不散落在 AnimBP
+- 动作请求走统一接口（TryDoAction）
+- Montage 播放走统一入口
+
+如果未来有联机需求，这种集中式设计
+只需要在请求入口加上 Server/Client 权限判断
+而不需要重构整个系统
+
+这不需要现在写网络代码，只需要：
+"保持状态变更路径的单一入口"
+这一条在单机开发中也是好习惯
+```
+
+```text
+盲区2：动画重定向与骨骼兼容
+二次验证说"如果后续会大量采购/混用外部动作资产，这块最好单独补"
+我的评估：正确，而且对于你的项目可能比想象中更早需要
+
+补充建议：
+
+如果你会使用 Mixamo / Marketplace / 其他来源的动画：
+1. 尽早确定项目主骨骼（Skeleton）
+2. 所有外部动画统一通过 Retarget 到主骨骼
+3. 在 UE4.27 中使用 Retarget Manager 设置骨骼映射
+4. 建议建立一个 Retarget 验证流程：
+   - 导入外部动画
+   - Retarget 到主骨骼
+   - 在标准场景中预览
+   - 检查手脚穿模
+   - 检查 Root Motion 是否正确转移
+5. 命名规范中加上来源标记：
+   AN_Player_LightAttack_01_SRC_Mixamo
+   AN_Player_LightAttack_01_SRC_Original
+   （或用文件夹区分来源）
+
+这个流程建议在 P0 阶段就确定，避免后期返工。
+```
+
+```text
+盲区3（新增）：相机系统与动作系统的联动
+
+你已经完成了相机总组件，但纲领中没有详细覆盖
+动作系统如何与相机系统配合
+
+类魂项目中相机需要响应的动作事件：
+1. 锁定时的相机行为（你的锁定组件已有）
+2. 攻击时的轻微相机震动（Camera Shake）
+3. 受击时的相机反馈
+4. 处决时的特殊相机角度
+5. 闪避时相机是否跟随还是延迟
+6. Boss战的相机距离自动调整
+
+建议：
+在动作请求系统的执行层（ExecuteAction）中
+预留一个 CameraEvent 回调接口
+让相机组件可以订阅动作事件并做出响应
+
+这不需要现在就全部实现
+但接口预留应该在 P0 阶段完成
+因为你已经有相机组件了，联动接口越早做越好
+```
+
+```text
+盲区4（新增）：音效与动作系统的联动规范
+
+你的项目蓝图负责音乐系统和氛围音效
+但纲领中没有明确"战斗音效"如何与动作系统对接
+
+对于类魂项目，战斗音效的时机要求非常精确：
+- 挥刀音效：必须和动画的挥砍帧精确对齐
+- 命中音效：必须和 Hitbox 激活同步
+- 脚步音效：必须和移动动画的落脚帧对齐
+- 防御/弹反音效：必须和判定窗口同步
+
+推荐方案：
+统一通过 AnimNotify 触发
+- AN_PlaySFX_SwingLight
+- AN_PlaySFX_SwingHeavy
+- AN_PlaySFX_FootStep
+- AN_PlaySFX_Impact（由命中判定触发，不是Notify）
+
+在 Notify 中只发出事件
+实际音效播放由音效系统（蓝图侧）负责
+这样保持"动作系统触发事件，表现系统响应事件"的原则
+
+这一点应该在命名规范和Notify规范中补充。
+```
+
+---
+
+## 五、最终三方对齐结论
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│                    三方对齐最终结论                            │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│  原纲领（第一个LLM）：                                        │
+│  → 提供了完整的架构设计和开发方向                              │
+│  → 质量高，方向正确，覆盖面广                                 │
+│  → 适合作为"设计蓝图"                                        │
+│                                                              │
+│  交叉验证（我/Copilot）：                                     │
+│  → 补充了 UE4.27 实操细节和工程规范                           │
+│  → 修正了少量枚举归属和资产优先级                              │
+│  → 增强了可执行性                                            │
+│                                                              │
+│  二次验证（第一个LLM）：                                      │
+│  → 对补充内容做了准确的"必须/推荐/可选"分级                   │
+│  → 防止了过度设计的风险                                       │
+│  → 提出了"保留弹性"的正确工程态度                             │
+│                                                              │
+├──────────────────────────────────────────────────────────────┤
+│  三方一致同意的核心原则：                                      │
+│  1. 动作请求制（TryDoAction）是核心                           │
+│  2. C++管规则，AnimBP管表现                                   │
+│  3. 玩家不用Blackboard做动画状态控制                          │
+│  4. SM处理持续状态，Montage处理离散动作                        │
+│  5. 玩家/敌人/Boss统一状态语言                                │
+│  6. Root Motion From Montages Only                           │
+│  7. 数据驱动动作配置                                          │
+│  8. 先闭环再扩展                                              │
+│                                                              │
+├──────────────────────────────────────────────────────────────┤
+│  三方达成的分级共识：                                          │
+│  第一层（必须）：8条核心原则 + 状态枚举修正                    │
+│  第二层（推荐）：Root Motion策略 + 命名规范 + 依赖项管理       │
+│  第三层（可选）：CombatSubState + 氛围AI + Motion Warping     │
+│                                                              │
+├──────────────────────────────────────────────────────────────┤
+│  本次评估新增的盲区补充：                                      │
+│  1. 保持状态变更单一入口（为潜在联机预留）                     │
+│  2. 动画重定向流程（P0阶段确定）                               │
+│  3. 相机系统与动作系统联动接口                                 │
+│  4. 音效与动作系统联动规范                                     │
+│                                                              │
+├──────────────────────────────────────────────────────────────┤
+│  最终结论：                                                    │
+│  三份文档可以合并为一份最终版主纲领                             │
+│  没有方向性冲突                                               │
+│  所有分歧都是"程度/时机"的差异，不是"对错"的差异              │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+```
+
+---
+

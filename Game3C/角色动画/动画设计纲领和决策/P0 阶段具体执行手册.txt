@@ -1,0 +1,1936 @@
+
+
+# 选项B：P0 阶段具体执行手册
+
+```text
+================================================================================
+  UE4.27 类魂项目 · P0 阶段具体执行手册
+  HAND OFF DOCUMENT v1.0 — 附录B
+  
+  文档性质：P0 阶段每周执行计划 / 具体工作分解 / 产出物清单
+  前置依赖：必须先阅读主纲领（选项A文档）
+  覆盖时间：第1周 ~ 第4周（含缓冲共约5周）
+  目标产出：玩家角色最小可战斗闭环
+  
+  ⚠️ 本手册假设单人或极小团队开发
+  ⚠️ 每周按5个工作日计算，第5天留给测试和修Bug
+  ⚠️ 如果某一天的任务提前完成，拉取下一天的任务
+  ⚠️ 如果某一天的任务未完成，顺延但不跳过
+================================================================================
+```
+
+---
+
+## 第〇章 · P0 阶段总目标
+
+```text
+================================================================================
+  P0 结束时必须达到的状态
+================================================================================
+
+  玩家角色能够：
+  1. 在非战斗状态下自由移动（Walk/Run/Idle/Turn In Place）
+  2. 进入战斗状态后切换到战斗姿态
+  3. 锁定目标后八方向环绕移动
+  4. 执行轻攻击三段连击
+  5. 执行重攻击
+  6. 四方向闪避
+  7. 受到攻击时播放受击动画并被打断当前动作
+  8. 失衡（Stagger）
+  9. 死亡
+  10. 喝药/使用道具
+  11. 基础交互（拾取/调查）
+  12. 落地（从高处）
+  13. 以上所有动作通过动作请求制（TryDoAction）触发
+  14. 耐力消耗与恢复运作正常
+  15. 输入缓存运作正常
+  16. 连段窗口运作正常
+  17. Debug 可视化显示当前所有状态
+
+  P0 结束时不需要达到的状态：
+  - 敌人AI（P1阶段开始）
+  - 防御/弹反（P1）
+  - 处决/背刺（P1技术样机）
+  - Boss（P2）
+  - IK/Foot Placement（后期）
+  - 完美的动画过渡（持续迭代）
+  - 音效/特效完善（P1配合）
+
+================================================================================
+  P0 阶段总体时间线
+================================================================================
+
+  第1周：地基工程（状态系统 + 规范 + Root Motion 决策）
+  第2周：移动系统（Blend Space + 基础 State Machine + Debug）
+  第3周：战斗核心（Montage + 动作请求 + 输入缓存 + 连段）
+  第4周：闭环验证（受击 + 耐力 + 打断 + 交互 + 调参）
+  缓冲：第5周前半用于修Bug和补漏
+
+================================================================================
+  P0 所需动画资产最小清单（开始前必须准备或确认来源）
+================================================================================
+
+  如果使用外部动画资产（Mixamo/Marketplace），
+  必须在第1周完成 Retarget 验证。
+
+  最小资产清单：
+  
+  基础移动（In-Place，不含 Root Motion）：
+  - AN_Player_Idle_Exploration          1个
+  - AN_Player_Walk_F/B/L/R              4个（至少）
+  - AN_Player_Run_F/B/L/R               4个（至少）
+  - AN_Player_TurnInPlace_L/R           2个
+
+  战斗移动（In-Place）：
+  - AN_Player_Idle_Combat               1个
+  - AN_Player_Strafe_F/B/L/R/FL/FR/BL/BR  8个（锁定环绕）
+
+  攻击（可含 Root Motion）：
+  - AN_Player_LightAttack_01/02/03      3个
+  - AN_Player_HeavyAttack_01            1个
+
+  闪避（含 Root Motion）：
+  - AN_Player_Dodge_F/B/L/R             4个
+
+  受击（不含 Root Motion）：
+  - AN_Player_HitReact_F/B/L/R          4个（轻受击）
+  - AN_Player_Stagger                   1个
+
+  其他：
+  - AN_Player_Death_01                  1个
+  - AN_Player_Heal                      1个
+  - AN_Player_Interact                  1个
+  - AN_Player_Land                      1个
+  
+  总计最小：约 35 个动画序列
+  
+  如有探索/战斗姿态切换：
+  - AN_Player_WeaponEquip               1个
+  - AN_Player_WeaponUnequip             1个
+```
+
+---
+
+## 第一章 · 第1周：地基工程
+
+```text
+================================================================================
+  第1周目标：建立所有后续工作的基础设施
+================================================================================
+
+  产出物：
+  1. 全部状态枚举定义（C++ .h 文件）
+  2. 动作数据结构体定义（C++ .h 文件）
+  3. 命名规范文档（可以是注释或独立文档）
+  4. Content 文件夹结构建立
+  5. Root Motion 策略确认文档
+  6. 动画资产导入 + Retarget 验证（如用外部资产）
+  7. Skeleton Anim Slot Manager 配置
+  8. AnimBP 空壳建立
+  9. UCombatComponent 空壳建立
+```
+
+---
+
+### 第1天：状态枚举 + 命名规范 + 文件夹结构
+
+```text
+上午任务：
+
+1. 创建 C++ 头文件：CharacterStateTypes.h
+   包含以下枚举：
+   - ECharacterMainState
+   - ELocomotionState
+   - EGait
+   - EMovementStyle
+   - ERotationMode
+   - EOverlayState
+   - EActionState
+   - EHitReactState
+   （具体值见主纲领第二章 2.2 节，直接照搬）
+
+2. 创建 C++ 头文件：ActionTypes.h
+   包含：
+   - EActionType（Attack/Dodge/Heal/Interact/Guard/Parry/Skill）
+
+3. 在 Character 基类中添加状态变量声明
+   （不写逻辑，只声明变量和 UPROPERTY）：
+   - MainState
+   - LocomotionState
+   - Gait
+   - MovementStyle
+   - RotationMode
+   - OverlayState
+   - ActionState
+   - HitReactState
+   - bIsInCombat
+   - bIsLockedOn
+   - bInRecovery
+   - bCanChain
+   - bCanBeInterrupted
+   - bIsInvincible
+   - bHasSuperArmor
+   - fCurrentSpeed
+   - fMovementDirection
+   - fForwardAxis
+   - fRightAxis
+
+下午任务：
+
+4. 建立 Content 文件夹结构
+   按主纲领第十一章 11.2 节建立目录
+
+5. 建立命名规范参考文档
+   可以是项目根目录下的 README 或注释文件
+   包含主纲领第十一章 11.1 节的所有命名规则
+
+6. 将以上内容提交版本管理
+   Commit: "Foundation: State enums, naming conventions, folder structure"
+
+今日产出检查：
+[ ] CharacterStateTypes.h 编译通过
+[ ] ActionTypes.h 编译通过
+[ ] Character 基类变量声明完成
+[ ] Content 文件夹结构建立
+[ ] 命名规范文档存在
+```
+
+---
+
+### 第2天：Root Motion 策略 + 动画资产导入 + Retarget 验证
+
+```text
+上午任务：
+
+1. 确认 Root Motion 策略（参考主纲领第六章）
+   在项目文档或代码注释中记录决策：
+   
+   移动动画    → 不使用 Root Motion（In-Place）
+   攻击动画    → 默认不用，突进攻击等单独开启
+   闪避动画    → 使用 Root Motion
+   受击动画    → 不使用 Root Motion
+   处决动画    → 使用 Root Motion（P1 再做）
+
+2. 导入所有 P0 阶段需要的动画资产
+   按文件夹结构放置：
+   Characters/Player/Animations/Locomotion/
+   Characters/Player/Animations/Combat/
+   Characters/Player/Animations/HitReact/
+   Characters/Player/Animations/Interaction/
+
+3. 如果使用外部动画资产：
+   - 在 Retarget Manager 中设置骨骼映射
+   - 逐一验证每个动画的 Retarget 结果
+   - 检查手脚穿模
+   - 检查根骨骼位置
+   
+   如果使用自制动画：跳过 Retarget 步骤
+
+下午任务：
+
+4. 检查所有动画的 Root Motion 设置
+   - 移动动画：确认 EnableRootMotion = false
+   - 闪避动画：确认 EnableRootMotion = true
+   - 攻击动画：逐一确认，有位移的开启，无位移的关闭
+   - 受击动画：确认 EnableRootMotion = false
+
+5. 检查所有动画是否正确引用项目主 Skeleton
+
+6. 提交版本管理
+   Commit: "Assets: Import P0 animation sequences, verify RM settings"
+
+今日产出检查：
+[ ] Root Motion 策略文档/注释存在
+[ ] 所有 P0 动画资产已导入到正确文件夹
+[ ] Retarget 验证通过（如适用）
+[ ] Root Motion 开关逐一确认
+[ ] 所有动画引用同一 Skeleton
+```
+
+---
+
+### 第3天：Slot Group 配置 + AnimBP 空壳 + Blend Space 建立
+
+```text
+上午任务：
+
+1. 在 Skeleton 的 Anim Slot Manager 中配置 Slot Group
+   添加以下 Slot：
+   - DefaultGroup.FullBody
+   - DefaultGroup.UpperBody
+   - DefaultGroup.Additive
+   
+   确认配置保存成功
+
+2. 创建 ABP_Player（AnimBP 空壳）
+   - 关联项目主 Skeleton
+   - Event Graph 中暂时只做：
+     a. 获取 OwningActor
+     b. Cast to Character 基类
+     c. 缓存到变量（CharacterRef）
+   - AnimGraph 中暂时只放一个 Idle 动画作为默认输出
+   - 设置 Root Motion Mode = Root Motion From Montages Only
+
+3. 创建 Blend Space 资产（内容后续填充）：
+   - BS_Player_Locomotion（2D，Speed + Direction 或 Forward + Right）
+   - BS_Player_LockOnStrafe（2D，Forward + Right）
+
+下午任务：
+
+4. 填充 BS_Player_Locomotion
+   推荐轴配置（Speed + Direction 方案）：
+   - Horizontal Axis: Direction（-180 到 180）
+   - Vertical Axis: Speed（0 到最大速度，如 600）
+   - 采样点：
+     Speed=0: Idle
+     Speed=300, Direction=0/90/-90/180: Walk F/R/L/B
+     Speed=600, Direction=0/90/-90/180: Run F/R/L/B
+
+   或者（Forward + Right 方案，更适合锁定移动复用）：
+   - Horizontal Axis: Right（-1 到 1）
+   - Vertical Axis: Forward（-1 到 1）
+   - 加 Speed 作为第三参数或通过切换 BS 处理
+
+5. 填充 BS_Player_LockOnStrafe
+   轴配置：
+   - Horizontal Axis: Right（-1 到 1）
+   - Vertical Axis: Forward（-1 到 1）
+   - 采样点（至少9个）：
+     中心(0,0): Combat Idle
+     (0,1): Strafe Forward
+     (0,-1): Strafe Backward
+     (1,0): Strafe Right
+     (-1,0): Strafe Left
+     (1,1): Strafe Forward-Right
+     (-1,1): Strafe Forward-Left
+     (1,-1): Strafe Backward-Right
+     (-1,-1): Strafe Backward-Left
+
+6. 提交版本管理
+   Commit: "AnimBP: Skeleton slots configured, ABP shell created, BS built"
+
+今日产出检查：
+[ ] Skeleton Anim Slot Manager 有 FullBody/UpperBody/Additive
+[ ] ABP_Player 存在，关联正确 Skeleton
+[ ] ABP_Player Root Motion Mode = Root Motion From Montages Only
+[ ] BS_Player_Locomotion 有正确采样点，预览正常
+[ ] BS_Player_LockOnStrafe 有至少9个采样点，预览正常
+```
+
+---
+
+### 第4天：动作数据结构 + CombatComponent 空壳 + AnimBP 变量接口
+
+```text
+上午任务：
+
+1. 创建 C++ 头文件：ActionData.h
+   定义 FActionData 结构体（继承 FTableRowBase）
+   P0 最小字段集：
+   
+   ActionID            FName
+   ActionType          EActionType
+   MontageAsset        TSoftObjectPtr<UAnimMontage>
+   PlayRate            float（默认1.0）
+   StaminaCost         float
+   bUsesRootMotion     bool
+   bCanBeInterrupted   bool
+
+2. 创建 DataTable 资产：DT_ActionData_Player
+   基于 FActionData 结构体
+   暂时不填数据（第3周填充）
+   放在 Characters/Shared/DataTables/
+
+3. 创建 C++ 类：UCombatComponent（继承 UActorComponent）
+   P0 最小接口声明（只声明，不写实现）：
+   
+   公开函数：
+   - bool TryDoAction(EActionState RequestedAction)
+   - bool CanDoAction(EActionState RequestedAction) const
+   - void OnActionEnd()
+   - void OnHitReceived(EHitReactState HitType)
+   - void OnMontageEnded(...)
+   
+   公开变量：
+   - EActionState CurrentActionState
+   - bool bIsPerformingAction
+   - bool bCanChain
+   - bool bInRecovery
+   
+   内部变量：
+   - UDataTable* ActionDataTable（在编辑器中指定）
+   - float InputBufferDuration（默认0.2）
+   - EActionState BufferedAction
+   - float BufferTimer
+
+下午任务：
+
+4. 在 ABP_Player 的 Event Graph 中建立变量接口
+   从 CharacterRef 读取以下变量并缓存为 AnimBP 本地变量：
+   
+   - MainState（ECharacterMainState）
+   - LocomotionState（ELocomotionState）
+   - Gait（EGait）
+   - MovementStyle（EMovementStyle）
+   - ActionState（EActionState）
+   - HitReactState（EHitReactState）
+   - bIsInCombat（bool）
+   - bIsLockedOn（bool）
+   - fCurrentSpeed（float）
+   - fMovementDirection（float）
+   - fForwardAxis（float）
+   - fRightAxis（float）
+   
+   这些变量在 Event Blueprint Update Animation 中每帧更新
+
+5. 将 UCombatComponent 添加到 Character 基类中
+   在 Character .h 中声明：
+   UPROPERTY(VisibleAnywhere) UCombatComponent* CombatComponent;
+   在构造函数中创建默认子组件
+
+6. 提交版本管理
+   Commit: "Core: ActionData struct, CombatComponent shell, AnimBP variables"
+
+今日产出检查：
+[ ] ActionData.h 编译通过
+[ ] FActionData 结构体正确继承 FTableRowBase
+[ ] DT_ActionData_Player 资产存在
+[ ] UCombatComponent 编译通过
+[ ] ABP_Player Event Graph 读取所有状态变量
+[ ] Character 基类持有 CombatComponent
+```
+
+---
+
+### 第5天：集成验证 + 补漏 + 整理
+
+```text
+上午任务：
+
+1. 编译验证
+   确保整个项目编译通过，无错误无警告（或只有无关警告）
+
+2. 运行验证
+   - 启动游戏
+   - 确认 Character 正确创建 CombatComponent
+   - 确认 ABP_Player 正确获取 CharacterRef
+   - 确认 ABP_Player 变量每帧更新（用 PrintString 或 Debug 组件验证）
+   - 确认 Blend Space 预览正常
+
+3. Debug 组件扩展
+   在你已有的 Debug 组件中添加以下显示：
+   - 当前 MainState
+   - 当前 LocomotionState
+   - 当前 ActionState
+   - 当前 Gait
+   - 当前 MovementStyle
+   - 当前 Speed
+   - 当前 Direction
+   - CombatComponent 状态（bIsPerformingAction / bCanChain）
+   
+   显示方式：Screen Debug Message 或 DrawDebugString
+   确保在游戏中可以实时看到所有状态
+
+下午任务：
+
+4. 补漏
+   检查本周所有产出检查清单
+   修复未通过的项目
+
+5. 代码整理
+   - 确认所有 .h/.cpp 文件有统一的文件头注释
+   - 确认所有枚举值有注释说明
+   - 确认 Content 文件夹结构正确
+
+6. 提交版本管理
+   Commit: "Week1 Complete: Foundation verified, debug display added"
+
+今日产出检查：
+[ ] 项目编译通过
+[ ] 运行时 ABP_Player 正确读取状态
+[ ] Debug 显示所有状态变量
+[ ] Blend Space 预览正常
+[ ] 本周所有检查清单通过
+
+================================================================================
+  第1周结束时的项目状态
+================================================================================
+
+  已完成：
+  ✅ 全部状态枚举定义
+  ✅ 动作数据结构体（P0最小字段）
+  ✅ DataTable 资产（空）
+  ✅ Content 文件夹结构
+  ✅ 命名规范文档
+  ✅ Root Motion 策略确认
+  ✅ 所有 P0 动画资产导入并验证
+  ✅ Skeleton Slot Group 配置
+  ✅ ABP_Player 空壳 + 变量接口
+  ✅ BS_Player_Locomotion
+  ✅ BS_Player_LockOnStrafe
+  ✅ UCombatComponent 空壳
+  ✅ Debug 状态显示
+
+  尚未完成：
+  ❌ AnimBP State Machine（第2周）
+  ❌ Montage 制作（第3周）
+  ❌ 动作请求逻辑实现（第3周）
+  ❌ 输入缓存实现（第3周）
+  ❌ 受击/打断逻辑（第4周）
+  ❌ 耐力系统联动（第4周）
+```
+
+---
+
+## 第二章 · 第2周：移动系统
+
+```text
+================================================================================
+  第2周目标：角色可以正确移动、转身、切换战斗姿态、锁定环绕
+================================================================================
+
+  产出物：
+  1. ABP_Player 完整的 Grounded State Machine
+  2. 非战斗移动正常运行
+  3. 战斗移动/锁定环绕正常运行
+  4. Turn In Place 正常运行
+  5. 状态切换逻辑（Normal ↔ Combat）
+  6. Character 状态更新逻辑（速度/方向/Gait 计算）
+  7. AnimBP 正确根据状态选择 Blend Space
+```
+
+---
+
+### 第1天：Character 状态更新逻辑
+
+```text
+上午任务：
+
+1. 在 Character 基类（或 MovementComponent 扩展）中实现状态计算
+   每帧（Tick）更新以下值：
+   
+   fCurrentSpeed = GetVelocity().Size()
+   或
+   fCurrentSpeed = GetCharacterMovement()->Velocity.Size2D()
+   
+   fMovementDirection = 
+     计算当前速度方向与角色朝向的夹角（-180到180）
+   
+   计算 fForwardAxis / fRightAxis：
+     从输入轴值获取（用于锁定移动）
+     这些值在锁定时驱动 LockOnStrafe BS
+   
+   LocomotionState 更新：
+     if Speed < 1.0 → Idle
+     else → Move
+     （Start/Stop/Pivot 后续添加，P0 先简化）
+   
+   Gait 更新：
+     根据输入（是否按住 Sprint 键）和 Speed 阈值：
+     Speed < WalkThreshold → Walk
+     Speed < RunThreshold → Run
+     bSprintPressed && Speed > RunThreshold → Sprint
+
+2. 实现 MainState 切换逻辑（简化版）
+   Normal → Combat：
+     当玩家进入锁定（bIsLockedOn = true）
+     或按下攻击键时
+   Combat → Normal：
+     脱离锁定且一段时间无战斗操作后
+
+下午任务：
+
+3. 实现 MovementStyle 更新逻辑
+   if bIsLockedOn → LockOnStrafe
+   else → FreeMove
+
+4. 实现 RotationMode 更新逻辑
+   if bIsLockedOn → OrientToTarget
+   else → OrientToMovement
+   
+   在 CharacterMovementComponent 中对应设置：
+   bOrientRotationToMovement = (RotationMode == OrientToMovement)
+   bUseControllerDesiredRotation = (RotationMode == OrientToTarget)
+
+5. 验证：运行游戏，Debug 显示应正确反映所有状态变化
+
+6. Commit: "Movement: Character state update logic implemented"
+
+今日产出检查：
+[ ] 速度/方向每帧正确计算
+[ ] LocomotionState 正确在 Idle/Move 间切换
+[ ] Gait 正确在 Walk/Run/Sprint 间切换
+[ ] MovementStyle 正确随锁定状态切换
+[ ] RotationMode 正确切换
+[ ] Debug 显示确认
+```
+
+---
+
+### 第2天：AnimBP Grounded State Machine — 基础移动
+
+```text
+上午任务：
+
+1. 在 ABP_Player 的 AnimGraph 中建立主结构
+   
+   AnimGraph 结构（从输出节点往回连）：
+   
+   Output Pose
+     ← Slot 'DefaultGroup.FullBody'
+       ← Slot 'DefaultGroup.UpperBody'（后期添加，暂时跳过）
+         ← [主 State Machine]
+
+2. 建立主 State Machine（命名：MainStateMachine）
+   包含以下状态：
+   
+   ├── Grounded          ← 默认入口
+   ├── InAir             ← P0 简化处理
+   ├── HitReact_Gate     ← 门控状态（第4周接入）
+   └── Dead              ← 终态（第4周接入）
+
+3. 建立 Grounded 内部结构（子状态机或直接在内部）
+   
+   Grounded 内部：
+   ├── Idle State
+   │   播放内容：根据 bIsInCombat 选择
+   │   - false → AN_Player_Idle_Exploration
+   │   - true  → AN_Player_Idle_Combat
+   │   （用 Blend Poses by Bool 或条件分支）
+   │
+   └── Movement State
+       播放内容：根据 MovementStyle 选择
+       - FreeMove     → BS_Player_Locomotion
+       - LockOnStrafe → BS_Player_LockOnStrafe
+
+下午任务：
+
+4. 设置 Grounded 内部过渡规则
+   
+   Idle → Movement：
+     条件：fCurrentSpeed > 10.0（留小阈值避免抖动）
+     过渡时间：0.2秒
+   
+   Movement → Idle：
+     条件：fCurrentSpeed < 5.0
+     过渡时间：0.2秒
+
+5. 连接 Blend Space 输入参数
+   BS_Player_Locomotion：
+   - Speed = fCurrentSpeed
+   - Direction = fMovementDirection（如果用 Speed+Direction 方案）
+   或
+   - Forward = fForwardAxis
+   - Right = fRightAxis（如果用 Forward+Right 方案）
+   
+   BS_Player_LockOnStrafe：
+   - Forward = fForwardAxis
+   - Right = fRightAxis
+
+6. 运行验证：
+   - 站立时播放 Idle
+   - 移动时播放对应 Blend Space 动画
+   - 锁定时切换到 LockOnStrafe BS
+   - 过渡平滑
+
+7. Commit: "AnimBP: Grounded SM with Idle and Movement states"
+
+今日产出检查：
+[ ] MainStateMachine 有 Grounded/InAir/HitReact_Gate/Dead
+[ ] Grounded 内有 Idle 和 Movement
+[ ] Idle 根据战斗状态切换动画
+[ ] Movement 根据 MovementStyle 切换 BS
+[ ] 过渡平滑无跳变
+[ ] 锁定时正确使用 LockOnStrafe BS
+```
+
+---
+
+### 第3天：Turn In Place + InAir/Land
+
+```text
+上午任务：
+
+1. 实现 Turn In Place 逻辑
+   
+   在 Character 中检测：
+   - 角色静止（Speed < 1.0）
+   - 控制器旋转与角色朝向差值超过阈值（如 60°）
+   - 此时设置 LocomotionState = TurnInPlace
+   
+   在 AnimBP Grounded SM 中添加 TurnInPlace State：
+   ├── Idle
+   ├── Movement
+   └── TurnInPlace（新增）
+   
+   Idle → TurnInPlace：
+     条件：LocomotionState == TurnInPlace
+     过渡时间：0.15秒
+   
+   TurnInPlace → Idle：
+     条件：转身完成（旋转差值回到阈值内）
+     过渡时间：0.2秒
+   
+   TurnInPlace State 播放：
+   - 根据旋转方向选择 AN_Player_TurnInPlace_L 或 _R
+   - 使用 Blend Poses by Bool (方向 > 0 ? Right : Left)
+   
+   在 Character 中：
+   - TurnInPlace 期间用代码插值旋转角色朝向
+   - 旋转速率可调（推荐 120~180 度/秒）
+
+下午任务：
+
+2. 实现 InAir / Land
+   
+   在 MainStateMachine 中设置 InAir 状态：
+   
+   Grounded → InAir：
+     条件：CharacterMovement->IsFalling() == true
+     过渡时间：0.1秒
+   
+   InAir → Grounded：
+     条件：CharacterMovement->IsFalling() == false
+     过渡时间：0.2秒
+     （进入 Grounded 时会根据速度自动进入 Idle 或 Movement）
+   
+   InAir 内部（P0 简化版）：
+   - 只播放 Fall 动画（AN_Player_Land 或一个 Fall Loop）
+   - 不做 JumpStart（P0 不做跳跃）
+   
+   落地处理：
+   - 可以在 Grounded 入口处短暂播放 Land 动画
+   - 或用 Montage 播放 Land（更灵活）
+   - P0 推荐：在过渡混合中自然过渡回 Idle/Move 即可
+
+3. 运行验证：
+   - 站立时旋转视角，角色原地转身
+   - 转身动画方向正确
+   - 从高处掉落时播放 Fall
+   - 落地后回到正确的 Grounded 状态
+
+4. Commit: "AnimBP: Turn In Place and InAir states"
+
+今日产出检查：
+[ ] Turn In Place 在正确阈值触发
+[ ] 左右转身选择正确动画
+[ ] 转身完成后回到 Idle
+[ ] 从高处掉落时切换到 InAir
+[ ] 落地后正确回到 Grounded
+```
+
+---
+
+### 第4天：状态切换细化 + 战斗姿态完善
+
+```text
+上午任务：
+
+1. 完善 Normal ↔ Combat 切换的视觉表现
+   
+   当 MainState 从 Normal → Combat：
+   - bIsInCombat = true
+   - Idle 自动切换到 Combat Idle
+   - 如果有 Weapon Equip 动画：播放 Montage
+   - 如果没有：直接通过 Idle Blend 过渡
+   
+   当 MainState 从 Combat → Normal：
+   - bIsInCombat = false
+   - Idle 自动切换到 Exploration Idle
+   - 过渡时间可以稍长（0.3~0.5秒），感觉更自然
+   
+   确保 Movement State 也响应战斗状态：
+   - 战斗中移动速度可能不同
+   - 战斗中默认 Gait 可能是 Run 而非 Walk
+
+2. 确保锁定系统与移动正确联动
+   
+   你已有锁定与切换锁定组件，确认以下联动：
+   - 锁定时：MovementStyle → LockOnStrafe
+   - 锁定时：RotationMode → OrientToTarget
+   - 锁定时：角色始终面向目标
+   - 解锁时：恢复 FreeMove 和 OrientToMovement
+   
+   验证锁定状态下八方向移动是否自然
+
+下午任务：
+
+3. Sprint 实现
+   - 按住 Sprint 键 + 移动时：Gait → Sprint
+   - 松开或停止移动时：回到 Run 或 Walk
+   - Sprint 时 CharacterMovement->MaxWalkSpeed 提高
+   - BS 中 Sprint 速度对应更快的 Run 动画
+   - 或者如果有独立 Sprint 动画，在 BS 中添加更高速度的采样点
+
+4. 移动手感微调
+   - 调整 CharacterMovement 参数：
+     MaxWalkSpeed（Walk/Run/Sprint 各档）
+     MaxAcceleration
+     BrakingDecelerationWalking
+     GroundFriction
+   - 调整 BS 过渡的平滑度
+   - 调整 Idle ↔ Movement 过渡时间
+
+5. Commit: "Movement: Combat stance, lock-on integration, sprint, tuning"
+
+今日产出检查：
+[ ] Normal/Combat 切换时 Idle 动画正确变化
+[ ] 锁定时八方向环绕移动自然
+[ ] 解锁时回到自由移动
+[ ] Sprint 正确触发和停止
+[ ] 移动加速/减速手感基本舒适
+```
+
+---
+
+### 第5天：集成验证 + Debug 强化 + 补漏
+
+```text
+上午任务：
+
+1. 完整移动系统验证清单
+   按以下场景逐一测试：
+   
+   [ ] 站立不动 → 显示 Exploration Idle
+   [ ] 前后左右移动 → Locomotion BS 正确混合
+   [ ] 停止移动 → 回到 Idle，过渡平滑
+   [ ] 按住 Sprint → 速度提升，动画匹配
+   [ ] 进入战斗状态 → Idle 切换为 Combat Idle
+   [ ] 锁定目标 → 切换到 LockOnStrafe BS
+   [ ] 锁定时八方向移动 → 动画方向正确
+   [ ] 解锁 → 回到 FreeMove
+   [ ] 站立时旋转视角 → Turn In Place 触发
+   [ ] 左转 → 播放左转动画
+   [ ] 右转 → 播放右转动画
+   [ ] 转身完成 → 回到 Idle
+   [ ] 从高处掉落 → InAir 状态
+   [ ] 落地 → 回到 Grounded
+   [ ] 切换锁定目标 → 朝向正确更新
+
+2. Debug 显示强化
+   确保所有以下信息在屏幕上可见：
+   - MainState
+   - LocomotionState
+   - Gait
+   - MovementStyle
+   - RotationMode
+   - Speed
+   - Direction
+   - bIsLockedOn
+   - bIsInCombat
+   - 当前 AnimBP State Machine 状态名（可选但推荐）
+
+下午任务：
+
+3. 修复所有验证中发现的问题
+
+4. 如果所有验证通过，可以提前开始第3周的 Montage 制作准备：
+   - 创建 Montage 资产（空壳）：
+     AM_Player_LightCombo
+     AM_Player_HeavyAttack
+     AM_Player_Dodge_F/B/L/R
+     AM_Player_HitReact_F/B/L/R
+     AM_Player_Stagger
+     AM_Player_Death
+     AM_Player_Heal
+     AM_Player_Interact
+
+5. Commit: "Week2 Complete: Movement system verified"
+
+今日产出检查：
+[ ] 完整验证清单全部通过
+[ ] Debug 显示所有关键状态
+[ ] 无已知 Bug 遗留
+[ ] （可选）Montage 空壳已创建
+
+================================================================================
+  第2周结束时的项目状态
+================================================================================
+
+  已完成：
+  ✅ 角色状态每帧正确更新
+  ✅ 非战斗自由移动 + Blend Space
+  ✅ 战斗状态 Idle 和移动
+  ✅ 锁定八方向环绕移动
+  ✅ Turn In Place
+  ✅ InAir / Land
+  ✅ Sprint
+  ✅ Normal ↔ Combat 切换
+  ✅ Debug 实时状态显示
+  ✅ 移动手感基本调参
+
+  尚未完成：
+  ❌ 攻击/闪避/受击 Montage（第3周）
+  ❌ 动作请求逻辑（第3周）
+  ❌ 输入缓存（第3周）
+  ❌ 连段窗口（第3周）
+  ❌ 耐力系统（第4周）
+  ❌ 受击打断（第4周）
+  ❌ 交互/喝药（第4周）
+```
+
+---
+
+## 第三章 · 第3周：战斗核心
+
+```text
+================================================================================
+  第3周目标：接入攻击、闪避、连段、输入缓存
+================================================================================
+
+  产出物：
+  1. 轻攻击3段连击 Montage 完成并可播放
+  2. 重攻击 Montage 完成
+  3. 闪避4方向 Montage 完成
+  4. CombatComponent TryDoAction 核心逻辑实现
+  5. 输入缓存系统运作
+  6. 连段窗口通过 Notify 控制
+  7. 基础 Notify 类定义完成
+```
+
+---
+
+### 第1天：Notify C++ 基类 + 核心 Montage 制作
+
+```text
+上午任务：
+
+1. 创建 C++ Notify 类
+
+   瞬时 Notify（继承 UAnimNotify）：
+   - UAN_EnableHitbox
+   - UAN_DisableHitbox
+   - UAN_ActionEnd
+   - UAN_PlaySFX（P0 可只做空壳）
+   
+   状态 Notify（继承 UAnimNotifyState）：
+   - UANS_ComboWindow
+   - UANS_IFrame（P0 可只做空壳）
+   - UANS_SuperArmor（P0 可只做空壳）
+   
+   P0 阶段每个 Notify 的实现可以很简单：
+   - UAN_EnableHitbox::Notify() → 调用 Character 的 EnableHitbox()
+   - UAN_DisableHitbox::Notify() → 调用 Character 的 DisableHitbox()
+   - UAN_ActionEnd::Notify() → 调用 CombatComponent 的 OnActionEnd()
+   - UANS_ComboWindow::NotifyBegin() → 设置 bCanChain = true
+   - UANS_ComboWindow::NotifyEnd() → 设置 bCanChain = false
+
+下午任务：
+
+2. 制作 AM_Player_LightCombo Montage
+   
+   使用动画序列：
+   - Section "Default"  → AN_Player_LightAttack_01
+   - Section "Combo_02" → AN_Player_LightAttack_02
+   - Section "Combo_03" → AN_Player_LightAttack_03
+   
+   Slot: DefaultGroup.FullBody
+   
+   每个 Section 中添加 Notify：
+   ├── AN_EnableHitbox      （攻击判定开始帧）
+   ├── AN_DisableHitbox     （攻击判定结束帧）
+   ├── ANS_ComboWindow      （可接受连段输入的时间段）
+   └── AN_ActionEnd         （Section 结束前，如果不接连段）
+   
+   注意：
+   - ComboWindow 应在攻击判定之后开启
+   - ComboWindow 在 Section 结束前关闭
+   - 如果在 ComboWindow 内接收到输入 → JumpToSection 下一段
+   - 如果没有接收到 → 播放完当前 Section 的恢复帧 → ActionEnd
+
+3. 制作 AM_Player_HeavyAttack Montage
+   - 单 Section
+   - 同样添加 Hitbox 和 ActionEnd Notify
+   - 不需要 ComboWindow（重攻击不接连段，或后续扩展）
+   - Slot: DefaultGroup.FullBody
+   - Root Motion: 如果动画有位移则开启
+
+4. Commit: "Combat: Notify classes, LightCombo and HeavyAttack montages"
+
+今日产出检查：
+[ ] 所有 Notify C++ 类编译通过
+[ ] AM_Player_LightCombo 有3个 Section
+[ ] 每个 Section 有正确的 Notify 布局
+[ ] AM_Player_HeavyAttack 制作完成
+[ ] Montage 预览播放正常
+```
+
+---
+
+### 第2天：闪避 Montage + CombatComponent 核心逻辑
+
+```text
+上午任务：
+
+1. 制作闪避 Montage
+   
+   4个独立 Montage（或一个 Montage 4个 Section）：
+   - AM_Player_Dodge_F
+   - AM_Player_Dodge_B
+   - AM_Player_Dodge_L
+   - AM_Player_Dodge_R
+   
+   Slot: DefaultGroup.FullBody
+   Root Motion: 开启（闪避需要动画驱动位移）
+   
+   每个 Montage 添加 Notify：
+   ├── ANS_IFrame            （无敌帧时间段）
+   └── AN_ActionEnd          （闪避结束）
+   
+   闪避方向选择逻辑（在 C++ 中实现，不在 Montage 中）：
+   根据输入方向选择对应的 Montage
+   如果锁定状态：直接用 fForwardAxis/fRightAxis 判断方向
+   如果非锁定状态：默认向后闪避或根据移动方向
+
+下午任务：
+
+2. 实现 CombatComponent::TryDoAction 核心逻辑
+
+   伪代码流程：
+   
+   bool TryDoAction(EActionState Requested)
+   {
+     // 1. 检查 MainState 是否允许
+     if MainState == Dead || Disabled || Cinematic
+       return false
+     
+     // 2. 如果当前正在执行动作
+     if bIsPerformingAction
+     {
+       // 如果可连段且请求的是攻击
+       if bCanChain && IsAttackAction(Requested)
+         → 执行连段（JumpToSection 或播放下一段 Montage）
+         return true
+       
+       // 如果当前动作不可打断
+       if !bCanBeInterrupted
+         → 缓存输入（InputBuffer）
+         return false
+       
+       // 如果当前动作可打断
+       → 停止当前 Montage
+       → 继续执行新动作
+     }
+     
+     // 3. 检查耐力（P0简化版，直接检查数值组件）
+     FActionData* Data = FindActionData(Requested)
+     if CurrentStamina < Data->StaminaCost
+       return false
+     
+     // 4. 执行动作
+     ExecuteAction(Requested, Data)
+     return true
+   }
+   
+   void ExecuteAction(EActionState Action, FActionData* Data)
+   {
+     CurrentActionState = Action
+     bIsPerformingAction = true
+     
+     // 扣除耐力
+     StatsComponent->ConsumeStamina(Data->StaminaCost)
+     
+     // 播放 Montage
+     AnimInstance->Montage_Play(Data->MontageAsset, Data->PlayRate)
+     
+     // 绑定 Montage 结束回调
+     // → OnMontageEnded
+     
+     // 如果需要锁定朝向
+     if Data->bLocksRotation
+       → 临时禁用旋转
+     
+     // 触发相机事件（预留接口）
+     // OnActionStarted.Broadcast(Action)
+   }
+
+3. 实现 DataTable 查找函数
+   FActionData* FindActionData(EActionState Action)
+   - 从 DT_ActionData_Player 中根据 ActionID 查找
+   - 返回对应行数据
+
+4. 填充 DT_ActionData_Player
+   填入以下行（P0 最小数据）：
+   
+   | ActionID      | ActionType | Montage              | Rate | Stamina | RM   | Interrupt |
+   |---------------|-----------|----------------------|------|---------|------|-----------|
+   | LightAttack_1 | Attack    | AM_Player_LightCombo | 1.0  | 15      | false| true      |
+   | HeavyAttack_1 | Attack    | AM_Player_HeavyAttack| 1.0  | 25      | true | false     |
+   | Dodge_F       | Dodge     | AM_Player_Dodge_F    | 1.0  | 20      | true | false     |
+   | Dodge_B       | Dodge     | AM_Player_Dodge_B    | 1.0  | 20      | true | false     |
+   | Dodge_L       | Dodge     | AM_Player_Dodge_L    | 1.0  | 20      | true | false     |
+   | Dodge_R       | Dodge     | AM_Player_Dodge_R    | 1.0  | 20      | true | false     |
+
+5. Commit: "Combat: Dodge montages, TryDoAction core logic, DataTable populated"
+
+今日产出检查：
+[ ] 4个闪避 Montage 制作完成
+[ ] TryDoAction 编译通过
+[ ] ExecuteAction 编译通过
+[ ] DataTable 已填充6行数据
+[ ] 闪避 Montage Root Motion 开启
+```
+
+---
+
+### 第3天：输入绑定 + 输入缓存 + 连段系统
+
+```text
+上午任务：
+
+1. 绑定玩家输入到 TryDoAction
+   
+   在玩家控制器或 Character 中：
+   
+   攻击键按下 → TryDoAction(EActionState::LightAttack)
+   重攻击键按下 → TryDoAction(EActionState::HeavyAttack)
+   闪避键按下 → TryDodge()
+   （TryDodge 内部计算方向后调用 TryDoAction 对应方向的 Dodge）
+   
+   TryDodge 方向计算：
+   if bIsLockedOn:
+     根据 fForwardAxis / fRightAxis 判断四方向
+   else:
+     如果有移动输入 → 向移动方向闪避
+     如果无移动输入 → 向后闪避
+
+2. 实现输入缓存系统
+   
+   在 CombatComponent 中：
+   
+   当 TryDoAction 返回 false 且原因是"当前动作不可打断"：
+     BufferedAction = RequestedAction
+     BufferTimer = InputBufferDuration（默认0.2秒）
+     bIsBufferActive = true
+   
+   每帧 Tick：
+     if bIsBufferActive
+       BufferTimer -= DeltaTime
+       if BufferTimer <= 0
+         bIsBufferActive = false
+         BufferedAction = None
+       else if 当前可以执行动作（从不可打断变为可打断，或 ComboWindow 开启）
+         TryDoAction(BufferedAction)
+         bIsBufferActive = false
+
+下午任务：
+
+3. 实现连段系统
+   
+   当 UANS_ComboWindow::NotifyBegin 触发：
+     CombatComponent->bCanChain = true
+     CombatComponent->CurrentComboCount++（或通过 ActionID 追踪）
+   
+   当 UANS_ComboWindow::NotifyEnd 触发：
+     CombatComponent->bCanChain = false
+   
+   当连段输入被接受时（在 TryDoAction 的连段分支）：
+     确定下一段的 ActionID
+     方式A：Montage_JumpToSection("Combo_02") / ("Combo_03")
+     方式B：从 DataTable 查找 NextComboActionID → 播放新 Montage
+     
+     P0 推荐方式A（JumpToSection），更简单
+     
+     连段追踪：
+     ComboIndex = 0（初始）
+     第一次攻击 → Default Section，ComboIndex = 1
+     连段窗口内再次攻击 → JumpToSection("Combo_02")，ComboIndex = 2
+     再次 → JumpToSection("Combo_03")，ComboIndex = 3
+     Combo_03 没有 ComboWindow → 连段结束
+
+4. 运行验证：
+   - 按攻击键 → 播放轻攻击第一段
+   - 在连段窗口内再按 → 第二段
+   - 再按 → 第三段
+   - 第三段结束 → 回到 Idle/Move
+   - 在非连段窗口按攻击 → 输入被缓存 → 连段窗口开启时自动执行
+   - 按重攻击 → 播放重攻击
+   - 按闪避 → 根据方向播放对应闪避
+
+5. Commit: "Combat: Input binding, input buffer, combo system"
+
+今日产出检查：
+[ ] 攻击键正确触发 TryDoAction
+[ ] 轻攻击三段连击正常运作
+[ ] 连段窗口外的输入不会触发连段
+[ ] 输入缓存在窗口开启时自动触发
+[ ] 重攻击正常播放
+[ ] 闪避四方向正确选择和播放
+[ ] 闪避 Root Motion 位移正常
+```
+
+---
+
+### 第4天：Montage 结束处理 + 动作锁定 + 状态恢复
+
+```text
+上午任务：
+
+1. 实现 Montage 结束回调
+   
+   在 CombatComponent 中绑定：
+   AnimInstance->OnMontageEnded.AddDynamic(this, &OnMontageEnded)
+   
+   OnMontageEnded(UAnimMontage* Montage, bool bInterrupted):
+     if !bInterrupted:
+       // 正常结束
+       CurrentActionState = None
+       bIsPerformingAction = false
+       bCanChain = false
+       ComboIndex = 0
+       // 恢复旋转控制
+       RestoreRotationMode()
+     else:
+       // 被打断（受击等）
+       // 由打断逻辑负责设置新状态
+       // 这里只做清理
+       bCanChain = false
+       ComboIndex = 0
+
+2. 实现 AN_ActionEnd Notify
+   
+   这个 Notify 的作用是在 Montage 的最后恢复帧触发
+   而不是等 Montage 完全播放完毕
+   
+   为什么需要这个：
+   - Montage 结束后有 BlendOut 时间
+   - 在 BlendOut 期间角色应该已经可以接受新输入
+   - AN_ActionEnd 在 BlendOut 之前触发
+   - 提前重置 bIsPerformingAction
+   - 这样输入缓存可以更早被消费
+   
+   AN_ActionEnd::Notify():
+     CombatComponent->OnActionEnd()
+   
+   CombatComponent::OnActionEnd():
+     CurrentActionState = None
+     bIsPerformingAction = false
+     bCanChain = false
+     bInRecovery = true（短暂恢复期）
+     // 启动恢复期计时器
+     → 0.1秒后 bInRecovery = false
+
+下午任务：
+
+3. 动作中的旋转控制
+   
+   攻击时：
+   - 如果锁定：保持面向目标
+   - 如果非锁定：攻击开始时锁定当前朝向（不跟随输入旋转）
+   - 攻击结束后：恢复正常旋转模式
+   
+   闪避时：
+   - Root Motion 控制位移方向
+   - 角色朝向根据闪避方向调整
+   - 闪避结束后恢复
+
+4. 确保 AnimBP State Machine 正确响应动作状态
+   
+   当 Montage 通过 FullBody Slot 播放时：
+   - Slot 节点会自动覆盖 State Machine 输出
+   - Montage 结束后自动 BlendOut 回到 State Machine
+   - 这是 UE4.27 的默认行为，不需要额外处理
+   
+   但需要确认：
+   - Montage 播放期间 State Machine 仍在运行（只是输出被覆盖）
+   - Montage 结束后 State Machine 的输出是正确的
+     （例如：角色在攻击后如果在移动，SM 应该在 Movement 状态）
+
+5. 运行验证：
+   - 攻击完成后 → 正确回到 Idle/Move
+   - 攻击中移动 → 攻击结束后立即响应移动
+   - 闪避完成后 → 正确回到 Idle/Move
+   - 连续快速输入 → 输入缓存正确消费，不丢失输入
+   - Debug 显示 ActionState 在动作结束后回到 None
+
+6. Commit: "Combat: Montage end handling, action lock, state recovery"
+
+今日产出检查：
+[ ] Montage 正常结束后状态正确重置
+[ ] AN_ActionEnd 正确提前触发
+[ ] 动作期间旋转控制正确
+[ ] 动作结束后旋转恢复
+[ ] SM 在 Montage 结束后输出正确
+[ ] 连续输入不丢失
+```
+
+---
+
+### 第5天：集成验证 + 补漏
+
+```text
+上午任务：
+
+1. 第3周完整验证清单
+
+   基础移动（第2周回归）：
+   [ ] 站立 Idle 正常
+   [ ] 移动 Blend Space 正常
+   [ ] 锁定环绕正常
+   [ ] Turn In Place 正常
+   [ ] Sprint 正常
+
+   轻攻击连段：
+   [ ] 按攻击 → 第一段播放
+   [ ] 连段窗口内按攻击 → 第二段
+   [ ] 继续 → 第三段
+   [ ] 第三段结束 → 回到 Idle
+   [ ] 连段窗口外按攻击 → 不触发连段
+   [ ] 攻击中 Hitbox Notify 正确触发（PrintString 确认）
+   [ ] ComboWindow Notify 正确开启/关闭（Debug 确认）
+
+   重攻击：
+   [ ] 按重攻击 → 播放
+   [ ] 播放完成 → 回到 Idle
+
+   闪避：
+   [ ] 非锁定前方闪避 → 正确方向 + Root Motion 位移
+   [ ] 锁定时四方向闪避 → 方向正确
+   [ ] 闪避后 → 回到 Idle/Move
+   [ ] IFrame Notify 触发（PrintString 确认）
+
+   输入缓存：
+   [ ] 攻击动作中按闪避 → 攻击结束后自动闪避
+   [ ] 闪避动作中按攻击 → 闪避结束后自动攻击
+   [ ] 缓存超时 → 输入丢弃
+   [ ] 连段窗口内缓存 → 正确连段
+
+   状态恢复：
+   [ ] 所有动作结束后 ActionState 回到 None
+   [ ] 所有动作结束后 bIsPerformingAction = false
+   [ ] Debug 显示状态全程正确
+
+下午任务：
+
+2. 修复所有验证中发现的问题
+
+3. 为第4周准备受击 Montage：
+   创建并填充 Notify：
+   - AM_Player_HitReact_F / B / L / R
+   - AM_Player_Stagger
+   - AM_Player_Death
+   - AM_Player_Heal
+   - AM_Player_Interact
+
+4. Commit: "Week3 Complete: Combat core verified"
+
+今日产出检查：
+[ ] 完整验证清单全部通过
+[ ] 无已知重大 Bug
+[ ] 受击/喝药/交互 Montage 已创建
+
+================================================================================
+  第3周结束时的项目状态
+================================================================================
+
+  已完成：
+  ✅ 轻攻击三段连击
+  ✅ 重攻击
+  ✅ 四方向闪避（含 Root Motion）
+  ✅ TryDoAction 动作请求系统
+  ✅ 输入缓存系统
+  ✅ 连段窗口系统（Notify 驱动）
+  ✅ Montage 结束处理和状态恢复
+  ✅ 基础 Notify C++ 类
+  ✅ DataTable 动作数据
+
+  尚未完成：
+  ❌ 受击/打断（第4周）
+  ❌ 耐力消耗/恢复可视化验证（第4周）
+  ❌ 喝药/交互（第4周）
+  ❌ 死亡（第4周）
+  ❌ 无敌帧/霸体帧实际判定（第4周）
+```
+
+---
+
+## 第四章 · 第4周：闭环验证
+
+```text
+================================================================================
+  第4周目标：接入受击、耐力可视化、打断、交互、死亡
+             完成玩家最小可战斗闭环
+================================================================================
+
+  产出物：
+  1. 受击系统（4方向轻受击 + Stagger）
+  2. 受击打断当前动作
+  3. 耐力消耗/恢复运行并可观测
+  4. 喝药动作
+  5. 基础交互
+  6. 死亡动画
+  7. AnimBP HitReact 门控 + Dead 状态
+  8. 无敌帧在闪避中生效
+```
+
+---
+
+### 第1天：受击 Montage + HitReact 逻辑
+
+```text
+上午任务：
+
+1. 制作受击 Montage
+   
+   AM_Player_HitReact_F / B / L / R：
+   - 各自使用对应方向的受击动画
+   - Slot: DefaultGroup.FullBody
+   - 每个添加 AN_ActionEnd Notify
+   - Root Motion: 关闭
+   - BlendIn: 0.1 秒（受击需要快速切入）
+   - BlendOut: 0.2 秒
+   
+   AM_Player_Stagger：
+   - 使用 Stagger 动画
+   - Slot: DefaultGroup.FullBody
+   - 添加 AN_ActionEnd
+   - BlendIn: 0.1 秒
+
+2. 实现受击逻辑
+   
+   在 CombatComponent 中：
+   
+   void OnHitReceived(EHitReactState HitType, FVector HitDirection)
+   {
+     // 1. 如果在无敌帧中 → 忽略
+     if bIsInvincible
+       return
+     
+     // 2. 如果有霸体 → 不播放受击动画但扣血
+     if bHasSuperArmor
+       → 扣血但不打断
+       return
+     
+     // 3. 打断当前动作
+     if bIsPerformingAction
+       AnimInstance->Montage_Stop(0.1f, CurrentMontage)
+       // Montage 的 OnEnded 会触发 bInterrupted=true
+     
+     // 4. 设置受击状态
+     HitReactState = HitType
+     MainState = HitReact
+     
+     // 5. 选择受击 Montage
+     UAnimMontage* HitMontage = SelectHitMontage(HitType, HitDirection)
+     
+     // 6. 播放
+     AnimInstance->Montage_Play(HitMontage)
+     
+     // 7. 绑定结束回调
+     → 受击结束后恢复 MainState 和 HitReactState
+   }
+   
+   SelectHitMontage 逻辑：
+   - 根据 HitDirection 计算受击来自哪个方向（前后左右）
+   - 选择对应的 AM_Player_HitReact_X
+   - 如果 HitType == Stagger → 选择 AM_Player_Stagger
+
+下午任务：
+
+3. 在 AnimBP 中处理 HitReact
+   
+   在 MainStateMachine 中：
+   
+   任意状态 → HitReact_Gate：
+     条件：MainState == HitReact
+     过渡时间：0（Montage 自己处理 BlendIn）
+   
+   HitReact_Gate 内部：
+   - 不播放任何动画（只是门控）
+   - 实际动画由 Montage 通过 FullBody Slot 播放
+   - 这个状态阻止 Locomotion SM 输出
+   
+   HitReact_Gate → Grounded：
+     条件：MainState != HitReact && HitReactState == None
+     过渡时间：0.15 秒
+
+4. 验证：
+   - 制作一个测试触发器（或按键触发假受击）
+   - 站立时受击 → 播放对应方向受击动画
+   - 攻击中受击 → 攻击被打断，播放受击
+   - 受击结束后 → 回到 Idle/Move
+   - Debug 显示 MainState 和 HitReactState 变化
+
+5. Commit: "HitReact: Montages, hit logic, AnimBP gate state"
+
+今日产出检查：
+[ ] 4方向受击 Montage 制作完成
+[ ] Stagger Montage 制作完成
+[ ] OnHitReceived 编译通过
+[ ] 受击正确打断当前动作
+[ ] 受击方向选择正确
+[ ] 受击结束后状态正确恢复
+[ ] AnimBP HitReact_Gate 正确工作
+```
+
+---
+
+### 第2天：耐力系统联动 + 无敌帧/霸体帧
+
+```text
+上午任务：
+
+1. 耐力系统联动
+   
+   你已有玩家角色数值组件，确认以下接口存在：
+   - float GetCurrentStamina()
+   - float GetMaxStamina()
+   - void ConsumeStamina(float Amount)
+   - bool HasEnoughStamina(float Amount)
+   - 耐力自动恢复逻辑
+   
+   在 CombatComponent::TryDoAction 中：
+   确认耐力检查正确工作：
+   if !StatsComponent->HasEnoughStamina(ActionData->StaminaCost)
+     return false
+   
+   在 ExecuteAction 中：
+   StatsComponent->ConsumeStamina(ActionData->StaminaCost)
+   
+   耐力恢复规则（类魂标准）：
+   - 动作执行中暂停恢复
+   - 动作结束后短延迟后开始恢复（如 0.5 秒）
+   - 恢复速率可配置
+   - 防御中持续消耗（P1）
+
+2. 验证耐力：
+   - 连续攻击直到耐力耗尽 → 攻击请求被拒绝
+   - 停止动作 → 耐力开始恢复
+   - Debug 显示当前耐力值
+
+下午任务：
+
+3. 实现无敌帧（IFrame）
+   
+   UANS_IFrame::NotifyBegin():
+     CombatComponent->bIsInvincible = true
+   
+   UANS_IFrame::NotifyEnd():
+     CombatComponent->bIsInvincible = false
+   
+   在闪避 Montage 中：
+   确保 ANS_IFrame 覆盖正确的时间段
+   （通常是闪避中间部分，不是全程无敌）
+   
+   验证：
+   - 闪避 IFrame 期间触发受击 → 无反应
+   - IFrame 外触发受击 → 正常受击
+
+4. 实现霸体帧（SuperArmor）—— P0 简化版
+   
+   UANS_SuperArmor::NotifyBegin():
+     CombatComponent->bHasSuperArmor = true
+   
+   UANS_SuperArmor::NotifyEnd():
+     CombatComponent->bHasSuperArmor = false
+   
+   在重攻击 Montage 中添加 ANS_SuperArmor
+   （重攻击期间有霸体，不被轻攻击打断）
+   
+   验证：
+   - 重攻击霸体期间受击 → 不播放受击动画，继续攻击
+   - 霸体外受击 → 正常打断
+
+5. Commit: "Systems: Stamina integration, IFrame, SuperArmor"
+
+今日产出检查：
+[ ] 耐力消耗正确
+[ ] 耐力不足时动作被拒绝
+[ ] 耐力恢复运作
+[ ] 闪避 IFrame 内不受击
+[ ] 重攻击 SuperArmor 内不被打断（但受伤）
+[ ] Debug 显示耐力/无敌/霸体状态
+```
+
+---
+
+### 第3天：喝药 + 交互 + 死亡
+
+```text
+上午任务：
+
+1. 制作 AM_Player_Heal Montage
+   - 使用 AN_Player_Heal 动画
+   - Slot: DefaultGroup.FullBody（或 UpperBody 如果允许移动中喝药）
+   - 添加 Notify：
+     ├── AN_HealEffect        （实际回血的时间点）
+     └── AN_ActionEnd
+   - 不可打断时间段 + 可打断时间段
+   - DataTable 中添加行：
+     | Heal | Heal | AM_Player_Heal | 1.0 | 0 | false | true（后半段可打断）|
+
+2. 制作 AM_Player_Interact Montage
+   - 使用 AN_Player_Interact 动画
+   - Slot: DefaultGroup.FullBody
+   - 添加 Notify：
+     ├── AN_InteractTrigger    （实际触发交互的时间点）
+     └── AN_ActionEnd
+   - DataTable 添加行
+
+3. 连接输入：
+   喝药键 → TryDoAction(EActionState::Heal)
+   交互键 → TryDoAction(EActionState::Interact)
+   
+   交互需要额外检查：
+   是否在交互范围内（可通过你已有的侦测组件判断）
+
+下午任务：
+
+4. 制作 AM_Player_Death Montage
+   - 使用 AN_Player_Death_01 动画
+   - Slot: DefaultGroup.FullBody
+   - 不添加 AN_ActionEnd（死亡是终态）
+   - BlendIn: 0.1 秒
+
+5. 实现死亡逻辑
+   
+   当 HP <= 0 时（数值组件触发）：
+   CombatComponent->OnDeath()
+   
+   OnDeath():
+     // 打断所有当前动作
+     if bIsPerformingAction
+       AnimInstance->Montage_Stop(0.1f)
+     
+     // 设置状态
+     MainState = Dead
+     ActionState = None
+     
+     // 播放死亡 Montage
+     AnimInstance->Montage_Play(DeathMontage)
+     
+     // 禁用输入
+     DisableInput()
+     
+     // 禁用碰撞（或延迟禁用）
+     // 后续处理（重生/GameOver 等不在 P0 范围）
+
+6. 在 AnimBP MainStateMachine 中：
+   
+   任意状态 → Dead：
+     条件：MainState == Dead
+     过渡时间：0
+   
+   Dead 状态内部：
+   - 播放最后一帧 Pose（或 Death Loop）
+   - 不再有任何过渡出去（终态）
+
+7. 验证：
+   - 按喝药键 → 播放喝药动画 → 回血 → 回到 Idle
+   - 按交互键（在交互物旁）→ 播放交互动画
+   - HP归零 → 播放死亡动画 → 角色不再响应输入
+
+8. Commit: "Actions: Heal, Interact, Death"
+
+今日产出检查：
+[ ] 喝药正常播放并回血
+[ ] 交互正常播放
+[ ] 死亡动画正常播放
+[ ] 死亡后角色不再响应输入
+[ ] AnimBP Dead 状态正确进入
+```
+
+---
+
+### 第4天：全闭环调参 + 手感优化
+
+```text
+这一天不写新功能，专门做调参。
+
+上午任务：
+
+1. 攻击手感调参
+   
+   需要调整的参数：
+   - 每段攻击的 PlayRate（加速/减速）
+   - ComboWindow 的开启/关闭时机
+   - Hitbox Enable/Disable 时机
+   - 攻击后恢复期长度
+   - 输入缓存时长（InputBufferDuration）
+   
+   调参标准（对标类魂手感）：
+   - 攻击应该有"承诺感"：按下后不能立即取消
+   - 连段应该有节奏：不是越快越好，要有韵律
+   - 恢复期要有惩罚感：连段结束后有短暂硬直
+   - 重攻击比轻攻击更慢但更有力量感
+
+2. 闪避手感调参
+   
+   需要调整的参数：
+   - 闪避 Root Motion 的位移距离
+   - IFrame 的时间段
+   - 闪避后恢复时间
+   - 闪避 PlayRate
+   
+   调参标准：
+   - 闪避应该感觉"快速但有代价"
+   - IFrame 不能太长（通常 0.2~0.4 秒）
+   - 闪避后应有短暂的不能立即再次闪避的间隔
+
+下午任务：
+
+3. 受击反馈调参
+   
+   需要调整的参数：
+   - 受击 Montage 的 BlendIn 速度
+   - 受击动画时长
+   - Stagger 动画时长
+   - 受击后多久可以行动
+   
+   调参标准：
+   - 受击要即时：BlendIn 越快越好
+   - 受击要有痛感：不能太短
+   - 但也不能太长让玩家失去控制感
+
+4. 移动与锁定调参
+   
+   回顾并微调：
+   - 各 Gait 速度值
+   - 锁定环绕速度
+   - 旋转速度
+   - 加速/减速曲线
+
+5. Commit: "Tuning: Combat feel pass - attack, dodge, hit react, movement"
+
+今日产出检查：
+[ ] 攻击连段节奏感觉自然
+[ ] 闪避距离和速度合适
+[ ] IFrame 窗口合理
+[ ] 受击反馈即时且有痛感
+[ ] 耐力消耗/恢复节奏合理
+[ ] 整体操作有"类魂"的承诺感和惩罚感
+```
+
+---
+
+### 第5天：最终验证 + P0 完成
+
+```text
+上午任务：
+
+1. P0 最终完整验证清单
+   
+   === 移动 ===
+   [ ] 非战斗 Idle
+   [ ] 战斗 Idle
+   [ ] 前后左右移动
+   [ ] Sprint
+   [ ] Lock-on 八方向环绕
+   [ ] Turn In Place
+   [ ] 从高处掉落 → InAir → Land
+   [ ] Normal ↔ Combat 切换
+
+   === 攻击 ===
+   [ ] 轻攻击第1段
+   [ ] 轻攻击第2段（连段）
+   [ ] 轻攻击第3段（连段）
+   [ ] 重攻击
+   [ ] 攻击后恢复 → 回到 Idle/Move
+   [ ] 攻击中的 Hitbox Notify 触发
+   [ ] 攻击消耗耐力
+
+   === 闪避 ===
+   [ ] 非锁定闪避
+   [ ] 锁定前方闪避
+   [ ] 锁定后方闪避
+   [ ] 锁定左方闪避
+   [ ] 锁定右方闪避
+   [ ] 闪避 Root Motion 位移
+   [ ] 闪避 IFrame 有效
+   [ ] 闪避消耗耐力
+
+   === 受击 ===
+   [ ] 前方受击
+   [ ] 后方受击
+   [ ] 左方受击
+   [ ] 右方受击
+   [ ] Stagger
+   [ ] 受击打断攻击
+   [ ] 受击打断喝药
+   [ ] IFrame 中不受击
+   [ ] SuperArmor 中不被打断
+   [ ] 受击后恢复 → 可行动
+
+   === 耐力 ===
+   [ ] 攻击消耗耐力
+   [ ] 闪避消耗耐力
+   [ ] 耐力不足 → 动作被拒绝
+   [ ] 停止动作后耐力恢复
+   [ ] Debug 显示耐力值
+
+   === 输入缓存 ===
+   [ ] 动作中的输入被正确缓存
+   [ ] 缓存在可执行时触发
+   [ ] 缓存超时后失效
+   [ ] 连段窗口 + 缓存配合正确
+
+   === 交互/道具 ===
+   [ ] 喝药播放并回血
+   [ ] 交互播放
+   [ ] 喝药中可被打断（后半段）
+
+   === 死亡 ===
+   [ ] HP归零 → 死亡动画
+   [ ] 死亡后不响应输入
+   [ ] AnimBP 进入 Dead 状态
+
+   === Debug ===
+   [ ] MainState 实时显示
+   [ ] LocomotionState 实时显示
+   [ ] ActionState 实时显示
+   [ ] HitReactState 实时显示
+   [ ] Gait 实时显示
+   [ ] MovementStyle 实时显示
+   [ ] 耐力值显示
+   [ ] bIsInvincible 显示
+   [ ] bHasSuperArmor 显示
+   [ ] bCanChain 显示
+   [ ] ComboIndex 显示
+
+下午任务：
+
+2. 修复所有未通过的验证项
+
+3. 如果全部通过 → P0 完成
+   Commit: "P0 COMPLETE: Player minimum combat loop verified"
+   Tag: v0.1-p0-combat-loop
+
+4. 记录已知问题和待改进项
+   创建一个 TODO 清单（代码注释或文档）：
+   
+   已知需要改进（进入 P1）：
+   - Start/Stop 过渡动画
+   - 更精细的转身过渡
+   - Guard/Parry 系统
+   - 处决技术样机
+   - 敌人 AI 基础结构
+   - 音效接入
+   - 相机震动接入
+   - Additive 呼吸/疲惫
+   - 更多受击方向和变体
+   - 武器切换
+
+================================================================================
+  P0 完成时的项目状态
+================================================================================
+
+  ✅ 已完成：
+  - 统一状态枚举系统
+  - 动作数据结构 + DataTable
+  - UCombatComponent 核心逻辑
+  - AnimBP 完整结构（Grounded/InAir/HitReact/Dead）
+  - Locomotion Blend Space（自由移动 + 锁定环绕）
+  - Turn In Place
+  - 轻攻击三段连击
+  - 重攻击
+  - 四方向闪避（Root Motion）
+  - 受击四方向 + Stagger
+  - 动作请求制（TryDoAction）
+  - 输入缓存
+  - 连段窗口
+  - 耐力消耗/恢复
+  - 无敌帧 / 霸体帧
+  - 动作打断
+  - 喝药 / 交互
+  - 死亡
+  - Debug 全状态可视化
+  - Notify C++ 基类
+  - 命名规范 + 文件夹结构
+
+  ❌ 尚未开始（P1 范围）：
+  - Guard / Parry 系统
+  - 处决 / 背刺技术样机
+  - 敌人基础结构 + AI
+  - Blackboard / BehaviorTree
+  - Sprint Attack / Dodge Attack
+  - Weapon Equip / Unequip
+  - 音效联动
+  - 相机联动
+  - Additive 动画
+  - Motion Warping 替代方案
+  - Start / Stop / Pivot 细化
+  - 更多受击变体
+
+  项目进入状态：
+  → 可迭代的最小战斗闭环已建立
+  → 可以在此基础上安全扩展敌人和新功能
+  → 架构已为 P1/P2 内容做好准备
+```
+
+---
+
+## 附录：每日快速参考卡片
+
+```text
+================================================================================
+  P0 每日任务速查表
+================================================================================
+
+  第1周：地基工程
+  ┌─────┬────────────────────────────────────────────┐
+  │ Day │ 任务                                        │
+  ├─────┼────────────────────────────────────────────┤
+  │  1  │ 状态枚举 + 命名规范 + 文件夹结构            │
+  │  2  │ RM策略 + 动画导入 + Retarget验证            │
+  │  3  │ Slot配置 + AnimBP空壳 + BS制作               │
+  │  4  │ ActionData结构 + CombatComp空壳 + AnimBP变量 │
+  │  5  │ 集成验证 + Debug强化 + 补漏                  │
+  └─────┴────────────────────────────────────────────┘
+
+  第2周：移动系统
+  ┌─────┬────────────────────────────────────────────┐
+  │ Day │ 任务                                        │
+  ├─────┼────────────────────────────────────────────┤
+  │  1  │ Character状态更新逻辑（速度/方向/Gait）      │
+  │  2  │ AnimBP Grounded SM（Idle + Movement）        │
+  │  3  │ Turn In Place + InAir/Land                   │
+  │  4  │ 战斗姿态 + 锁定联动 + Sprint + 手感调参      │
+  │  5  │ 移动系统完整验证 + Debug强化 + 补漏          │
+  └─────┴────────────────────────────────────────────┘
+
+  第3周：战斗核心
+  ┌─────┬────────────────────────────────────────────┐
+  │ Day │ 任务                                        │
+  ├─────┼────────────────────────────────────────────┤
+  │  1  │ Notify类 + LightCombo/HeavyAttack Montage   │
+  │  2  │ Dodge Montage + TryDoAction核心逻辑 + DT填充 │
+  │  3  │ 输入绑定 + 输入缓存 + 连段系统               │
+  │  4  │ Montage结束处理 + 动作锁定 + 状态恢复        │
+  │  5  │ 战斗核心完整验证 + 补漏                      │
+  └─────┴────────────────────────────────────────────┘
+
+  第4周：闭环验证
+  ┌─────┬────────────────────────────────────────────┐
+  │ Day │ 任务                                        │
+  ├─────┼────────────────────────────────────────────┤
+  │  1  │ 受击Montage + HitReact逻辑 + AnimBP门控     │
+  │  2  │ 耐力联动 + IFrame + SuperArmor               │
+  │  3  │ 喝药 + 交互 + 死亡                           │
+  │  4  │ 全闭环调参（手感优化日）                      │
+  │  5  │ P0最终验证 + 完成标记                        │
+  └─────┴────────────────────────────────────────────┘
+
+================================================================================
+  文档结束
+  
+  本文档版本：v1.0
+  前置依赖：主纲领 HAND OFF 文档（选项A）
+  覆盖阶段：P0（第1周~第4周+缓冲）
+  目标产出：玩家角色最小可战斗闭环
+================================================================================
+```
+
+---
+
+**选项B 输出完毕。** 这是完整的 P0 阶段具体执行手册，包含了：
+
+- 每周目标与产出物
+- 每天具体任务分解（上午/下午）
+- 每天的产出检查清单
+- 每天的 Commit 建议
+- 伪代码和逻辑流程
+- 调参标准和类魂手感指引
+- 最终完整验证清单
+- P0 完成状态总结
+
+请确认是否满意，或有需要调整的地方。确认后我输出选项C：**C++ 头文件模板 + AnimBP 状态机详细设计**。

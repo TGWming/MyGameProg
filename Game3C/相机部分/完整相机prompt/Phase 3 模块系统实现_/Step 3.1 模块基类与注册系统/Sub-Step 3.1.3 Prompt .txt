@@ -1,0 +1,225 @@
+Sub-Step 3.1.3 Prompt
+
+================================================================================
+任务：创建CameraModuleRegistry.h - 模块注册表类声明
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+ModuleRegistry负责管理所有39个模块的注册、查询和激活状态。
+
+【当前进度】
+Phase 3 Step 3.1 Sub-Step 3.1.3 (共190个Sub-Step中的第58个)
+前置完成：3.1.1-3.1.2 CameraModuleBase ✅
+
+【任务目标】
+创建文件：Source/[ProjectName]/Public/Camera/Modules/CameraModuleRegistry.h
+定义模块注册表类，管理所有39个相机模块。
+
+【⚠️ 编码格式要求 - CRITICAL】
+
+1. **文件编码：UTF-8 Without BOM（强制）**
+   - 创建文件后立即检查VS Code右下角编码
+   - 如果显示 "UTF-8 with BOM"，点击转换为 "UTF-8"
+   - 保存前再次确认
+
+2. **注释规范：所有注释必须使用英文（强制）**
+   - 禁止使用中文注释
+   - 参考标准：已完成的CameraModuleBase.h
+
+3. **命名替换：**
+   - 将 [ProjectName] 替换为实际项目名称
+   - 将 YOURPROJECT_API 替换为实际API宏（如 MYPROJECT_API）
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Public/Camera/Modules/CameraModuleRegistry.h
+
+2. **文件结构要求：**
+
+**A. 头部声明：**
+- 版权声明：// Copyright Epic Games, Inc. All Rights Reserved.  
+- #pragma once
+- 包含头文件（按顺序）：
+  * #include "CoreMinimal.h"
+  * #include "UObject/NoExportTypes.h"
+  * #include "Camera/Data/CameraStateEnums.h" （或 Camera/Core/SoulsCameraTypes.h，根据实际项目）
+  * #include "CameraModuleBase.h"
+  * #include "CameraModuleRegistry.generated.h" （必须最后）
+
+**B. 类定义：UCameraModuleRegistry**
+
+继承：public UObject
+
+UCLASS宏：UCLASS(BlueprintType)
+
+使用 YOURPROJECT_API 宏（记得替换）
+
+**C. 类文档注释：**
+添加详细的多行注释，说明：
+- 模块注册表的职责（管理39个模块）
+- 主要功能：注册、查询、激活状态管理
+- 与Pipeline的关系（为Stage 3提供模块）
+
+**D. 公共接口（public）：**
+
+**D. 1 初始化组（注释：Initialization）：**
+
+构造函数：
+- UCameraModuleRegistry();
+
+Initialize() 方法：
+- 参数：UObject* Outer
+- 功能：初始化并创建所有模块
+- UFUNCTION(BlueprintCallable, Category = "Camera|ModuleRegistry")
+- 添加注释：Initialize and create all 39 camera modules
+
+IsInitialized() 方法：
+- 返回 bool，内联实现返回 bIsInitialized
+- UFUNCTION(BlueprintPure, Category = "Camera|ModuleRegistry")
+- 添加注释：Check if registry is initialized
+
+**D.2 模块注册组（注释：Module Registration）：**
+
+RegisterModule() 方法：
+- 参数：UCameraModuleBase* Module
+- 返回：bool（注册成功/失败）
+- UFUNCTION(BlueprintCallable, Category = "Camera|ModuleRegistry")
+- 添加注释：Register a module instance
+
+UnregisterModule() 方法：
+- 参数：ECameraModuleType ModuleType
+- 返回：bool（注销成功/失败）
+- UFUNCTION(BlueprintCallable, Category = "Camera|ModuleRegistry")
+- 添加注释：Unregister a module by type
+
+GetModule() 方法：
+- 参数：ECameraModuleType ModuleType
+- 返回：UCameraModuleBase*
+- const方法
+- UFUNCTION(BlueprintPure, Category = "Camera|ModuleRegistry")
+- 添加注释：Get module by type
+
+GetAllModules() 方法：
+- 无参数
+- 返回：TArray<UCameraModuleBase*>
+- const方法
+- UFUNCTION(BlueprintPure, Category = "Camera|ModuleRegistry")
+- 添加注释：Get all registered modules
+
+GetModulesByCategory() 方法：
+- 参数：EModuleCategory Category
+- 返回：TArray<UCameraModuleBase*>
+- const方法
+- UFUNCTION(BlueprintPure, Category = "Camera|ModuleRegistry")
+- 添加注释：Get modules by category (Position/Rotation/Distance/FOV/Offset/Constraint)
+
+**D.3 激活查询组（注释：Active Module Query）：**
+
+GetActiveModules() 方法：
+- 参数：
+  * const FStageExecutionContext& Context
+  * const FCameraStateConfig& StateConfig
+  * TArray<UCameraModuleBase*>& OutActiveModules （输出参数）
+- 返回：void
+- UFUNCTION(BlueprintCallable, Category = "Camera|ModuleRegistry")
+- 添加注释：Get all modules that should be active for current context
+
+UpdateModuleStates() 方法：
+- 参数：
+  * const FStageExecutionContext& Context
+  * const FCameraStateConfig& StateConfig
+- 返回：void
+- UFUNCTION(BlueprintCallable, Category = "Camera|ModuleRegistry")
+- 添加注释：Update module activation states based on context
+
+**D.4 模块计数组（注释：Module Count）：**
+
+GetModuleCount() 方法：
+- 返回：int32，内联实现返回 RegisteredModules.Num()
+- const方法
+- UFUNCTION(BlueprintPure, Category = "Camera|ModuleRegistry")
+- 添加注释：Get total number of registered modules
+
+GetActiveModuleCount() 方法：
+- 返回：int32
+- const方法
+- UFUNCTION(BlueprintPure, Category = "Camera|ModuleRegistry")
+- 添加注释：Get number of currently active modules
+
+**E. 受保护接口（protected）：**
+
+**E.1 内部方法组（注释：Internal Methods）：**
+
+CreateAllModules() 方法：
+- 参数：UObject* Outer
+- 返回：void
+- 非UFUNCTION（纯C++内部方法）
+- 添加注释：Create all 39 module instances
+
+CreateModule() 模板方法：
+- 模板参数：typename T
+- 参数：UObject* Outer, ECameraModuleType ModuleType
+- 返回：T*
+- 模板方法定义（可以在头文件中实现或声明）
+- 添加注释：Create a single module of specified type
+
+**F. 私有成员（private）：**
+
+**F.1 状态组（注释：State）：**
+
+RegisteredModules 成员：
+- 类型：TMap<ECameraModuleType, UCameraModuleBase*>
+- UPROPERTY()
+- 添加注释：Map of registered modules by type
+
+ActiveModules 成员：
+- 类型：TArray<UCameraModuleBase*>
+- UPROPERTY()
+- 添加注释：Currently active modules (updated each frame)
+
+bIsInitialized 成员：
+- 类型：bool
+- 不使用UPROPERTY（简单bool标志）
+- 添加注释：Is registry initialized
+
+**G. 代码风格要求：**
+- 使用分隔注释组织代码（//====... ====）
+- 每个方法添加简短注释说明功能
+- 内联方法直接在声明中实现
+- 使用const修饰只读方法
+- 输出参数使用&引用
+
+【注意事项】
+
+1. **模板方法处理：**
+   CreateModule<T>() 是模板方法，可以：
+   - 选项A：在头文件中声明，在. cpp中实现（需要显式实例化）
+   - 选项B：在头文件中直接实现（推荐，模板方法通常这样做）
+   
+   建议在头文件中声明即可，实现留到.  cpp文件。
+
+2. **ECameraModuleType依赖：**
+   根据Sub-Step 3.1.1的检查结果，使用正确的include路径：
+   - 如果是 Camera/Data/CameraStateEnums.h，使用它
+   - 如果是 Camera/Core/SoulsCameraTypes.h，使用它
+
+3. **UPROPERTY使用：**
+   - TMap和TArray需要UPROPERTY()以便垃圾回收
+   - 简单的bool标志不需要UPROPERTY（除非需要蓝图访问）
+
+4. **Category命名：**
+   所有UFUNCTION使用统一的Category:  "Camera|ModuleRegistry"
+
+【验证标准】
+1. 编译通过（0 errors, 0 warnings）
+2. 文件编码为 UTF-8 Without BOM
+3. 所有注释为英文
+4. 类标记为BlueprintType，可在蓝图中使用
+5. YOURPROJECT_API宏已正确替换
+6. Include路径与项目结构一致
+
+【输出要求】
+输出完整的CameraModuleRegistry.h文件代码，包含所有要求的方法声明和注释。
+
+================================================================================

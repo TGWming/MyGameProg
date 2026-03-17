@@ -1,0 +1,654 @@
+================================================================================
+任务：创建SoulsCameraManager.  cpp - 主管理器类空实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.             27 C++项目。
+实现主管理器的基础框架，子系统创建为空占位。
+完整实现将在后续Phase中逐步添加。
+
+【当前进度】
+Phase 1 Step 1.5 Sub-Step 1.5.7 (共190个Sub-Step中的第35个)
+前置完成：1.      5.   6 SoulsCameraManager.       h
+**这是Phase 1的最后一个Sub-Step。**
+
+【任务目标】
+创建文件：Source/[ProjectName]/Camera/Core/SoulsCameraManager.        cpp
+实现USoulsCameraManager类的基础框架（空实现/占位）。
+
+【具体要求】
+
+1. 文件路径：Source/[ProjectName]/Camera/Core/SoulsCameraManager.          cpp
+
+2. 完整文件内容：
+
+```cpp
+// Copyright Your Company.                  All Rights Reserved.       
+
+#include "SoulsCameraManager. h"
+#include "SoulsCameraStateMachine.h"
+#include "GameFramework/SpringArmComponent.h"
+#include "Camera/CameraComponent. h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent. h"
+#include "GameFramework/PlayerController.h"
+
+USoulsCameraManager::USoulsCameraManager()
+    : GlobalConfig(nullptr)
+    , StatesDataTable(nullptr)
+    , bAutoFindComponents(true)
+    , bAutoInitialize(true)
+    , bDisableNativeCollision(true)
+    , SpringArmComponent(nullptr)
+    , CameraComponent(nullptr)
+    , Pipeline(nullptr)
+    , StateMachine(nullptr)
+    , ModuleRegistry(nullptr)
+    , ModifierManager(nullptr)
+    , CollisionResolver(nullptr)
+    , Debugger(nullptr)
+    , LockOnTarget(nullptr)
+    , bIsInitialized(false)
+    , bDebugEnabled(false)
+{
+    PrimaryComponentTick. bCanEverTick = true;
+    PrimaryComponentTick.  bStartWithTickEnabled = true;
+}
+
+void USoulsCameraManager::BeginPlay()
+{
+    Super::BeginPlay();
+
+    if (bAutoFindComponents)
+    {
+        AutoFindComponents();
+    }
+
+    if (bAutoInitialize)
+    {
+        InitializeCamera();
+    }
+}
+
+void USoulsCameraManager::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    Super::EndPlay(EndPlayReason);
+
+    // Cleanup will be handled by garbage collection
+    bIsInitialized = false;
+}
+
+void USoulsCameraManager:: TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+    Super::  TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+    if (!bIsInitialized)
+    {
+        return;
+    }
+
+    // 1.    Gather input context
+    GatherInputContext(DeltaTime);
+
+    // 2.  Execute pipeline (will be implemented in Phase 2)
+    // if (Pipeline)
+    // {
+    //     Pipeline->Execute(DeltaTime, CurrentInputContext, CurrentOutput);
+    // }
+
+    // 3.  Update state machine transition
+    if (StateMachine)
+    {
+        StateMachine->UpdateTransition(DeltaTime);
+    }
+
+    // 4.  Apply output to components
+    ApplyOutput(CurrentOutput);
+}
+
+void USoulsCameraManager::InitializeCamera()
+{
+    if (bIsInitialized)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("SoulsCameraManager:      Already initialized"));
+        return;
+    }
+
+    // Validate components
+    if (!SpringArmComponent)
+    {
+        UE_LOG(LogTemp, Error, TEXT("SoulsCameraManager:    No SpringArmComponent assigned"));
+        return;
+    }
+
+    if (!CameraComponent)
+    {
+        UE_LOG(LogTemp, Error, TEXT("SoulsCameraManager:   No CameraComponent assigned"));
+        return;
+    }
+
+    // Disable native SpringArm collision if requested
+    if (bDisableNativeCollision && SpringArmComponent)
+    {
+        SpringArmComponent->bDoCollisionTest = false;
+        UE_LOG(LogTemp, Log, TEXT("SoulsCameraManager:    Disabled native SpringArm collision"));
+    }
+
+    // Create sub-systems
+    CreateSubSystems();
+
+    // Initialize state machine
+    if (StateMachine && StatesDataTable)
+    {
+        StateMachine->Initialize(StatesDataTable);
+    }
+
+    // Set default output values from SpringArm
+    if (SpringArmComponent)
+    {
+        CurrentOutput.Distance = SpringArmComponent->TargetArmLength;
+        CurrentOutput.SocketOffset = SpringArmComponent->SocketOffset;
+        CurrentOutput.TargetOffset = SpringArmComponent->TargetOffset;
+        CurrentOutput. Rotation = SpringArmComponent->GetComponentRotation();
+    }
+
+    if (CameraComponent)
+    {
+        CurrentOutput.  FOV = CameraComponent->FieldOfView;
+    }
+
+    bIsInitialized = true;
+    UE_LOG(LogTemp, Log, TEXT("SoulsCameraManager:    Initialized successfully"));
+}
+
+bool USoulsCameraManager::IsInitialized() const
+{
+    return bIsInitialized;
+}
+
+void USoulsCameraManager::SetSpringArmComponent(USpringArmComponent* InSpringArm)
+{
+    SpringArmComponent = InSpringArm;
+}
+
+void USoulsCameraManager::SetCameraComponent(UCameraComponent* InCamera)
+{
+    CameraComponent = InCamera;
+}
+
+USpringArmComponent* USoulsCameraManager::GetSpringArm() const
+{
+    return SpringArmComponent;
+}
+
+UCameraComponent* USoulsCameraManager::GetCamera() const
+{
+    return CameraComponent;
+}
+
+bool USoulsCameraManager::RequestStateChange(FName NewStateName, bool bForce)
+{
+    if (StateMachine)
+    {
+        return StateMachine->RequestStateChange(NewStateName, bForce);
+    }
+    return false;
+}
+
+FName USoulsCameraManager::GetCurrentStateName() const
+{
+    if (StateMachine)
+    {
+        return StateMachine-> GetCurrentStateName();
+    }
+    return NAME_None;
+}
+
+ECameraStateCategory USoulsCameraManager::GetCurrentCategory() const
+{
+    if (StateMachine)
+    {
+        return StateMachine->GetCurrentCategory();
+    }
+    return ECameraStateCategory::None;
+}
+
+bool USoulsCameraManager::IsInTransition() const
+{
+    if (StateMachine)
+    {
+        return StateMachine->IsInTransition();
+    }
+    return false;
+}
+
+void USoulsCameraManager::TriggerModifier(ECameraModifierType ModifierType, float Intensity)
+{
+    // Will be implemented in Phase 4
+    UE_LOG(LogTemp, Log, TEXT("SoulsCameraManager:    TriggerModifier %d with intensity %.     2f (not yet implemented)"), 
+        static_cast<int32>(ModifierType), Intensity);
+}
+
+void USoulsCameraManager::StopModifier(ECameraModifierType ModifierType)
+{
+    // Will be implemented in Phase 4
+    UE_LOG(LogTemp, Log, TEXT("SoulsCameraManager:    StopModifier %d (not yet implemented)"), 
+        static_cast<int32>(ModifierType));
+}
+
+void USoulsCameraManager::StopAllModifiers()
+{
+    // Will be implemented in Phase 4
+    UE_LOG(LogTemp, Log, TEXT("SoulsCameraManager:  StopAllModifiers (not yet implemented)"));
+}
+
+void USoulsCameraManager::SetLockOnTarget(AActor* Target)
+{
+    LockOnTarget = Target;
+    
+    if (Target)
+    {
+        UE_LOG(LogTemp, Log, TEXT("SoulsCameraManager:     Lock-on target set to %s"), *Target->GetName());
+    }
+    else
+    {
+        UE_LOG(LogTemp, Log, TEXT("SoulsCameraManager:   Lock-on target cleared"));
+    }
+}
+
+void USoulsCameraManager::ClearLockOnTarget()
+{
+    SetLockOnTarget(nullptr);
+}
+
+AActor* USoulsCameraManager::GetLockOnTarget() const
+{
+    return LockOnTarget.  Get();
+}
+
+bool USoulsCameraManager::HasLockOnTarget() const
+{
+    return LockOnTarget. IsValid();
+}
+
+FSoulsCameraOutput USoulsCameraManager::GetCurrentOutput() const
+{
+    return CurrentOutput;
+}
+
+FCameraInputContext USoulsCameraManager::GetCurrentInputContext() const
+{
+    return CurrentInputContext;
+}
+
+void USoulsCameraManager::SetDebugEnabled(bool bEnabled)
+{
+    bDebugEnabled = bEnabled;
+}
+
+bool USoulsCameraManager::IsDebugEnabled() const
+{
+    return bDebugEnabled;
+}
+
+USoulsCameraStateMachine* USoulsCameraManager::GetStateMachine() const
+{
+    return StateMachine;
+}
+
+void USoulsCameraManager::AutoFindComponents()
+{
+    AActor* Owner = GetOwner();
+    if (!Owner)
+    {
+        return;
+    }
+
+    // Find SpringArm
+    if (! SpringArmComponent)
+    {
+        SpringArmComponent = Owner->FindComponentByClass<USpringArmComponent>();
+        if (SpringArmComponent)
+        {
+            UE_LOG(LogTemp, Log, TEXT("SoulsCameraManager:    Auto-found SpringArmComponent"));
+        }
+    }
+
+    // Find Camera
+    if (!CameraComponent)
+    {
+        CameraComponent = Owner->FindComponentByClass<UCameraComponent>();
+        if (CameraComponent)
+        {
+            UE_LOG(LogTemp, Log, TEXT("SoulsCameraManager:   Auto-found CameraComponent"));
+        }
+    }
+}
+
+void USoulsCameraManager::CreateSubSystems()
+{
+    // Create State Machine
+    StateMachine = NewObject<USoulsCameraStateMachine>(this);
+    
+    // Pipeline, ModuleRegistry, ModifierManager, CollisionResolver
+    // will be created in Phase 2-5
+    
+    UE_LOG(LogTemp, Log, TEXT("SoulsCameraManager:   Sub-systems created"));
+}
+
+void USoulsCameraManager::GatherInputContext(float DeltaTime)
+{
+    CurrentInputContext.  Reset();
+    CurrentInputContext.DeltaTime = DeltaTime;
+    CurrentInputContext. GameTime = GetWorld()->GetTimeSeconds();
+
+    AActor* Owner = GetOwner();
+    if (!Owner)
+    {
+        return;
+    }
+
+    // Character state
+    CurrentInputContext.CharacterLocation = Owner->GetActorLocation();
+    CurrentInputContext.CharacterRotation = Owner->GetActorRotation();
+
+    // Try to get velocity from Character
+    if (ACharacter* Character = Cast<ACharacter>(Owner))
+    {
+        CurrentInputContext.CharacterVelocity = Character->GetVelocity();
+        CurrentInputContext.CharacterSpeed = CurrentInputContext.CharacterVelocity. Size2D();
+        CurrentInputContext.bIsMoving = CurrentInputContext.CharacterSpeed > 10.0f;
+        CurrentInputContext.bIsCrouching = Character->bIsCrouched;
+        
+        UCharacterMovementComponent* MovementComp = Character->GetCharacterMovement();
+        if (MovementComp)
+        {
+            CurrentInputContext.bIsInAir = MovementComp->IsFalling();
+            CurrentInputContext.bIsSprinting = MovementComp->MaxWalkSpeed > 600.0f; // Simplified check
+        }
+    }
+
+    // Player input
+    if (APlayerController* PC = Cast<APlayerController>(Owner->GetInstigatorController()))
+    {
+        float YawInput = PC->GetInputAxisValue(TEXT("Turn"));
+        float PitchInput = PC->GetInputAxisValue(TEXT("LookUp"));
+        CurrentInputContext.CameraInput = FVector2D(YawInput, PitchInput);
+        CurrentInputContext.InputMagnitude = CurrentInputContext.CameraInput.Size();
+    }
+
+    // Lock-on target
+    CurrentInputContext.bHasTarget = LockOnTarget. IsValid();
+    if (CurrentInputContext.  bHasTarget)
+    {
+        AActor* Target = LockOnTarget.Get();
+        CurrentInputContext. TargetActor = Target;
+        CurrentInputContext. TargetLocation = Target->GetActorLocation();
+        CurrentInputContext.TargetDistance = FVector:: Dist(
+            CurrentInputContext. CharacterLocation, 
+            CurrentInputContext. TargetLocation
+        );
+        
+        // Check if target is boss (can be extended with interface check)
+        CurrentInputContext.bTargetIsBoss = Target->Tags.Contains(FName("Boss"));
+    }
+
+    // Previous frame data
+    if (SpringArmComponent)
+    {
+        CurrentInputContext.  PreviousCameraLocation = SpringArmComponent->GetComponentLocation();
+        CurrentInputContext.  PreviousCameraRotation = SpringArmComponent->GetComponentRotation();
+    }
+}
+
+void USoulsCameraManager::ApplyOutput(const FSoulsCameraOutput& Output)
+{
+    if (!SpringArmComponent || ! CameraComponent)
+    {
+        return;
+    }
+
+    // Apply to SpringArm
+    SpringArmComponent->TargetArmLength = Output.Distance;
+    SpringArmComponent->SocketOffset = Output.  SocketOffset;
+    SpringArmComponent->TargetOffset = Output.  TargetOffset;
+    
+    // Apply rotation (if we have valid data)
+    if (!Output.Rotation.IsNearlyZero())
+    {
+        SpringArmComponent->SetWorldRotation(Output. Rotation);
+    }
+
+    // Apply to Camera
+    CameraComponent->SetFieldOfView(Output. FOV);
+
+    // Post-process settings can be applied here
+    // CameraComponent->PostProcessSettings...     (will be expanded in Phase 4)
+}
+```
+
+3. 代码风格：
+   - 完整的基础实现框架
+   - 未实现的功能有占位和日志提示
+   - GatherInputContext收集完整的输入上下文
+   - ApplyOutput将输出应用到原生组件
+   - 详细的日志便于调试
+
+【Phase 1 完成后验证清单】
+```
+Step 1.1: SoulsCameraTypes. h (7个枚举) ✓
+Step 1.2: SoulsCameraParams_StateBase.  h (A组34参数) ✓
+Step 1.3: B/C/D组参数 (120参数) ✓
+  - SoulsCameraParams_Module.h (B组32参数)
+  - SoulsCameraParams_Modifier.h (C组58参数)
+  - SoulsCameraParams_Collision.h (D组30参数)
+Step 1.4: 主配置与全局配置 (E组22参数) ✓
+  - SoulsCameraParams_Global.h
+  - SoulsCameraConfig.h
+  - SoulsCameraGlobalConfig.h/.    cpp
+Step 1.5: 运行时类型与核心类 ✓
+  - SoulsCameraRuntimeTypes.h
+  - SoulsCameraStateMachine. h/.    cpp
+  - SoulsCameraManager.h/.   cpp
+```
+
+【验证标准】
+- 编译通过 (0 errors)
+- 可在编辑器中：
+  * 创建DataTable（基于FCameraStateConfig）
+  * 创建GlobalConfig资产
+  * 将SoulsCameraManager组件添加到角色
+- 运行时：
+  * 组件正确初始化
+  * 自动找到SpringArm和Camera
+  * 日志显示初始化成功
+  * 基本的输入收集和输出应用工作
+
+【注意事项】
+- **这是Phase 1的最后一个Sub-Step**
+- 完成后进行完整编译验证
+- 验证所有14个文件都已创建
+- **添加新.  cpp文件后需要重新Generate Visual Studio project files**
+- 下一步：Phase 2 Pipeline实现
+
+【文件清单确认 - Phase 1共14个文件】
+```
+Source/[ProjectName]/Camera/Core/
+├── SoulsCameraTypes.h
+├── SoulsCameraParams_StateBase.h
+├── SoulsCameraParams_Module.h
+├── SoulsCameraParams_Modifier.h
+├── SoulsCameraParams_Collision.h
+├── SoulsCameraParams_Global.h
+├── SoulsCameraConfig.h
+├── SoulsCameraGlobalConfig. h
+├── SoulsCameraGlobalConfig.cpp
+├── SoulsCameraRuntimeTypes.h
+├── SoulsCameraStateMachine. h
+├── SoulsCameraStateMachine.cpp
+├── SoulsCameraManager.h
+└── SoulsCameraManager.cpp
+```
+
+【输出要求】
+输出完整的SoulsCameraManager.   cpp文件代码。
+
+================================================================================
+                        上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+```
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：Sub-Step 1.5.7 SoulsCameraManager.   cpp (主管理器类实现 - Phase 1最后一步)
+- 完成进度：[X/26] 函数 或 [百分比]
+- 中断位置：[具体说明在哪里中断，例如：完成到Target Management，未完成Output Access及后续]
+
+【已完成内容】
+- 文件头部（#include）
+- 构造函数
+- [列出已完成的函数]
+
+【未完成内容】
+- [列出剩余函数]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存到新文件SoulsCameraManager. cpp，然后开启新对话。
+注意：添加新.   cpp文件后需要重新Generate Visual Studio project files。
+
+================================================================================
+                    继续任务 - 新对话PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+Phase 1 Step 1.5 Sub-Step 1.5.7 续接任务。
+实现USoulsCameraManager类的基础框架。
+**这是Phase 1的最后一个Sub-Step。**
+
+【前置完成】
+- Step 1.1-1.4 所有参数结构体和配置 ✅
+- Sub-Step 1.5.1-1.5.3 运行时数据结构 ✅
+- Sub-Step 1.5.4-1.5.5 SoulsCameraStateMachine ✅
+- Sub-Step 1.5.6 SoulsCameraManager. h ✅
+- Sub-Step 1.5.7 部分完成：
+  - 文件头部 ✅
+  - 构造函数 ✅
+  - [列出已完成的函数] ✅
+
+【续接任务】
+继续完成SoulsCameraManager. cpp文件：
+- [列出剩余函数]
+
+【已有代码上下文】
+文件：SoulsCameraManager. cpp（已创建，需要继续添加）
+
+【需要实现的函数清单（共26个）】
+UActorComponent Interface (3个)：
+1. 构造函数
+2. BeginPlay()
+3. EndPlay()
+4. TickComponent()
+
+Initialization (2个)：
+5. InitializeCamera()
+6. IsInitialized()
+
+Component References (4个)：
+7. SetSpringArmComponent()
+8. SetCameraComponent()
+9. GetSpringArm()
+10. GetCamera()
+
+State Management (4个)：
+11. RequestStateChange()
+12. GetCurrentStateName()
+13. GetCurrentCategory()
+14. IsInTransition()
+
+Modifier Triggers (3个)：
+15. TriggerModifier() - 占位实现
+16. StopModifier() - 占位实现
+17. StopAllModifiers() - 占位实现
+
+Target Management (4个)：
+18. SetLockOnTarget()
+19. ClearLockOnTarget()
+20. GetLockOnTarget()
+21. HasLockOnTarget()
+
+Output Access (2个)：
+22. GetCurrentOutput()
+23. GetCurrentInputContext()
+
+Debug (2个)：
+24. SetDebugEnabled()
+25. IsDebugEnabled()
+
+Sub-System Access (1个)：
+26. GetStateMachine()
+
+Internal Methods (4个)：
+27. AutoFindComponents()
+28. CreateSubSystems()
+29. GatherInputContext()
+30. ApplyOutput()
+
+【Phase 1完成验证清单】
+完成后需验证：
+1. 编译通过 (0 errors)
+2. 可创建DataTable（基于FCameraStateConfig）
+3. 可创建GlobalConfig资产
+4. SoulsCameraManager组件可添加到角色
+5. 14个文件全部创建完成
+
+【输出要求】
+继续生成剩余代码，完成SoulsCameraManager.cpp文件。
+
+【编译注意】
+添加新.cpp文件后需要：
+1. 右键. uproject → Generate Visual Studio project files
+2. 重新打开.  sln或Reload All
+3. 编译
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。如再次达到限制，请再次生成交接信息。
+
+---结束复制---
+
+================================================================================
+```
+
+【交接信息要求】
+1. 交接PROMPT必须是**完全自包含**的，新对话无需任何额外信息即可继续
+2. 包含所有必要的**代码上下文**（关键结构体定义、依赖关系等）
+3. 明确标注**中断位置**和**剩余任务**
+4. 标明目标文件：SoulsCameraManager.      cpp
+5. 列出所有需要实现的函数（共30个，按分组）
+6. 包含编译注意事项（Generate Visual Studio project files）
+7. **标明这是Phase 1最后一个Sub-Step**
+8. 包含Phase 1完成验证清单
+
+================================================================================

@@ -1,0 +1,459 @@
+实现动画所需要准备的事项：
+
+
+
+
+**完全正确。**
+
+你说的就是**不同动作有不同的窗口时机**，这在实现上非常简单。
+
+---
+
+## 你描述的场景，翻译成具体实现
+
+以血源诅咒的变形斩为例：
+
+```
+轻击第1段 Montage 的时间轴：
+
+0.0          0.3      0.5          0.75     0.85    1.0
+ |            |        |            |        |       |
+ 抬手         挥砍      ↓            ↓       动作结束
+                       │            │
+                       │            └─ ANS_ComboWindow（普通连段窗口）
+                       │               只允许接轻击第2段
+                       │
+                       └─ ANS_TransformWindow（变形斩窗口）
+                          允许接变形斩
+                          比普通连段窗口更早打开
+```
+
+**同一个 Montage 上放两个不同的 NotifyState，一前一后。**
+
+变形斩的窗口在 0.3 就开了，普通连段窗口在 0.5 才开。
+
+所以：
+- 玩家在 0.4 时按变形斩 → 变形斩窗口已开 → 立刻执行
+- 玩家在 0.4 时按普通攻击 → 普通窗口还没开 → 缓存，等 0.5 再执行
+- 玩家在 0.6 时按普通攻击 → 普通窗口已开 → 立刻执行
+
+---
+
+## 代码层面怎么做
+
+```
+玩家按键
+  ↓
+代码判断：玩家想做什么？
+  ├─ 普通攻击 → 检查 bCanCombo（普通连段窗口）→ 开了就执行
+  └─ 变形斩   → 检查 bCanTransform（变形斩窗口）→ 开了就执行
+```
+
+就是**多加一个窗口 Bool**：
+
+| Notify | 控制的变量 | 打开时机（举例） |
+|---|---|---|
+| `ANS_ComboWindow` | `bCanCombo = true/false` | 0.5 ~ 0.75 |
+| `ANS_TransformWindow` | `bCanTransform = true/false` | 0.3 ~ 0.75 |
+
+每种"优先级不同的动作"就对应一个窗口。窗口放在 Montage 时间轴的哪个位置，完全由你决定。
+
+---
+
+## 推广到更多情况
+
+| 窗口类型 | 什么动作能在这个窗口执行 | 打开时机 | 为什么更早/更晚 |
+|---|---|---|---|
+| `ANS_ComboWindow` | 同类型普通连段 | 较晚（0.5） | 必须让当前招式打出实质效果后才能接 |
+| `ANS_TransformWindow` | 变形斩 | 较早（0.3） | 血源的变形斩设计上就是可以更快取消 |
+| `ANS_DodgeCancelWindow` | 翻滚取消 | 更早（0.25） | 魂like 中翻滚的取消优先级通常最高 |
+| `ANS_SkillCancelWindow` | 战技取消 | 视设计而定 | 有些战技可以很早打断普通攻击 |
+
+所有这些都是**在同一个 Montage 上多放几条 NotifyState**，不同的 Notify 在不同的时间点打开不同的 Bool。
+
+```
+一个 Montage 的时间轴上可以同时叠很多 Notify：
+
+0.0                                              1.0
+ |                                                 |
+ ├── ANS_DodgeCancelWindow ═══════════════════╗    |
+ |                                            ║    |
+ ├────── ANS_TransformWindow ═══════════╗     ║    |
+ |                                      ║     ║    |
+ ├────────── ANS_ComboWindow ═════╗     ║     ║    |
+ |                                ║     ║     ║    |
+ ├── AN_EnableHitbox              ║     ║     ║    |
+ ├────── AN_DisableHitbox         ║     ║     ║    |
+ |                                ╚═════╩═════╝    |
+ ├─────────────────── AN_ActionEnd                 |
+ |                                                 |
+
+翻滚取消：最早开，最晚关（优先级最高）
+变形斩：  比连段早开
+普通连段：最晚开（优先级最低）
+```
+
+---
+
+## 一句话总结
+
+> **你的理解完全正确。不同优先级的动作，就是在 Montage 上放不同的窗口 Notify，位置不同代表开放时机不同。越高优先级的动作，窗口越早打开。** 这就是魂like手感调参的核心——每个窗口放在第几帧，直接决定游戏的节奏和难度。
+
+
+
+
+一些确认点：
+
+
+**大方向完全正确。** 但有几个细节需要修正和补充。
+
+---
+
+## 修正 1：BlendSpace 的规划
+
+你说的：
+> 前后移动快速+慢速，左右移动快速+慢速，Sprint
+
+实际上不需要这么多独立的 BlendSpace。
+
+### 非锁定移动（FreeMove）
+
+只需要**一个 2D BlendSpace**：
+
+```
+BS_Locomotion_FreeMove_2D
+
+横轴：Direction（-180 到 180）
+纵轴：Speed（0 到 600）
+
+里面放的动画点位：
+
+        Speed
+         600  ┌─ Run_F ──── Run_FR ──── Run_R ──── Run_BR ──── Run_B ┐
+              │                                                        │
+         300  ├─ Walk_F ─── Walk_FR ─── Walk_R ─── Walk_BR ─── Walk_B ┤
+              │                                                        │
+           0  └─ Idle ──── Idle ──── Idle ──── Idle ──── Idle ────────┘
+             -180   -135    -90     -45      0      45     90    135   180
+                                    Direction
+```
+
+玩家推摇杆 → 代码算出 Speed 和 Direction → BlendSpace 自动混合出对应的走/跑/方向。
+
+**不需要分开做"前后快速""前后慢速""左右快速""左右慢速"。** 一个 2D BlendSpace 全包了。
+
+### 锁定移动（LockOnStrafe）
+
+需要**另一个 2D BlendSpace**：
+
+```
+BS_Locomotion_LockOn_2D
+
+横轴：RightAxis（-1 到 1）
+纵轴：ForwardAxis（-1 到 1）
+
+里面放的动画点位：
+
+       Forward
+         1   ┌─ Strafe_FL ── Strafe_F ── Strafe_FR ┐
+             │                                       │
+         0   ├─ Strafe_L ─── Idle ──── Strafe_R ────┤
+             │                                       │
+        -1   └─ Strafe_BL ── Strafe_B ── Strafe_BR ─┘
+            -1              0              1
+                          Right
+```
+
+角色面朝敌人不转身，八方向平移。
+
+### Sprint
+
+Sprint 不需要 BlendSpace，**一个单独的 Animation Sequence 就够**。
+
+因为冲刺时：
+- 速度是固定的最高速（不需要混合不同速度）
+- 方向永远是正前方（不需要混合方向）
+
+```
+所以 Locomotion 总共需要：
+
+├── BS_Locomotion_FreeMove_2D    ← 1个 BlendSpace（非锁定，包含走/跑/全方向）
+├── BS_Locomotion_LockOn_2D     ← 1个 BlendSpace（锁定，八方向平移）
+├── AS_Sprint_Forward            ← 1个动画（冲刺）
+└── AS_Idle                      ← 1个动画（站着）
+    AS_Idle_Combat               ← 1个动画（战斗站姿，可选）
+
+就这些。不需要更多了。
+```
+
+---
+
+## 修正 2：你说不做负重变换所以不需要两套 BS
+
+**你的判断是对的。** 如果不做负重影响动画姿态（比如黑魂3里负重高翻滚变胖翻），那确实不需要两套 Locomotion BS。
+
+但你**需要两套 BS 的原因不是负重，而是锁定和非锁定**：
+
+| BS | 什么时候用 | 为什么需要 |
+|---|---|---|
+| `BS_Locomotion_FreeMove_2D` | 没锁定敌人时 | 角色朝移动方向转身，用 Speed + Direction |
+| `BS_Locomotion_LockOn_2D` | 锁定敌人时 | 角色面朝敌人不转身，八方向平移，用 Forward + Right |
+
+这两个 BS 里的动画**完全不同**（转身跑 vs 面朝前方侧移），所以必须是两个。
+
+---
+
+## 修正 3：准备工作的完整清单
+
+你列的3步是对的，但我帮你细化一下：
+
+### 步骤 1：准备所有动画素材
+
+```
+确认你有以下动画文件（从 Mixamo / 动画包 / 自制）：
+
+Locomotion 用：
+├── Idle（站着）
+├── Idle_Combat（战斗站姿）
+├── Walk_F / Walk_B / Walk_L / Walk_R（四方向走）
+├── Walk_FL / Walk_FR / Walk_BL / Walk_BR（四斜方向走）
+├── Run_F / Run_B / Run_L / Run_R（四方向跑）
+├── Run_FL / Run_FR / Run_BL / Run_BR（四斜方向跑）
+├── Strafe_F / B / L / R / FL / FR / BL / BR（锁定八方向）
+├── Sprint_Forward（冲刺）
+├── TurnInPlace_L / TurnInPlace_R（原地转身，可选）
+
+跳跃用：
+├── JumpStart（起跳）
+├── FallLoop（下落循环）
+├── Land（落地）
+
+翻滚用（每个方向）：
+├── Roll_F / B / L / R / FL / FR / BL / BR
+├── Backstep（后撤步）
+
+战斗用（每种武器）：
+├── LightAttack_01 / 02 / 03（轻击连段）
+├── HeavyAttack（重击）
+├── RunAttack（冲刺攻击）
+├── JumpAttack（跳跃攻击）
+├── 其他特殊攻击
+
+受击用：
+├── HitReact_F / B / L / R（四方向受击）
+├── HitReact_Heavy（重受击）
+├── Knockdown（击倒）
+├── GetUp（起身）
+
+死亡用：
+├── Death_F / Death_B（前倒/后倒）
+
+交互用：
+├── PickUp（捡东西）
+├── OpenDoor（开门）
+├── DrinkEstus（喝药）
+├── 其他需要的交互
+```
+
+### 步骤 2：在 UE4 中搭建 AnimBP 框架
+
+```
+做这些事：
+
+1. 创建 BlendSpace 资产
+   ├── BS_Locomotion_FreeMove_2D（放入走/跑动画，设好轴）
+   └── BS_Locomotion_LockOn_2D（放入八方向动画，设好轴）
+
+2. 创建 AnimBP，搭建 State Machine
+   ├── Idle State（放 Idle 动画）
+   ├── Movement State（放 BS，用 bIsLockedOn 选哪个 BS）
+   ├── Sprint State��放 Sprint 动画）
+   ├── JumpStart State（放起跳动画）
+   ├── InAir State（放下落循环动画）
+   ├── Land State（放落地动画）
+   ├── Dead State（放死亡最后一帧 Pose）
+   └── 画好过渡箭头和条件（先用临时变量，后面代码接入）
+
+3. 在 AnimGraph 里连好：
+   State Machine → Slot FullBody → Output Pose
+```
+
+### 步骤 3：把需要 Montage 的动画转成 Montage 并布置 Notify
+
+```
+做这些事：
+
+1. 把以下动画创建为 Montage
+   ├── 翻滚（8方向 + 后撤步 = 9个 Montage）
+   ├── 攻击（每种武器的各种攻击）
+   │   轻击连段可以做成1个 Montage 分3个 Section
+   ├── 受击（各方向各程度）
+   ├── 死亡
+   ├── 喝药 / 捡东西 / 开门等交互
+   └── 确认每个 Montage 的 Slot 是 DefaultGroup.FullBody
+
+2. 在每个 Montage 上布置 Notify
+   ├── 攻击 Montage：
+   │   ├── AN_EnableHitbox / AN_DisableHitbox
+   │   ├── ANS_ComboWindow
+   │   └── AN_ActionEnd
+   ├── 翻滚 Montage：
+   │   ├── ANS_IFrame（无敌帧）
+   │   └── AN_ActionEnd
+   ├── 受击 Montage：
+   │   └── AN_ActionEnd
+   └── 交互 Montage：
+       └── AN_ActionEnd
+```
+
+### 步骤 4：准备完毕，开始写代码
+
+```
+以上全部完成后：
+├── AnimBP 有完整的 State Machine（Locomotion + Jump）
+├── 所有 Montage 已创建并布置好 Notify
+├── BlendSpace 已配置好
+└── 可以运行看到角色站着（虽然还没有代码驱动）
+
+这时候开始找我写代码：
+├── CharacterStateTypes.h（枚举）
+├── ActionTypes.h（数据结构）
+├── SoulsCharacterBase（状态变量 + Tick 计算）
+├── CombatComponent（TryDoAction + 连段 + 缓存 + 受击）
+├── SoulsAnimInstance（变量同步）
+├── 所有 Notify 的 C++ 类
+└── 代码写完接入 AnimBP → 角色能动了
+```
+
+---
+
+## 总结
+
+你的理解**完全正确**，只需要记住：
+
+| 你原来说的 | 修正 |
+|---|---|
+| Locomotion 需要很多 BS | 只需要 **2个 BS**（非锁定 + 锁定）+ Sprint 单独动画 |
+| 不做负重所以不需要两套 BS | 两套 BS 是因为**锁定 vs 非锁定**，不是因为负重 |
+| 准备好再写代码 | ✅ 正确，先搭好 AnimBP 框架 + Montage + Notify，再写代码接入 |
+
+
+关于锁定与非锁定状态下，向前移动的动画复用问题确认点：
+
+
+你的理解**完全正确**。两套 BS 的区别就是你说的那样。
+
+---
+
+## 先确认你理解对的部分
+
+### 非锁定（探索）
+
+```
+玩家推左摇杆往左：
+  角色整个身体转向左边 → 面朝左边 → 往左跑
+
+  就是正常的"人朝哪跑就面朝哪"
+```
+
+### 锁定（战斗）
+
+```
+玩家锁定敌人后推左摇杆往左：
+  角色身体始终面朝敌人 → 脚步侧移向左 → 围绕敌人走
+
+  人物面朝敌人，脚在侧移，动画姿势完全不同
+```
+
+✅ 你说的完全正确，这就是需要两套 BS 的原因。
+
+---
+
+## 你的问题：锁定状态下的 Forward 需要单独的动画吗？
+
+**好问题。答案是：看情况，但建议用同一个。**
+
+### 实际体验分析
+
+```
+非锁定 Forward：
+  角色面朝前方，正常跑步姿势，双臂摆动
+
+锁定 Forward（朝敌人方向跑过去）：
+  角色面朝敌人（也是前方），正常跑步姿势，双臂摆动
+```
+
+**这两个动画看起来确实几乎一模一样。** 因为两种情况下角色都是面朝前方跑。
+
+### 血源诅咒 / 黑魂3 实际怎么做的
+
+```
+锁定状态下往敌人方向跑：
+  用的就是和非锁定一样的 Run Forward 动画
+  或者是一个非常接近的变体（稍微低头��身，更有战斗警戒感）
+
+锁定状态下侧移/后退：
+  完全不同的动画（Strafe 系列）
+```
+
+所以实际上：
+
+| 锁定方向 | 需要专门动画吗 | 原因 |
+|---|---|---|
+| **Forward** | ❌ 可以复用非锁定的 Run_F | 都是面朝前方跑，看起来一样 |
+| **Left / Right** | ✅ 必须专门的 Strafe 动画 | 身体朝前，脚步侧移，完全不同 |
+| **Back** | ✅ 必须专门的 Strafe_B 动画 | 面朝前方倒退走，不是转身跑 |
+| **FL / FR / BL / BR** | ✅ 必须专门的 Strafe 动画 | 斜向移动，身体仍朝前 |
+
+---
+
+## 实际做法：两种都行
+
+### 做法 A：Forward 直接复用（省事，效果够用）
+
+```
+BS_Locomotion_LockOn_2D 里面：
+
+                Forward
+         1   ┌── Run_F ─────── Run_F ─────── Run_F ──┐
+             │   (复用非锁定)   (复用非锁定)   (复用非锁定) │
+             │                                         │
+         0   ├── Strafe_L ──── Idle ────── Strafe_R ──┤
+             │   (专门动画)                 (专门动画)    │
+             │                                         │
+        -1   └── Strafe_BL ── Strafe_B ── Strafe_BR ──┘
+                  (专门动画)   (专门动画)   (专门动画)
+            -1              0              1
+                          Right
+```
+
+Forward 那一排直接放非锁定的 Run_F，完全没问题。
+
+### 做法 B：Forward 用微调版本（更精细）
+
+```
+做一个 Run_F_Combat 动画：
+  和普通 Run_F 几乎一样，但是：
+  - 重心稍低
+  - 双手位置更靠近武器（随时准备攻击的感觉）
+  - 头部稍微低一点（警戒姿态）
+
+差别很细微，但体验更好。
+```
+
+---
+
+## 建议
+
+| 阶段 | 怎么做 |
+|---|---|
+| **P0（先做出来）** | Forward 直接复用非锁定的 Run_F，不浪费时间 |
+| **后期打磨** | 如果觉得锁定跑向敌人的感觉不够"战斗状态"，再做一个微调版替换 |
+
+先让系统跑起来，手感调通了，再花时间打磨细节动画。
+
+---
+
+## 一句话总结
+
+> **锁定 Forward 可以直接复用非锁定的 Run Forward，因为两个看起来几乎一样。** 真正需要专门动画的是 Strafe Left / Right / Back 以及四个斜方向，因为这些姿势和非锁定完全不同。

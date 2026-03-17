@@ -1,0 +1,9 @@
+StageID,StageName,ChineseName,Layer,ExecutionOrder,Description,InputData,OutputData,Dependencies,CanSkip,SkipCondition
+1,InputContextGather,输入上下文收集,InputLayer,1,收集当前帧所有相关输入数据，包括角色状态、玩家输入、锁定目标、环境信息等,PlayerController/Character/TargetActor/WorldContext,FCameraInputContext,无,false,无
+2,StateMachineUpdate,状态机更新,DecisionLayer,2,根据输入上下文评估当前应处于的相机状态，处理状态转换逻辑和混合参数,FCameraInputContext/PreviousState,CurrentState/BlendAlpha/TransitionInfo,Stage1,false,无
+3,ModuleComputeStack,模块计算栈,ComputeLayer,3,遍历所有激活的计算模块（Position/Rotation/Distance/FOV），获取各模块的原始输出,FCameraInputContext/CurrentState/PreviousOutput,TArray<FModuleOutput>,Stage2,false,无
+4,ModifierApply,修改器应用,ComputeLayer,4,更新并应用所有激活的修改器（震动/处决相机等临时效果）,TArray<FModuleOutput>/ActiveModifiers,ModifiedOutputs,Stage3,true,无激活的修改器时跳过
+5,BlendAndSolveConflicts,混合与冲突解决,ComputeLayer,5,根据混合策略合并所有模块输出，解决冲突，生成统一的相机参数,ModifiedOutputs/BlendPolicies,FSoulsCameraOutput,Stage4,false,无
+6,CollisionResolver,碰撞解析,SafetyLayer,6,执行碰撞检测，修正相机位置防止穿墙，处理遮挡物,FSoulsCameraOutput/WorldCollision,CollisionAdjustedOutput,Stage5,true,配置禁用碰撞检测时
+7,PostProcessEffects,后处理效果,OutputLayer,7,应用最终的后处理效果（平滑/滤镜/景深等）,CollisionAdjustedOutput,FinalOutput,Stage6,true,无后处理效果时
+8,RenderApply,渲染应用,OutputLayer,8,将最终计算结果应用到实际的SpringArm和Camera组件,FinalOutput,更新SpringArm/Camera组件,Stage7,false,无

@@ -1,0 +1,317 @@
+Sub-Step 6.2. 3 Prompt
+
+================================================================================
+任务：创建SoulsCameraDebugComponent.  h - 调试组件头文件
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.  27 C++项目。
+创建调试组件，提供可视化调试功能。
+
+【当前进度】
+Phase 6 Step 6.  2 Sub-Step 6.2.3 (共190个Sub-Step中的第181个)
+前置完成：6.2.2 蓝图函数库实现
+
+【任务目标】
+创建文件：Source/MyProject/Camera/Utility/SoulsCameraDebugComponent.  h
+定义调试组件类。
+
+【SoulsCameraManager可用接口】
+调试组件需要通过以下Manager接口获取数据：
+
+状态查询：
+- GetCurrentStateName() -> FName
+- GetCurrentCategory() -> ECameraStateCategory
+- IsInTransition() -> bool
+
+目标查询：
+- HasLockOnTarget() -> bool
+- GetLockOnTarget() -> AActor*
+
+输出查询（通过GetCurrentOutput()）：
+- GetCurrentOutput() -> FSoulsCameraOutput
+  - Output.FocusPoint (FVector)
+  - Output. Rotation (FRotator)
+  - Output. Distance (float)
+  - Output.FOV (float)
+  - Output.GetCameraLocation() -> FVector
+
+碰撞查询：
+- IsCollisionActive() -> bool
+- IsInCollisionRecovery() -> bool
+- IsCharacterOccluded() -> bool
+- IsTargetOccluded() -> bool
+- GetCollisionAdjustedDistance() -> float
+
+子系统访问：
+- GetModuleRegistry() -> UCameraModuleRegistry*
+- GetModifierManager() -> UCameraModifierManager*
+
+【具体要求】
+
+1. 文件路径：Source/MyProject/Camera/Utility/SoulsCameraDebugComponent. h
+
+2. 必须包含的头文件：
+```cpp
+#include "CoreMinimal.h"
+#include "Components/ActorComponent.h"
+#include "Camera/Data/CameraStateEnums.h"
+#include "Camera/Core/SoulsCameraRuntimeTypes. h"
+#include "SoulsCameraDebugComponent.generated.h"
+```
+
+3. 前向声明：
+```cpp
+class USoulsCameraManager;
+```
+
+4. FCameraDebugFlags结构体：
+```cpp
+USTRUCT(BlueprintType)
+struct MYPROJECT_API FCameraDebugFlags
+{
+    GENERATED_BODY()
+
+    // 可视化标志
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visualization")
+    bool bShowFocusPoint = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visualization")
+    bool bShowCameraPath = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visualization")
+    bool bShowCollisionProbes = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visualization")
+    bool bShowTargetInfo = false;
+
+    // 信息标志
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Info")
+    bool bShowStateInfo = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Info")
+    bool bShowModuleInfo = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Info")
+    bool bShowModifierInfo = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Info")
+    bool bShowPerformanceStats = false;
+
+    // 显示标志
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display")
+    bool bShowOnScreen = false;
+
+    // 便捷方法
+    FCameraDebugFlags() = default;
+    
+    static FCameraDebugFlags EnableAll();
+    bool HasAnyEnabled() const;
+    bool HasWorldVisualization() const;
+    bool HasScreenText() const;
+};
+```
+
+5. USoulsCameraDebugComponent类设计：
+
+```cpp
+UCLASS(ClassGroup=(Camera), meta=(BlueprintSpawnableComponent), DisplayName="Souls Camera Debug")
+class MYPROJECT_API USoulsCameraDebugComponent :  public UActorComponent
+{
+    GENERATED_BODY()
+
+public:
+    USoulsCameraDebugComponent();
+
+    // UActorComponent接口
+    virtual void BeginPlay() override;
+    virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+
+    //========================================
+    // Debug Control - 调试控制
+    //========================================
+
+    UFUNCTION(BlueprintCallable, Category = "Camera|Debug")
+    void SetDebugEnabled(bool bEnabled);
+
+    UFUNCTION(BlueprintPure, Category = "Camera|Debug")
+    bool IsDebugEnabled() const;
+
+    UFUNCTION(BlueprintCallable, Category = "Camera|Debug")
+    void SetDebugFlags(const FCameraDebugFlags& Flags);
+
+    UFUNCTION(BlueprintPure, Category = "Camera|Debug")
+    FCameraDebugFlags GetDebugFlags() const;
+
+    //========================================
+    // Debug String Generation - 调试信息生成
+    //========================================
+
+    UFUNCTION(BlueprintPure, Category = "Camera|Debug|Info")
+    FString GetDebugString() const;
+
+    UFUNCTION(BlueprintPure, Category = "Camera|Debug|Info")
+    FString GetStateDebugString() const;
+
+    UFUNCTION(BlueprintPure, Category = "Camera|Debug|Info")
+    FString GetModulesDebugString() const;
+
+    UFUNCTION(BlueprintPure, Category = "Camera|Debug|Info")
+    FString GetModifiersDebugString() const;
+
+    UFUNCTION(BlueprintPure, Category = "Camera|Debug|Info")
+    FString GetCollisionDebugString() const;
+
+protected:
+    //========================================
+    // Visualization Methods - 可视化方法
+    //========================================
+
+    virtual void DrawDebugVisualization(float DeltaTime);
+    virtual void DrawFocusPoint();
+    virtual void DrawCameraPath();
+    virtual void DrawCollisionProbes();
+    virtual void DrawTargetInfo();
+    virtual void DrawOnScreenDebug();
+
+    //========================================
+    // Configuration - 配置
+    //========================================
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Enable")
+    bool bDebugEnabled;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Flags")
+    FCameraDebugFlags DebugFlags;
+
+    //========================================
+    // Colors - 颜色配置
+    //========================================
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Colors")
+    FColor FocusPointColor;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Colors")
+    FColor CameraPathColor;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Colors")
+    FColor CollisionColor;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Colors")
+    FColor TargetColor;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Colors")
+    FColor SafeColor;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Colors")
+    FColor WarningColor;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Colors")
+    FColor ErrorColor;
+
+    //========================================
+    // Size Configuration - 尺寸配置
+    //========================================
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Size", meta = (ClampMin = "1. 0", ClampMax = "100.0"))
+    float FocusPointSize;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Size", meta = (ClampMin = "0.5", ClampMax = "10.0"))
+    float LineThickness;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Size", meta = (ClampMin = "10.0", ClampMax = "200.0"))
+    float TargetIndicatorSize;
+
+    //========================================
+    // Screen Text Configuration - 屏幕文字配置
+    //========================================
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Screen", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float ScreenTextPositionX;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Screen", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float ScreenTextPositionY;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Screen", meta = (ClampMin = "0.5", ClampMax = "3.0"))
+    float ScreenTextScale;
+
+    //========================================
+    // Camera Manager Reference - 相机管理器引用
+    //========================================
+
+    UPROPERTY(BlueprintReadOnly, Category = "Debug|Reference")
+    USoulsCameraManager* CameraManager;
+
+    //========================================
+    // Performance Tracking - 性能追踪
+    //========================================
+
+    float LastDeltaTime;
+    float AverageFrameTime;
+    float PeakFrameTime;
+    int32 FrameCount;
+    float TimeSincePerformanceReset;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|Performance", meta = (ClampMin = "0.1", ClampMax = "5.0"))
+    float PerformanceSampleInterval;
+
+    //========================================
+    // History Tracking - 历史追踪
+    //========================================
+
+    TArray<FVector> FocusPointHistory;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|History", meta = (ClampMin = "10", ClampMax = "500"))
+    int32 MaxHistorySize;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug|History", meta = (ClampMin = "0.01", ClampMax = "0.5"))
+    float HistorySampleInterval;
+
+    float TimeSinceLastHistorySample;
+
+    //========================================
+    // Internal Methods - 内部方法
+    //========================================
+
+    void FindCameraManager();
+    void UpdatePerformanceMetrics(float DeltaTime);
+    void UpdateHistory(float DeltaTime);
+    void ResetPerformanceData();
+    FString GetPerformanceString() const;
+};
+```
+
+6. 构造函数默认值：
+- bDebugEnabled = false
+- FocusPointColor = FColor::Yellow
+- CameraPathColor = FColor:: Cyan
+- CollisionColor = FColor:: Red
+- TargetColor = FColor:: Orange
+- SafeColor = FColor::Green
+- WarningColor = FColor:: Yellow
+- ErrorColor = FColor::Red
+- FocusPointSize = 10.0f
+- LineThickness = 2.0f
+- TargetIndicatorSize = 50.0f
+- ScreenTextPositionX = 0.02f
+- ScreenTextPositionY = 0.1f
+- ScreenTextScale = 1.0f
+- PerformanceSampleInterval = 1.0f
+- MaxHistorySize = 100
+- HistorySampleInterval = 0.05f
+
+7. Tick配置：
+- PrimaryComponentTick. bCanEverTick = true
+- PrimaryComponentTick. TickGroup = TG_PostUpdateWork
+- PrimaryComponentTick. bStartWithTickEnabled = true
+
+【验证标准】
+- 编译通过
+- 组件可添加到Actor
+- 所有UPROPERTY正确标记
+- FCameraDebugFlags结构体可在蓝图中使用
+- 颜色和尺寸配置可在编辑器中调整
+
+【输出要求】
+输出完整的SoulsCameraDebugComponent. h文件代码。
+================================================================================

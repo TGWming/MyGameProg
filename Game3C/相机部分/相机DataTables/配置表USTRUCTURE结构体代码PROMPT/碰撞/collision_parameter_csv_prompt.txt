@@ -1,0 +1,84 @@
+在我的UE4.27工程中创建相机碰撞参数数据表的C++结构体代码。
+
+## 任务要求
+
+1. 在项目的 Source 文件夹下创建头文件 `CameraCollisionParameterData.h`
+
+2. 创建一个继承自 FTableRowBase 的 USTRUCT，用于从CSV导入相机碰撞参数配置数据
+
+3. CSV文件结构如下（共31行数据）：
+   - ParamID:  FString - 参数唯一标识符，格式如 "CollisionParameter_CD01", "CollisionParameter_CF01"
+   - ParamName: FName - 参数名称，作为程序引用标识符（如 ProbeRadius, OcclusionFadeSpeed）
+   - ChineseName: FString - 中文显示名称
+   - Category: FString - 参数分类（Detection, Response, Occlusion, Recovery, Special）
+   - DataType: FString - 数据类型（float, int, bool, ECollisionChannel, TArray<float>）
+   - DefaultValue: FString - 默认值（数值如"12"，布尔如"true"，数组如"[15,30,45,60,90]"，枚举如"ECC_Camera"）
+   - MinValue: FString - 最小值（"-"表示无限制）
+   - MaxValue: FString - 最大值（"-"表示无限制）
+   - Unit:  FString - 单位（如 "cm", "degree", "1/s", "s", "-"）
+   - Description: FString - 参数描述
+   - RelatedStrategies:  FString - 关联策略ID列表，用斜杠分隔（如 "D01/D02/D03/D04", "RS03"）
+
+4. 结构体命名为 `FCameraCollisionParameterRow`
+
+5. 创建必要的枚举类型：
+   - ECollisionParamCategory - 参数分类枚举（Detection, Response, Occlusion, Recovery, Special）
+   - ECollisionParamDataType - 数据类型枚举（Float, Int, Bool, CollisionChannel, FloatArray）
+
+6. 添加必要的UPROPERTY宏，确保：
+   - 所有属性可在编辑器中编辑（EditAnywhere）
+   - 所有属性可在蓝图中读取（BlueprintReadWrite）
+   - 添加Category分组便于编辑器查看
+
+7. 添加辅助函数：
+   - float GetDefaultValueAsFloat() const - 将DefaultValue解析为float
+   - int32 GetDefaultValueAsInt() const - 将DefaultValue解析为int32
+   - bool GetDefaultValueAsBool() const - 将DefaultValue解析为bool（"true"/"false"）
+   - TArray<float> GetDefaultValueAsFloatArray() const - 将DefaultValue解析为float数组，处理"[x,y,z,...]"格式
+   - ECollisionChannel GetDefaultValueAsCollisionChannel() const - 将DefaultValue解析为ECollisionChannel枚举
+   - bool HasMinLimit() const - 检查MinValue是否不为"-"
+   - bool HasMaxLimit() const - 检查MaxValue是否不为"-"
+   - float GetMinValueAsFloat() const - 获取最小值（无限制时返回TNumericLimits<float>:: Lowest()）
+   - float GetMaxValueAsFloat() const - 获取最大值（无限制时返回TNumericLimits<float>::Max()）
+   - TArray<FString> GetRelatedStrategiesArray() const - 解析RelatedStrategies为数组
+   - bool IsFloatType() const - 检查DataType是否为float
+   - bool IsIntType() const - 检查DataType是否为int
+   - bool IsBoolType() const - 检查DataType是否为bool
+   - bool IsArrayType() const - 检查DataType是否为TArray<float>
+   - bool IsEnumType() const - 检查DataType是否为ECollisionChannel
+
+8. 确保代码兼容UE4.27
+
+## 特殊处理说明
+- ParamID前缀说明：
+  - CD开头：Detection（检测类）参数
+  - CF开头：Occlusion（遮挡处理类）参数（注意：Response类也使用CD前缀）
+  - CR开头：Recovery（恢复类）参数
+  - CS开头：Special（特殊情况处理类）参数
+- DataType特殊类型：
+  - TArray<float>：数组格式为"[x,y,z,...]"，如"[15,30,45,60,90]"
+  - ECollisionChannel：UE4引擎枚举，如"ECC_Camera"
+  - bool：字符串"true"或"false"
+- MinValue/MaxValue为"-"时表示无限制（bool、enum、array类型始终为"-"）
+- RelatedStrategies使用斜杠"/"分隔多个策略ID（如 "D01/D02/D03/D04"）
+
+## Category说明
+- Detection：检测相关参数（球半径、射线数量、碰撞通道等）
+- Response：响应相关参数（最小距离、滑动启用、FOV补偿等）
+- Occlusion：遮挡处理参数（渐隐速度、透明度、启用开关等）
+- Recovery：恢复相关参数（延迟时间、恢复速度、分段恢复等）
+- Special：特殊情况参数（狭小空间、低天花板、悬崖检测、墙角处理等）
+
+## 示例数据参考
+```csv
+CollisionParameter_CD01,ProbeRadius,检测球半径,Detection,float,12,5,30,cm,球扫检测的球体半径,D02/D04
+CollisionParameter_CD04,CollisionChannel,碰撞通道,Detection,ECollisionChannel,ECC_Camera,-,-,-,相机碰撞检测使用的通道,D01/D02/D03/D04
+CollisionParameter_CD07,SlideEnabled,启用滑动响应,Response,bool,true,-,-,-,是否启用沿表面滑动,RS02
+CollisionParameter_CD08,OrbitSearchAngles,轨道搜索角度,Response,TArray<float>,"[15,30,45,60,90]",-,-,degree,轨道调整时的搜索角度序列,RS03
+CollisionParameter_CF01,OcclusionFadeSpeed,遮挡渐隐速度,Occlusion,float,5,1,15,1/s,遮挡物透明化的速度,OC01
+CollisionParameter_CR02,RecoverySpeed,恢复速度,Recovery,float,3,1,10,1/s,平滑恢复的速度系数,RC02
+CollisionParameter_CS01,TightSpaceThreshold,狭小空间阈值,Special,float,150,80,300,cm,判定为狭小空间的距离阈值,SP01
+CollisionParameter_CS11,CornerFirstPersonFallback,墙角第一人称后备,Special,bool,false,-,-,-,极端墙角情况是否切换第一人称,SP04
+
+文件位置
+将文件放置在 Source/[项目名]/Public/Camera/Data/ 目录下

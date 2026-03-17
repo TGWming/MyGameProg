@@ -1,0 +1,197 @@
+
+
+
+
+
+[2025.10.01 17:15:56][ERROR] Fatal error encountered during background task 'File_Open':
+System.Threading.ThreadInterruptedException: Thread was interrupted from a waiting state.
+   at System.Threading.WaitHandle.WaitOneCore(IntPtr waitHandle, Int32 millisecondsTimeout)
+   at System.Threading.WaitHandle.WaitOneNoCheck(Int32 millisecondsTimeout)
+   at System.Windows.Forms.Control.WaitForWaitHandle(WaitHandle waitHandle)
+   at System.Windows.Forms.Control.MarshaledInvoke(Control caller, Delegate method, Object[] args, Boolean synchronous)
+   at System.Windows.Forms.Control.Invoke(Delegate method, Object[] args)
+   at System.Windows.Forms.Control.Invoke(Action method)
+   at DSAnimStudio.FmodManager.Purge() in C:\Users\Green\GitHub\DSAnimStudio\DSAnimStudioNETCore\FmodManager.cs:line 796
+   at DSAnimStudio.GameRoot.Init(String assetPath, SoulsGames gameType, String scratchFolder, Boolean forceReload, Boolean overrideInterrootPicker) in C:\Users\Green\GitHub\DSAnimStudio\DSAnimStudioNETCore\GameRoot.cs:line 452
+   at DSAnimStudio.TaeEditor.TaeFileContainer.CheckGameVersionForTaeInterop(String filePath, String internalFilePath, Boolean isRemo) in C:\Users\Green\GitHub\DSAnimStudio\DSAnimStudioNETCore\TaeEditor\TaeFileContainer.cs:line 404
+   at DSAnimStudio.TaeEditor.TaeFileContainer.LoadFromPath(String file, String possibleFallbackPath) in C:\Users\Green\GitHub\DSAnimStudio\DSAnimStudioNETCore\TaeEditor\TaeFileContainer.cs:line 610
+   at DSAnimStudio.TaeEditor.TaeEditorScreen.LoadCurrentFile() in C:\Users\Green\GitHub\DSAnimStudio\DSAnimStudioNETCore\TaeEditor\TaeEditorScreen.cs:line 836
+   at DSAnimStudio.TaeEditor.TaeEditorScreen.<File_Open>b__210_2(IProgress`1 progress) in C:\Users\Green\GitHub\DSAnimStudio\DSAnimStudioNETCore\TaeEditor\TaeEditorScreen.cs:line 1892
+   at DSAnimStudio.LoadingTaskMan.<>c__DisplayClass5_0.<DoLoadingTask>b__0(IProgress`1 progress) in C:\Users\Green\GitHub\DSAnimStudio\DSAnimStudioNETCore\LoadingTaskMan.cs:line 185
+   at DSAnimStudio.LoadingTaskMan.LoadingTask.<>c__DisplayClass13_1.<.ctor>b__1() in C:\Users\Green\GitHub\DSAnimStudio\DSAnimStudioNETCore\LoadingTaskMan.cs:line 62
+
+
+
+
+
+
+
+[2025.10.01 18:03:53][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/other/default.rumblebnd.dcx'
+
+
+
+
+
+[2025.10.02 21:28:22][GAME DATA IO] (INFO) Asset '/chr/c2120.anibnd.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt`, checking it first...
+[2025.10.02 21:28:22][GAME DATA IO] (SUCCESS) Loaded asset '/chr/c2120.anibnd.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt'.
+[2025.10.02 21:28:22][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/chr/c2120.anibnd.dcx'
+[2025.10.02 21:28:22][GAME DATA IO] (INFO) Asset '/chr/c2120.chrbnd.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt`, checking it first...
+[2025.10.02 21:28:22][GAME DATA IO] (SUCCESS) Loaded asset '/chr/c2120.chrbnd.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt'.
+[2025.10.02 21:28:22][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/chr/c2120.chrbnd.dcx'
+[2025.10.02 21:28:23][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/chr/c2120.anibnd.dcx'
+[2025.10.02 21:28:23][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/chr/c2120.chrbnd.dcx'
+[2025.10.02 21:28:23][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/chr/c2120.anibnd.dcx'
+[2025.10.02 21:28:23][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/chr/c2120.chrbnd.dcx'
+[2025.10.02 21:28:23][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/chr/c2120.anibnd.dcx'
+[2025.10.02 21:28:23][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/chr/c2120.chrbnd.dcx'
+[2025.10.02 21:28:23][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/chr/c2120.anibnd.dcx'
+[2025.10.02 21:28:23][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/chr/c2120.chrbnd.dcx'
+[2025.10.02 21:28:23][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/chr/c2120.anibnd.dcx'
+[2025.10.02 21:28:23][GAME DATA IO] (SUCCESS) Tried to read asset '/regulation.bin' from Game Data Directory: 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\regulation.bin'.
+[2025.10.02 21:28:23][GAME DATA IO] (SUCCESS) Tried to read asset '/regulation.bin' from Game Data Directory: 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\regulation.bin'.
+[2025.10.02 21:28:24][GAME DATA IO] (INFO) Asset '/msg/engus/item.msgbnd.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt`, checking it first...
+[2025.10.02 21:28:24][GAME DATA IO] (SUCCESS) Loaded asset '/msg/engus/item.msgbnd.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt'.
+[2025.10.02 21:28:24][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/msg/engus/item.msgbnd.dcx'
+[2025.10.02 21:28:24][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/msg/engus/item.msgbnd.dcx'
+[2025.10.02 21:28:24][GAME DATA IO] (INFO) Asset '/other/systex.tpf.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt`, checking it first...
+[2025.10.02 21:28:24][GAME DATA IO] (SUCCESS) Loaded asset '/other/systex.tpf.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt'.
+[2025.10.02 21:28:24][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/other/systex.tpf.dcx'
+[2025.10.02 21:28:24][GAME DATA IO] (INFO) Asset '/other/sysenvtex.tpf.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt`, checking it first...
+[2025.10.02 21:28:24][GAME DATA IO] (SUCCESS) Loaded asset '/other/sysenvtex.tpf.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt'.
+[2025.10.02 21:28:24][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/other/sysenvtex.tpf.dcx'
+[2025.10.02 21:28:24][GAME DATA IO] (INFO) Asset '/other/decaltex.tpf.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt`, checking it first...
+[2025.10.02 21:28:24][GAME DATA IO] (SUCCESS) Loaded asset '/other/decaltex.tpf.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt'.
+[2025.10.02 21:28:24][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/other/decaltex.tpf.dcx'
+[2025.10.02 21:28:24][GAME DATA IO] (INFO) Asset '/parts/common_body.tpf.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt`, checking it first...
+[2025.10.02 21:28:24][GAME DATA IO] (SUCCESS) Loaded asset '/parts/common_body.tpf.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt'.
+[2025.10.02 21:28:24][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/parts/common_body.tpf.dcx'
+[2025.10.02 21:28:24][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/other/systex.tpf.dcx'
+[2025.10.02 21:28:24][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/other/sysenvtex.tpf.dcx'
+[2025.10.02 21:28:24][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/other/decaltex.tpf.dcx'
+[2025.10.02 21:28:24][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/parts/common_body.tpf.dcx'
+[2025.10.02 21:28:24][GAME DATA IO] (INFO) Asset '/chr/c2120.chrbnd.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt`, checking it first...
+[2025.10.02 21:28:24][GAME DATA IO] (SUCCESS) Loaded asset '/chr/c2120.chrbnd.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt'.
+[2025.10.02 21:28:24][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/chr/c2120.chrbnd.dcx'
+[2025.10.02 21:28:24][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/chr/c2120.chrbnd.dcx'
+[2025.10.02 21:28:24][GAME DATA IO] (INFO) Asset '/chr/c2120.texbnd.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt`, checking it first...
+[2025.10.02 21:28:24][GAME DATA IO] (FILE NOT FOUND IN EBL) Did not find asset '/chr/c2120.texbnd.dcx' inside EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt'.
+[2025.10.02 21:28:24][GAME DATA IO] (FILE NOT FOUND IN EBL) Did not find asset '/chr/c2120.texbnd.dcx' inside EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt'.
+[2025.10.02 21:28:24][GAME DATA IO] (FILE NOT FOUND IN EBL) Did not find asset '/chr/c2120.texbnd.dcx' inside EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data1.bdt'.
+[2025.10.02 21:28:24][GAME DATA IO] (FILE NOT FOUND IN EBL) Did not find asset '/chr/c2120.texbnd.dcx' inside EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data2.bdt'.
+[2025.10.02 21:28:24][GAME DATA IO] (INFO) Asset '/chr/c2120_h.texbnd.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt`, checking it first...
+[2025.10.02 21:28:24][GAME DATA IO] (SUCCESS) Loaded asset '/chr/c2120_h.texbnd.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt'.
+[2025.10.02 21:28:24][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/chr/c2120_h.texbnd.dcx'
+[2025.10.02 21:28:24][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/chr/c2120_h.texbnd.dcx'
+[2025.10.02 21:28:24][GAME DATA IO] (INFO) Asset '/chr/c2129.texbnd.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt`, checking it first...
+[2025.10.02 21:28:24][GAME DATA IO] (FILE NOT FOUND IN EBL) Did not find asset '/chr/c2129.texbnd.dcx' inside EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt'.
+[2025.10.02 21:28:24][GAME DATA IO] (FILE NOT FOUND IN EBL) Did not find asset '/chr/c2129.texbnd.dcx' inside EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt'.
+[2025.10.02 21:28:24][GAME DATA IO] (FILE NOT FOUND IN EBL) Did not find asset '/chr/c2129.texbnd.dcx' inside EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data1.bdt'.
+[2025.10.02 21:28:24][GAME DATA IO] (FILE NOT FOUND IN EBL) Did not find asset '/chr/c2129.texbnd.dcx' inside EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data2.bdt'.
+[2025.10.02 21:28:24][GAME DATA IO] (INFO) Asset '/chr/c2120.anibnd.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt`, checking it first...
+[2025.10.02 21:28:24][GAME DATA IO] (SUCCESS) Loaded asset '/chr/c2120.anibnd.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt'.
+[2025.10.02 21:28:24][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/chr/c2120.anibnd.dcx'
+[2025.10.02 21:28:24][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/chr/c2120.anibnd.dcx'
+[2025.10.02 21:28:24][GAME DATA IO] (INFO) Asset '/material/allmaterial.matbinbnd.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt`, checking it first...
+[2025.10.02 21:28:24][GAME DATA IO] (SUCCESS) Loaded asset '/material/allmaterial.matbinbnd.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt'.
+[2025.10.02 21:28:24][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/material/allmaterial.matbinbnd.dcx'
+[2025.10.02 21:28:24][GAME DATA IO] (INFO) Asset '/shader/shaderbdle.shaderbdlebnd.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt`, checking it first...
+[2025.10.02 21:28:25][GAME DATA IO] (SUCCESS) Loaded asset '/shader/shaderbdle.shaderbdlebnd.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt'.
+[2025.10.02 21:28:25][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/shader/shaderbdle.shaderbdlebnd.dcx'
+[2025.10.02 21:28:27][GAME DATA IO] (INFO) Asset '/chr/c2120_div00.anibnd.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt`, checking it first...
+[2025.10.02 21:28:27][GAME DATA IO] (SUCCESS) Loaded asset '/chr/c2120_div00.anibnd.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt'.
+[2025.10.02 21:28:27][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/chr/c2120_div00.anibnd.dcx'
+[2025.10.02 21:28:29][GAME DATA IO] (INFO) Asset '/chr/c2120_div01.anibnd.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt`, checking it first...
+[2025.10.02 21:28:29][GAME DATA IO] (SUCCESS) Loaded asset '/chr/c2120_div01.anibnd.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt'.
+[2025.10.02 21:28:29][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/chr/c2120_div01.anibnd.dcx'
+
+
+
+
+
+[2025.10.02 21:37:59][GAME DATA IO] (INFO) Asset '/other/default.rumblebnd.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt`, checking it first...
+[2025.10.02 21:37:59][GAME DATA IO] (SUCCESS) Loaded asset '/other/default.rumblebnd.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt'.
+[2025.10.02 21:37:59][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/other/default.rumblebnd.dcx'
+
+
+
+
+
+[2025.10.04 22:35:56][GAME DATA IO] (INFO) Asset '/chr/c2120.anibnd.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt`, checking it first...
+[2025.10.04 22:35:56][GAME DATA IO] (SUCCESS) Loaded asset '/chr/c2120.anibnd.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt'.
+[2025.10.04 22:35:56][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/chr/c2120.anibnd.dcx'
+[2025.10.04 22:35:56][GAME DATA IO] (INFO) Asset '/chr/c2120.chrbnd.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt`, checking it first...
+[2025.10.04 22:35:56][GAME DATA IO] (SUCCESS) Loaded asset '/chr/c2120.chrbnd.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt'.
+[2025.10.04 22:35:56][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/chr/c2120.chrbnd.dcx'
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/chr/c2120.anibnd.dcx'
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/chr/c2120.chrbnd.dcx'
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/chr/c2120.anibnd.dcx'
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/chr/c2120.chrbnd.dcx'
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/chr/c2120.anibnd.dcx'
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/chr/c2120.chrbnd.dcx'
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/chr/c2120.anibnd.dcx'
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/chr/c2120.chrbnd.dcx'
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/chr/c2120.anibnd.dcx'
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Tried to read asset '/regulation.bin' from Game Data Directory: 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\regulation.bin'.
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Tried to read asset '/regulation.bin' from Game Data Directory: 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\regulation.bin'.
+[2025.10.04 22:35:57][GAME DATA IO] (INFO) Asset '/msg/engus/item.msgbnd.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt`, checking it first...
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Loaded asset '/msg/engus/item.msgbnd.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt'.
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/msg/engus/item.msgbnd.dcx'
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/msg/engus/item.msgbnd.dcx'
+[2025.10.04 22:35:57][GAME DATA IO] (INFO) Asset '/other/systex.tpf.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt`, checking it first...
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Loaded asset '/other/systex.tpf.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt'.
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/other/systex.tpf.dcx'
+[2025.10.04 22:35:57][GAME DATA IO] (INFO) Asset '/other/sysenvtex.tpf.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt`, checking it first...
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Loaded asset '/other/sysenvtex.tpf.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt'.
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/other/sysenvtex.tpf.dcx'
+[2025.10.04 22:35:57][GAME DATA IO] (INFO) Asset '/other/decaltex.tpf.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt`, checking it first...
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Loaded asset '/other/decaltex.tpf.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt'.
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/other/decaltex.tpf.dcx'
+[2025.10.04 22:35:57][GAME DATA IO] (INFO) Asset '/parts/common_body.tpf.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt`, checking it first...
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Loaded asset '/parts/common_body.tpf.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt'.
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/parts/common_body.tpf.dcx'
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/other/systex.tpf.dcx'
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/other/sysenvtex.tpf.dcx'
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/other/decaltex.tpf.dcx'
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/parts/common_body.tpf.dcx'
+[2025.10.04 22:35:57][GAME DATA IO] (INFO) Asset '/chr/c2120.chrbnd.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt`, checking it first...
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Loaded asset '/chr/c2120.chrbnd.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt'.
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/chr/c2120.chrbnd.dcx'
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/chr/c2120.chrbnd.dcx'
+[2025.10.04 22:35:57][GAME DATA IO] (INFO) Asset '/chr/c2120.texbnd.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt`, checking it first...
+[2025.10.04 22:35:57][GAME DATA IO] (FILE NOT FOUND IN EBL) Did not find asset '/chr/c2120.texbnd.dcx' inside EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt'.
+[2025.10.04 22:35:57][GAME DATA IO] (FILE NOT FOUND IN EBL) Did not find asset '/chr/c2120.texbnd.dcx' inside EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt'.
+[2025.10.04 22:35:57][GAME DATA IO] (FILE NOT FOUND IN EBL) Did not find asset '/chr/c2120.texbnd.dcx' inside EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data1.bdt'.
+[2025.10.04 22:35:57][GAME DATA IO] (FILE NOT FOUND IN EBL) Did not find asset '/chr/c2120.texbnd.dcx' inside EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data2.bdt'.
+[2025.10.04 22:35:57][GAME DATA IO] (INFO) Asset '/chr/c2120_h.texbnd.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt`, checking it first...
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Loaded asset '/chr/c2120_h.texbnd.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt'.
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/chr/c2120_h.texbnd.dcx'
+[2025.10.04 22:35:57][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/chr/c2120_h.texbnd.dcx'
+[2025.10.04 22:35:58][GAME DATA IO] (INFO) Asset '/chr/c2129.texbnd.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt`, checking it first...
+[2025.10.04 22:35:58][GAME DATA IO] (FILE NOT FOUND IN EBL) Did not find asset '/chr/c2129.texbnd.dcx' inside EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt'.
+[2025.10.04 22:35:58][GAME DATA IO] (FILE NOT FOUND IN EBL) Did not find asset '/chr/c2129.texbnd.dcx' inside EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt'.
+[2025.10.04 22:35:58][GAME DATA IO] (FILE NOT FOUND IN EBL) Did not find asset '/chr/c2129.texbnd.dcx' inside EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data1.bdt'.
+[2025.10.04 22:35:58][GAME DATA IO] (FILE NOT FOUND IN EBL) Did not find asset '/chr/c2129.texbnd.dcx' inside EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data2.bdt'.
+[2025.10.04 22:35:58][GAME DATA IO] (INFO) Asset '/chr/c2120.anibnd.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt`, checking it first...
+[2025.10.04 22:35:58][GAME DATA IO] (SUCCESS) Loaded asset '/chr/c2120.anibnd.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt'.
+[2025.10.04 22:35:58][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/chr/c2120.anibnd.dcx'
+[2025.10.04 22:35:58][GAME DATA IO] (SUCCESS) Loaded asset from EBL cache - '/chr/c2120.anibnd.dcx'
+[2025.10.04 22:35:58][GAME DATA IO] (INFO) Asset '/material/allmaterial.matbinbnd.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt`, checking it first...
+[2025.10.04 22:35:58][GAME DATA IO] (SUCCESS) Loaded asset '/material/allmaterial.matbinbnd.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt'.
+[2025.10.04 22:35:58][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/material/allmaterial.matbinbnd.dcx'
+[2025.10.04 22:35:58][GAME DATA IO] (INFO) Asset '/shader/shaderbdle.shaderbdlebnd.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt`, checking it first...
+[2025.10.04 22:35:59][GAME DATA IO] (SUCCESS) Loaded asset '/shader/shaderbdle.shaderbdlebnd.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt'.
+[2025.10.04 22:35:59][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/shader/shaderbdle.shaderbdlebnd.dcx'
+[2025.10.04 22:36:01][GAME DATA IO] (INFO) Asset '/chr/c2120_div00.anibnd.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt`, checking it first...
+[2025.10.04 22:36:01][GAME DATA IO] (SUCCESS) Loaded asset '/chr/c2120_div00.anibnd.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt'.
+[2025.10.04 22:36:01][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/chr/c2120_div00.anibnd.dcx'
+[2025.10.04 22:36:02][GAME DATA IO] (INFO) Asset '/chr/c2120_div01.anibnd.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt`, checking it first...
+[2025.10.04 22:36:02][GAME DATA IO] (SUCCESS) Loaded asset '/chr/c2120_div01.anibnd.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data3.bdt'.
+[2025.10.04 22:36:02][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/chr/c2120_div01.anibnd.dcx'
+
+
+
+
+
+[2025.10.04 22:44:29][GAME DATA IO] (INFO) Asset '/other/default.rumblebnd.dcx' is most likely in EBL `D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt`, checking it first...
+[2025.10.04 22:44:29][GAME DATA IO] (SUCCESS) Loaded asset '/other/default.rumblebnd.dcx' from EBL 'D:\Program Files (x86)\Steam\steamapps\common\ELDEN RING\Game\data0.bdt'.
+[2025.10.04 22:44:29][GAME DATA IO] (SUCCESS) Added asset to EBL cache - '/other/default.rumblebnd.dcx'

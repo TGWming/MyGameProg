@@ -1,0 +1,360 @@
+在我的UE4.27工程中创建相机模块参数数据表的C++结构体代码。
+
+## 任务要求
+
+### 任务1：创建 CameraModuleParameterEnums. h
+路径：Source/[YourProject]/Public/Camera/Data/CameraModuleParameterEnums.h
+
+创建必要的枚举类型：
+- ECameraParamCategory - 参数分类枚举（Position, Rotation, Distance, FOV, Offset, Constraint）
+- ECameraParamDataType - 数据类型枚举（Float, Vector, Name）
+
+### 任务2：创建 CameraModuleParameterData.h
+路径：Source/[YourProject]/Public/Camera/Data/CameraModuleParameterData.h
+
+创建一个继承自 FTableRowBase 的 USTRUCT，用于从CSV导入相机模块参数配置数据
+
+CSV文件结构如下（共56行数据）：
+- ParamID:  FString - 参数唯一标识符，格式如 "ModuleParameterDesigner_MP01"（注意：此字段会自动成为RowName，结构体中可保留但导入后为空）
+- ParamName: FName - 参数名称，作为程序引用标识符（如 PositionLagSpeed, FocusOffset）
+- ChineseName: FString - 中文显示名称
+- Category: FString - 参数分类（Position, Rotation, Distance, FOV, Offset, Constraint）
+- DataType: FString - 数据类型（float, FVector, FName）
+- DefaultValue:  FString - 默认值（数值如"8"，或向量格式如"(0,0,80)"，或名称如"spine_02"）
+- MinValue:  FString - 最小值（"-"表示无限制）
+- MaxValue: FString - 最大值（"-"表示无限制）
+- Unit: FString - 单位（如 "1/s", "cm", "degree", "s", "cm/s", "cm/(cm/s)", "degree/(cm/s)", "-"）
+- Description: FString - 参数描述
+- RelatedModules: FString - 关联模块ID列表，用斜杠分隔（如 "P01/P02" 或 "R04/R05"）
+
+结构体命名为 `FCameraModuleParameterRow`
+
+添加必要的UPROPERTY宏，确保：
+- 所有属性可在编辑器中编辑（EditAnywhere）
+- 所有属性可在蓝图中读取（BlueprintReadWrite）
+- 添加Category分组便于编辑器查看
+
+**重要：结构体中不要包含任何UFUNCTION函数，只保留UPROPERTY属性和构造函数**
+
+### 任务3：创建 CameraModuleParameterHelpers.h
+路径：Source/[YourProject]/Public/Camera/Data/CameraModuleParameterHelpers.h
+
+创建 UCameraModuleParameterHelpers 类，继承自 UBlueprintFunctionLibrary
+
+所有函数标记为 UFUNCTION(BlueprintPure, Category = "Camera|ModuleParameter")
+所有函数为静态函数
+
+需要实现的函数：
+```cpp
+// 类型检查函数
+static bool IsFloatType(const FCameraModuleParameterRow& Row);
+static bool IsVectorType(const FCameraModuleParameterRow& Row);
+static bool IsNameType(const FCameraModuleParameterRow& Row);
+
+// 值解析函数
+static float GetDefaultValueAsFloat(const FCameraModuleParameterRow& Row);
+static FVector GetDefaultValueAsVector(const FCameraModuleParameterRow& Row);
+static FName GetDefaultValueAsName(const FCameraModuleParameterRow& Row);
+
+// 限制检查函数
+static bool HasMinLimit(const FCameraModuleParameterRow& Row);
+static bool HasMaxLimit(const FCameraModuleParameterRow& Row);
+static float GetMinValueAsFloat(const FCameraModuleParameterRow& Row);
+static float GetMaxValueAsFloat(const FCameraModuleParameterRow& Row);
+
+// 数组解析函数
+static TArray<FString> GetRelatedModulesArray(const FCameraModuleParameterRow& Row);
+
+// 分类检查函数
+static bool IsPositionParam(const FCameraModuleParameterRow& Row);
+static bool IsRotationParam(const FCameraModuleParameterRow& Row);
+static bool IsDistanceParam(const FCameraModuleParameterRow& Row);
+static bool IsFOVParam(const FCameraModuleParameterRow& Row);
+static bool IsOffsetParam(const FCameraModuleParameterRow& Row);
+static bool IsConstraintParam(const FCameraModuleParameterRow& Row);
+
+// 枚举转换函数
+static ECameraParamCategory StringToCategory(const FString& CategoryString);
+static FString CategoryToString(ECameraParamCategory Category);
+static ECameraParamDataType StringToDataType(const FString& DataTypeString);
+static FString DataTypeToString(ECameraParamDataType DataType);
+
+// 中文显示名称
+static FString GetCategoryDisplayName(ECameraParamCategory Category);
+static FString GetDataTypeDisplayName(ECameraParamDataType DataType);
+```
+
+### 任务4：创建 CameraModuleParameterHelpers.cpp
+路径：Source/[YourProject]/Private/Camera/Data/CameraModuleParameterHelpers.cpp
+
+实现头文件中声明的所有静态函数
+
+## 函数实现逻辑参考
+
+### IsFloatType
+```cpp
+return Row.DataType. Equals(TEXT("float"), ESearchCase::IgnoreCase);
+```
+
+### IsVectorType
+```cpp
+return Row.DataType. Equals(TEXT("FVector"), ESearchCase::IgnoreCase) ||
+       Row. DataType.Contains(TEXT("Vector"), ESearchCase:: IgnoreCase);
+```
+
+### IsNameType
+```cpp
+return Row.DataType.Equals(TEXT("FName"), ESearchCase::IgnoreCase) ||
+       Row. DataType.Contains(TEXT("Name"), ESearchCase::IgnoreCase);
+```
+
+### GetDefaultValueAsFloat
+```cpp
+if (Row.DefaultValue.IsEmpty() || Row.DefaultValue == TEXT("-"))
+{
+    return 0.0f;
+}
+return FCString::Atof(*Row.DefaultValue);
+```
+
+### GetDefaultValueAsVector
+```cpp
+FVector Result = FVector::ZeroVector;
+
+if (Row.DefaultValue. IsEmpty() || Row.DefaultValue == TEXT("-"))
+{
+    return Result;
+}
+
+// 移除括号和引号
+FString CleanedValue = Row.DefaultValue;
+CleanedValue.RemoveFromStart(TEXT("\""));
+CleanedValue.RemoveFromEnd(TEXT("\""));
+CleanedValue.RemoveFromStart(TEXT("("));
+CleanedValue.RemoveFromEnd(TEXT(")"));
+
+// 按逗号分割
+TArray<FString> Components;
+CleanedValue.ParseIntoArray(Components, TEXT(","), true);
+
+if (Components.Num() >= 3)
+{
+    Result. X = FCString:: Atof(*Components[0]. TrimStartAndEnd());
+    Result.Y = FCString:: Atof(*Components[1].TrimStartAndEnd());
+    Result.Z = FCString::Atof(*Components[2].TrimStartAndEnd());
+}
+
+return Result;
+```
+
+### GetDefaultValueAsName
+```cpp
+if (Row.DefaultValue.IsEmpty() || Row.DefaultValue == TEXT("-"))
+{
+    return NAME_None;
+}
+return FName(*Row.DefaultValue);
+```
+
+### HasMinLimit
+```cpp
+return ! Row.MinValue. IsEmpty() && Row.MinValue != TEXT("-");
+```
+
+### HasMaxLimit
+```cpp
+return !Row.MaxValue. IsEmpty() && Row.MaxValue != TEXT("-");
+```
+
+### GetMinValueAsFloat
+```cpp
+if (! HasMinLimit(Row))
+{
+    return TNumericLimits<float>::Lowest();
+}
+return FCString::Atof(*Row.MinValue);
+```
+
+### GetMaxValueAsFloat
+```cpp
+if (!HasMaxLimit(Row))
+{
+    return TNumericLimits<float>::Max();
+}
+return FCString::Atof(*Row.MaxValue);
+```
+
+### GetRelatedModulesArray
+```cpp
+TArray<FString> Result;
+
+if (Row.RelatedModules.IsEmpty() || Row.RelatedModules == TEXT("-"))
+{
+    return Result;
+}
+
+Row.RelatedModules.ParseIntoArray(Result, TEXT("/"), true);
+
+for (FString& Str : Result)
+{
+    Str = Str.TrimStartAndEnd();
+}
+
+return Result;
+```
+
+### IsPositionParam
+```cpp
+return Row. Category.Equals(TEXT("Position"), ESearchCase::IgnoreCase);
+```
+
+### IsRotationParam
+```cpp
+return Row.Category. Equals(TEXT("Rotation"), ESearchCase::IgnoreCase);
+```
+
+### IsDistanceParam
+```cpp
+return Row.Category. Equals(TEXT("Distance"), ESearchCase::IgnoreCase);
+```
+
+### IsFOVParam
+```cpp
+return Row.Category.Equals(TEXT("FOV"), ESearchCase::IgnoreCase);
+```
+
+### IsOffsetParam
+```cpp
+return Row. Category.Equals(TEXT("Offset"), ESearchCase:: IgnoreCase);
+```
+
+### IsConstraintParam
+```cpp
+return Row.Category.Equals(TEXT("Constraint"), ESearchCase::IgnoreCase);
+```
+
+### StringToCategory
+```cpp
+FString TrimmedString = CategoryString.TrimStartAndEnd();
+if (TrimmedString. Equals(TEXT("Position"), ESearchCase::IgnoreCase))
+    return ECameraParamCategory::Position;
+else if (TrimmedString.Equals(TEXT("Rotation"), ESearchCase:: IgnoreCase))
+    return ECameraParamCategory::Rotation;
+else if (TrimmedString. Equals(TEXT("Distance"), ESearchCase::IgnoreCase))
+    return ECameraParamCategory:: Distance;
+else if (TrimmedString.Equals(TEXT("FOV"), ESearchCase::IgnoreCase))
+    return ECameraParamCategory::FOV;
+else if (TrimmedString. Equals(TEXT("Offset"), ESearchCase::IgnoreCase))
+    return ECameraParamCategory:: Offset;
+else if (TrimmedString.Equals(TEXT("Constraint"), ESearchCase:: IgnoreCase))
+    return ECameraParamCategory::Constraint;
+return ECameraParamCategory::Position;
+```
+
+### CategoryToString
+```cpp
+switch (Category)
+{
+case ECameraParamCategory::Position:   return TEXT("Position");
+case ECameraParamCategory::Rotation:   return TEXT("Rotation");
+case ECameraParamCategory::Distance:   return TEXT("Distance");
+case ECameraParamCategory::FOV:         return TEXT("FOV");
+case ECameraParamCategory:: Offset:     return TEXT("Offset");
+case ECameraParamCategory::Constraint:  return TEXT("Constraint");
+default: return TEXT("Position");
+}
+```
+
+### StringToDataType
+```cpp
+FString TrimmedString = DataTypeString.TrimStartAndEnd();
+if (TrimmedString. Equals(TEXT("float"), ESearchCase::IgnoreCase))
+    return ECameraParamDataType::Float;
+else if (TrimmedString.Equals(TEXT("FVector"), ESearchCase:: IgnoreCase) ||
+         TrimmedString.Contains(TEXT("Vector"), ESearchCase:: IgnoreCase))
+    return ECameraParamDataType::Vector;
+else if (TrimmedString. Equals(TEXT("FName"), ESearchCase::IgnoreCase) ||
+         TrimmedString. Contains(TEXT("Name"), ESearchCase::IgnoreCase))
+    return ECameraParamDataType:: Name;
+return ECameraParamDataType::Float;
+```
+
+### DataTypeToString
+```cpp
+switch (DataType)
+{
+case ECameraParamDataType:: Float:  return TEXT("float");
+case ECameraParamDataType::Vector: return TEXT("FVector");
+case ECameraParamDataType::Name:   return TEXT("FName");
+default: return TEXT("float");
+}
+```
+
+### GetCategoryDisplayName
+```cpp
+switch (Category)
+{
+case ECameraParamCategory::Position:    return TEXT("位置");
+case ECameraParamCategory:: Rotation:   return TEXT("旋转");
+case ECameraParamCategory::Distance:   return TEXT("距离");
+case ECameraParamCategory::FOV:        return TEXT("视野");
+case ECameraParamCategory:: Offset:     return TEXT("偏移");
+case ECameraParamCategory::Constraint: return TEXT("约束");
+default: return TEXT("未知");
+}
+```
+
+### GetDataTypeDisplayName
+```cpp
+switch (DataType)
+{
+case ECameraParamDataType::Float:   return TEXT("浮点数");
+case ECameraParamDataType:: Vector: return TEXT("向量");
+case ECameraParamDataType::Name:   return TEXT("名称");
+default: return TEXT("未知");
+}
+```
+
+## 特殊处理说明
+- FVector类型的DefaultValue格式为 "(x,y,z)"，需要移除引号和括号后解析
+- MinValue/MaxValue为"-"时表示无限制
+- Unit字段仅供显示参考，不影响数值计算
+- RelatedModules使用斜杠"/"分隔多个模块ID
+
+## 示例数据参考
+```csv
+ModuleParameterDesigner_MP01,PositionLagSpeed,位置惯性速度,Position,float,8,1,20,1/s,位置跟随的惯性系数越大跟随越快,P02
+ModuleParameterDesigner_MP04,FocusOffset,焦点偏移,Position,FVector,"(0,0,80)",-,-,cm,相对角色的焦点偏移默认看向胸口,P01/P02
+ModuleParameterDesigner_MP05,FocusSocketName,焦点骨骼名,Position,FName,spine_02,-,-,-,使用骨骼Socket时的名称,P01
+ModuleParameterDesigner_MR04,SoftLockStrength,软锁定强度,Rotation,float,0.3,0,1,-,锁定时玩家输入的响应比例,R04
+ModuleParameterDesigner_MO01,BaseSocketOffset,基础Socket偏移,Offset,FVector,"(0,40,0)",-,-,cm,默认的屏幕空间偏移,O01
+ModuleParameterDesigner_MC01,ExploreMinPitch,探索最小俯仰,Constraint,float,-60,-90,0,degree,探索状态的最小俯仰角,C01
+```
+
+## 文件结构
+```
+Source/[YourProject]/
+├── Public/
+│   └── Camera/
+│       └── Data/
+│           ├── CameraModuleParameterData.h         (新建-结构体)
+│           ├── CameraModuleParameterEnums.h        (新建-枚举)
+│           └── CameraModuleParameterHelpers.h      (新建-辅助类)
+└── Private/
+    └── Camera/
+        └── Data/
+            └── CameraModuleParameterHelpers.cpp    (新建-辅助类实现)
+```
+
+## UE4.27 兼容性要求
+1. 使用 GENERATED_BODY() 宏
+2. #include "XXX.generated.h" 必须是最后一个include
+3. 辅助类继承 UBlueprintFunctionLibrary
+4. 所有蓝图可调用函数使用 UFUNCTION(BlueprintPure, Category = "...")
+5. **USTRUCT结构体中不能包含UFUNCTION，只能有UPROPERTY和普通构造函数**
+
+## 完成后验证
+1. 编译项目确认无错误
+2. 确认FCameraModuleParameterRow结构体中不包含任何UFUNCTION（只有UPROPERTY属性和构造函数）
+3. 确认UCameraModuleParameterHelpers类包含所有22个静态辅助函数
+4. 确认枚举类型正确定义并可在蓝图中使用

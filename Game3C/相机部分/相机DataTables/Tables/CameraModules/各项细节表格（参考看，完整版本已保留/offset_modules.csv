@@ -1,0 +1,6 @@
+ModuleID,ModuleName,ChineseName,Category,Description,BlendPolicy,Priority,ActiveStates,InputParams,OutputParams
+O01,SocketOffset_Base,基础Socket偏移,Offset,屏幕空间偏移让焦点稳定在屏幕固定位置,Override,100,All,CurrentState/StateSocketOffset,SocketOffsetOverride
+O02,SocketOffset_Shoulder,过肩偏移,Offset,过肩视角的左右偏移,Override,110,Aim/Combat,ShoulderSide/ShoulderOffset,SocketOffsetOverride
+O03,SocketOffset_Switch,肩膀切换,Offset,左右肩过肩视角的切换过渡,Blend,110,Aim,CurrentShoulder/TargetShoulder/SwitchProgress,SocketOffsetOverride
+O04,TargetOffset_Crouch,蹲伏偏移,Offset,蹲伏时的三维空间焦点下移,Additive,100,Explore_Crouch/Stealth,CrouchOffset,TargetOffsetOffset
+O05,TargetOffset_Mount,骑乘偏移,Offset,骑乘时的三维空间焦点调整,Override,100,Mount,MountFocusOffset,TargetOffsetOverride

@@ -1,0 +1,648 @@
+Sub-Step 3.2.8 Prompt
+
+================================================================================
+任务：在CameraModule_Position. cpp中添加P07 Spline_Follow实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+P07让相机焦点沿样条曲线移动，用于过场动画和脚本化相机路径。
+
+【当前进度】
+Phase 3 Step 3.2 Sub-Step 3.2.8 (共190个Sub-Step中的第67个)
+前置完成：3.2.7 P06实现 ✅
+
+【任务目标】
+在CameraModule_Position.cpp中完整实现P07模块，替换现有的stub占位符。
+
+【⚠️ 重要说明】
+
+**P07的特殊性：**
+P07依赖外部的SplineComponent引用，这需要额外的系统支持（样条管理系统）。
+由于完整的样条系统尚未实现（属于后续阶段），本Sub-Step将实现：
+
+1. ✅ **完整的激活逻辑**（检查样条引用）
+2. ✅ **占位符计算逻辑**（模拟样条行为）
+3. ✅ **预留扩展接口**（为未来真实样条集成做准备）
+
+这种方法符合Phase 3的占位符智慧使用原则。
+
+【⚠️ 编译前必做步骤】
+
+1. **编译前必做：**
+   本Sub-Step只修改现有. cpp文件，不添加新文件。
+   因此**不需要Regenerate**，可以直接编译。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   确认StateConfig的字段路径与项目实际结构一致。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_Position. cpp
+
+2. **定位修改位置：**
+
+在文件中找到P07的stub实现部分：
+
+```cpp
+//========================================
+// P07: Spline Follow - Follow predefined spline path
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.2.8
+// ...   stub代码
+```
+
+**将上述stub代码完整替换为下方的完整实现。**
+
+---
+
+3. **P07完整实现代码：**
+
+**A. ShouldActivate()方法（需要完整实现）：**
+
+**当前stub代码：**
+```cpp
+bool UCameraModule_P07_Spline_Follow::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Stub - activates when a valid spline reference exists
+	return false;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * ShouldActivate - Determine if spline follow should be active
+ * 
+ * P07 activates when:
+ * - Module is enabled
+ * - Current state is cinematic (splines are typically for cutscenes)
+ * - (Future) A valid spline component reference exists
+ * 
+ * Current Implementation:
+ * Since the full spline management system is not yet implemented,
+ * we use bIsCinematic as the activation condition.  When spline system
+ * is added, this will also check for a valid SplineComponent reference.
+ * 
+ * Use Cases:
+ * - Cinematic camera paths along predefined routes
+ * - Scripted camera movements in cutscenes
+ * - Rail-based camera transitions
+ * - Showcase sequences following specific paths
+ */
+bool UCameraModule_P07_Spline_Follow::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if current state is cinematic
+	// Spline follow is typically used for cutscenes and scripted sequences
+	if (! StateConfig.StateBase. Flags.  bIsCinematic)
+	{
+		return false;
+	}
+	
+	// TODO: When spline system is implemented, add check: 
+	// if (! StateConfig.Module.Position.  SplineComponent. IsValid())
+	// {
+	//     return false;
+	// }
+	
+	// For now, activate for all cinematic states
+	// This allows testing the module even without a spline system
+	return true;
+}
+```
+
+**说明：**
+- 当前仅检查Cinematic标志
+- 包含TODO注释，说明未来需要检查SplineComponent引用
+- 注释清楚说明这是占位符实现
+
+---
+
+**B. Compute()方法（需要完整占位符实现）：**
+
+**当前stub代码：**
+```cpp
+bool UCameraModule_P07_Spline_Follow:: Compute(...)
+{
+	OutOutput = CreateBaseOutput();
+	OutOutput.  bHasPositionOutput = false;
+	return false;
+}
+```
+
+**替换为完整占位符实现：**
+```cpp
+/**
+ * Compute - Calculate focus point along spline path
+ * 
+ * CURRENT IMPLEMENTATION (Placeholder):
+ * Since the full spline system is not yet integrated, this module provides
+ * a placeholder implementation that simulates spline-like behavior by
+ * orbiting around the character.  This allows: 
+ * - Testing the module activation/deactivation
+ * - Verifying the pipeline integration
+ * - Demonstrating smooth position transitions
+ * 
+ * FUTURE IMPLEMENTATION (When Spline System Available):
+ * 1. Get SplineComponent reference from StateConfig
+ * 2. Get current spline position (0-1 or distance along spline)
+ * 3.  Evaluate spline at current position → GetLocationAtSplineInputKey()
+ * 4. Apply any configured offsets
+ * 5. Update spline position based on speed/time
+ * 6. Output the evaluated spline position
+ * 
+ * Placeholder Behavior:
+ * - Simulates a circular path around the character
+ * - Position progresses over time (10% per second)
+ * - Provides smooth, predictable camera movement
+ * - Demonstrates Override blend policy
+ * 
+ * @param Context The current pipeline execution context
+ * @param StateConfig The current camera state configuration
+ * @param OutOutput Output structure to fill with computed values
+ * @return True if computation succeeded
+ */
+bool UCameraModule_P07_Spline_Follow::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Use Override blend policy (spline paths are authoritative)
+	// When following a spline, we want exact path adherence
+	OutOutput.BlendPolicy = EBlendPolicy::Override;
+	
+	// ========================================
+	// PLACEHOLDER IMPLEMENTATION
+	// ========================================
+	// This section simulates spline behavior until the real spline system
+	// is integrated. It creates a circular orbit around the character. 
+	
+	// Get character location as orbit center
+	FVector CharacterLocation = Context.InputContext.CharacterLocation;
+	
+	// Get standard focus offset
+	FVector FocusOffset = StateConfig.StateBase.Offset.FocusOffset;
+	float VerticalOffset = StateConfig.StateBase.Offset.  VerticalOffset;
+	FocusOffset.Z += VerticalOffset;
+	
+	// Update spline position over time
+	// In real implementation, this would come from spline progression logic
+	// CurrentSplinePosition ranges from 0.0 to 1.0 (normalized)
+	const float SplineSpeed = 0.1f;  // 10% of path per second
+	CurrentSplinePosition += Context.DeltaTime * SplineSpeed;
+	
+	// Wrap around when reaching end of spline
+	// fmod ensures position stays in 0-1 range
+	CurrentSplinePosition = FMath:: Fmod(CurrentSplinePosition, 1.0f);
+	
+	// Simulate spline position by creating a circular orbit
+	// Convert normalized position (0-1) to angle (0-360 degrees)
+	float Angle = CurrentSplinePosition * 360.0f;
+	
+	// Orbit radius (in centimeters)
+	// In real implementation, this would be the spline's actual shape
+	const float OrbitRadius = 200.0f;  // 2 meters from character
+	
+	// Calculate position on circular path
+	// X = cos(angle) * radius, Y = sin(angle) * radius
+	FVector SplineOffset;
+	SplineOffset.X = FMath::Cos(FMath:: DegreesToRadians(Angle)) * OrbitRadius;
+	SplineOffset.Y = FMath::  Sin(FMath::DegreesToRadians(Angle)) * OrbitRadius;
+	SplineOffset.Z = 0.0f;  // Keep at same height (horizontal orbit)
+	
+	// Calculate final focus point
+	// Base position + configured offset + simulated spline offset
+	FVector FocusPoint = CharacterLocation + FocusOffset + SplineOffset;
+	
+	// ========================================
+	// END PLACEHOLDER IMPLEMENTATION
+	// ========================================
+	
+	// Fill output structure
+	OutOutput.PositionOffset = FocusPoint;
+	OutOutput. bHasPositionOutput = true;
+	
+	// Optional debug logging
+	// Shows current spline position for debugging/verification
+	UE_LOG(LogTemp, VeryVerbose, TEXT("P07 Spline:  Position %. 2f%% (placeholder orbit)"), 
+	       CurrentSplinePosition * 100.0f);
+	
+	return true;
+	
+	// ========================================
+	// FUTURE REAL IMPLEMENTATION EXAMPLE: 
+	// ========================================
+	// USplineComponent* Spline = StateConfig.Module.Position.  SplineComponent;
+	// if (! Spline || !Spline->IsValidLowLevel())
+	// {
+	//     OutOutput.bHasPositionOutput = false;
+	//     return false;
+	// }
+	// 
+	// // Get spline length
+	// float SplineLength = Spline->GetSplineLength();
+	// 
+	// // Update position along spline
+	// float SplineSpeed = StateConfig.Module.Position. SplineSpeed;  // cm/s
+	// CurrentSplineDistance += Context.DeltaTime * SplineSpeed;
+	// 
+	// // Wrap or clamp based on configuration
+	// if (StateConfig.Module.Position. bLoopSpline)
+	// {
+	//     CurrentSplineDistance = FMath::Fmod(CurrentSplineDistance, SplineLength);
+	// }
+	// else
+	// {
+	//     CurrentSplineDistance = FMath::Clamp(CurrentSplineDistance, 0.0f, SplineLength);
+	// }
+	// 
+	// // Get world position at current spline distance
+	// FVector SplinePosition = Spline->GetLocationAtDistanceAlongSpline(
+	//     CurrentSplineDistance, 
+	//     ESplineCoordinateSpace::World
+	// );
+	// 
+	// // Apply any additional offset
+	// FVector FocusOffset = StateConfig.StateBase.Offset.FocusOffset;
+	// FVector FocusPoint = SplinePosition + FocusOffset;
+	// 
+	// // Output
+	// OutOutput.PositionOffset = FocusPoint;
+	// OutOutput.bHasPositionOutput = true;
+	// 
+	// return true;
+}
+```
+
+**说明：**
+- **占位符实现**：模拟样条行为（圆形轨道）
+- **清晰注释**：说明当前是占位符，未来如何实现
+- **TODO示例代码**：展示真实样条集成后的代码
+- **可测试**：即使没有样条系统，也能运行和测试
+- **Override策略**：样条路径应该是权威的
+
+---
+
+4. **完整的P07代码块（用于复制粘贴）：**
+
+如果AGENT需要完整的代码块，提供以下版本：
+
+```cpp
+//========================================
+// P07: Spline Follow - Follow predefined spline path
+//========================================
+
+/**
+ * ShouldActivate - Activate for cinematic states (placeholder)
+ */
+bool UCameraModule_P07_Spline_Follow::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if current state is cinematic
+	if (!StateConfig.StateBase. Flags. bIsCinematic)
+	{
+		return false;
+	}
+	
+	// TODO:  When spline system is implemented, add check for valid SplineComponent
+	
+	return true;
+}
+
+/**
+ * Compute - Calculate focus point along spline (placeholder orbit)
+ */
+bool UCameraModule_P07_Spline_Follow::  Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output
+	OutOutput = CreateBaseOutput();
+	OutOutput.BlendPolicy = EBlendPolicy:: Override;
+	
+	// === PLACEHOLDER IMPLEMENTATION ===
+	// Simulates spline with circular orbit until real spline system is integrated
+	
+	// Get character location as orbit center
+	FVector CharacterLocation = Context.InputContext.CharacterLocation;
+	
+	// Get standard offsets
+	FVector FocusOffset = StateConfig.StateBase. Offset.FocusOffset;
+	float VerticalOffset = StateConfig.StateBase.Offset.VerticalOffset;
+	FocusOffset.Z += VerticalOffset;
+	
+	// Update spline position over time (10% per second)
+	const float SplineSpeed = 0.1f;
+	CurrentSplinePosition += Context. DeltaTime * SplineSpeed;
+	CurrentSplinePosition = FMath:: Fmod(CurrentSplinePosition, 1.0f);
+	
+	// Simulate spline with circular orbit
+	float Angle = CurrentSplinePosition * 360.0f;
+	const float OrbitRadius = 200.0f;  // 2 meters
+	
+	FVector SplineOffset;
+	SplineOffset.X = FMath::Cos(FMath::  DegreesToRadians(Angle)) * OrbitRadius;
+	SplineOffset.Y = FMath::Sin(FMath:: DegreesToRadians(Angle)) * OrbitRadius;
+	SplineOffset.  Z = 0.0f;
+	
+	// Calculate final focus point
+	FVector FocusPoint = CharacterLocation + FocusOffset + SplineOffset;
+	
+	// Fill output
+	OutOutput.PositionOffset = FocusPoint;
+	OutOutput.bHasPositionOutput = true;
+	
+	// Optional debug log
+	UE_LOG(LogTemp, VeryVerbose, TEXT("P07 Spline: Position %.2f%% (placeholder)"), 
+	       CurrentSplinePosition * 100.0f);
+	
+	return true;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 清楚标记这是占位符实现
+   - 提供未来真实实现的示例代码
+   - 说明占位符的行为
+   - 所有注释使用英文
+
+2. **格式：**
+   - 使用Tab缩进（与现有代码一致）
+   - 方法之间空两行
+   - 占位符部分用注释分隔
+
+3. **TODO标记：**
+   - 使用TODO注释标记未来需要实现的部分
+   - 提供清晰的实现指导
+
+【技术说明】
+
+**P07的设计理念：**
+
+### 1. 占位符 vs 真实实现
+
+**当前占位符实现：**
+```
+目的：
+- 允许模块激活和测试
+- 提供可预测的运动
+- 演示Pipeline集成
+- 不依赖外部系统
+
+行为：
+- 围绕角色做圆形轨道运动
+- 每秒前进10%路径
+- 2米半径轨道
+- 水平平面运动
+```
+
+**未来真实实现：**
+```
+目的：
+- 使用真实的SplineComponent
+- 沿任意形状路径运动
+- 支持速度控制
+- 支持循环/单次模式
+
+行为：
+- 从StateConfig获取SplineComponent引用
+- 按配置速度沿样条移动
+- 精确跟随样条形状
+- 支持样条偏移
+```
+
+### 2. 样条曲线基础知识
+
+**UE4 SplineComponent：**
+```cpp
+// 获取样条长度
+float Length = Spline->GetSplineLength();
+
+// 获取指定距离处的位置
+FVector Pos = Spline->GetLocationAtDistanceAlongSpline(
+    Distance,                           // 沿样条的距离（cm）
+    ESplineCoordinateSpace::World       // 世界空间
+);
+
+// 获取指定输入键处的位置（0-1归一化）
+FVector Pos = Spline->GetLocationAtSplineInputKey(
+    InputKey,                           // 0-1之间
+    ESplineCoordinateSpace::World
+);
+
+// 获取样条点数量
+int32 NumPoints = Spline->GetNumberOfSplinePoints();
+```
+
+### 3. 占位符实现的价值
+
+**为什么要做占位符？**
+
+```
+原因1：解耦开发
+- P07可以独立测试
+- 不依赖样条管理系统
+- Pipeline集成可以提前验证
+
+原因2：渐进式开发
+- Phase 3专注模块系统
+- 样条系统可能在Phase 4+实现
+- 占位符允许持续开发
+
+原因3：演示和测试
+- 提供可见的运动效果
+- 验证Override策略正确性
+- 测试Cinematic状态切换
+
+原因4：文档价值
+- TODO注释作为实现指南
+- 示例代码帮助未来开发
+- 清晰的扩展路径
+```
+
+### 4. 圆形轨道模拟
+
+**数学原理：**
+```
+圆周运动公式：
+X = CenterX + Radius * cos(Angle)
+Y = CenterY + Radius * sin(Angle)
+
+参数化：
+Angle = Progress * 2π = Progress * 360°
+Progress ∈ [0, 1]
+
+实现：
+float Angle = CurrentSplinePosition * 360.0f;
+SplineOffset.X = cos(Angle_radians) * Radius;
+SplineOffset.Y = sin(Angle_radians) * Radius;
+
+效果：
+- Progress=0.0 → 角色右侧（0°）
+- Progress=0.25 → 角色前方（90°）
+- Progress=0.5 → 角色左侧（180°）
+- Progress=0.75 → 角色后方（270°）
+- Progress=1.0 → 回到起点（360°=0°）
+```
+
+### 5. 与其他模块的对比
+
+| 模块 | 焦点来源 | 动态性 | 依赖外部 |
+|------|---------|-------|---------|
+| **P01** | 玩家位置 | 实时跟随 | 否 |
+| **P06** | 配置固定值 | 完全静态 | 否 |
+| **P07** | 样条曲线 | 路径运动 | 是（SplineComponent） |
+
+P07的独特之处：
+- 唯一依赖外部Actor/Component的模块
+- 唯一有"路径"概念的模块
+- 唯一需要进度状态的模块（CurrentSplinePosition）
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过（0 errors, 0 warnings）
+   - [ ] 文件编码为UTF-8 Without BOM
+   - [ ] 所有注释为英文
+
+2. **代码完整性：**
+   - [ ] ShouldActivate()实现完整
+   - [ ] Compute()占位符实现完整
+   - [ ] 所有方法签名与. h一致
+   - [ ] TODO注释清晰
+
+3. **逻辑正确性：**
+   - [ ] 仅在Cinematic状态激活
+   - [ ] 使用Override混合策略
+   - [ ] CurrentSplinePosition正确更新
+   - [ ] 圆形轨道计算正确
+   - [ ] 输出bHasPositionOutput=true
+
+4. **占位符质量：**
+   - [ ] 清楚标记为占位符
+   - [ ] 提供未来实现示例
+   - [ ] 可运行和测试
+   - [ ] 不会导致崩溃
+
+【注意事项】
+
+1. **不需要Regenerate：**
+   本Sub-Step只修改现有. cpp文件内容，不添加新文件。
+   保存后可以直接编译，无需Regenerate。
+
+2. **CurrentSplinePosition成员变量：**
+   这个变量已在.  h文件中声明为protected成员：
+   ```cpp
+   protected:
+   	UPROPERTY()
+   	float CurrentSplinePosition;
+   ```
+   无需额外声明，直接使用即可。
+
+3. **日志级别：**
+   使用VeryVerbose级别，避免正常游戏时输出过多日志：
+   ```cpp
+   UE_LOG(LogTemp, VeryVerbose, TEXT("... "));
+   ```
+
+4. **占位符的局限性：**
+   - 圆形轨道很简单，不代表真实样条
+   - 固定速度（10%/s），不可配置
+   - 始终围绕角色，不是独立路径
+   - 但这些对于占位符来说是可接受的
+
+5. **未来集成建议：**
+   当样条系统准备好时，需要：
+   - 在StateConfig中添加SplineComponent引用
+   - 在ShouldActivate中检查SplineComponent有效性
+   - 在Compute中使用真实样条API
+   - 保留占位符代码在注释中作为参考
+
+【输出要求】
+
+完成修改后，请报告：
+
+```
+================================================================================
+Sub-Step 3.2. 8 完成报告
+================================================================================
+
+【修改内容】
+- 文件：CameraModule_Position. cpp
+- 修改位置：P07模块（ShouldActivate、Compute）
+- 代码行数：约XX行
+- 实现类型：占位符实现（带未来集成指南）
+
+【实现的功能】
+- ✅ ShouldActivate：检查Cinematic状态
+- ✅ Compute：圆形轨道占位符
+- ✅ TODO：未来样条集成指南
+
+【编译结果】
+- 编译状态：[成功/失败]
+- 错误数：[数量]
+- 警告数：[数量]
+
+【占位符特性】
+- 模拟行为：圆形轨道（2米半径）
+- 运动速度：10%/秒
+- 可测试性：[是/否]
+
+【遇到的问题】
+[如果有问题，详细描述]
+
+【最终状态】
+✅ P07模块占位符实现完成，可激活和测试
+
+================================================================================
+```
+
+【后续步骤】
+
+P07完成后，Position模块进度：
+- [x] ✅ P01:  Follow Target
+- [x] ✅ P02: Follow Target Lagged
+- [x] ✅ P03: Follow Target Predictive
+- [x] ✅ P04: Orbit Lock-On
+- [x] ✅ P05: Orbit Boss
+- [x] ✅ P06: Fixed Point
+- [x] ✅ P07: Spline Follow（占位符）
+- [ ] ⏳ P08: MidPoint Two Target (Sub-Step 3.2.9)
+
+**Position模块完成度：7/8 (87.5%)**
+
+完成后准备进入Sub-Step 3.2.9（P08: MidPoint Two Target - 最后一个Position模块）。
+
+P08将是相对简单的模块，类似P04但更通用。
+
+================================================================================

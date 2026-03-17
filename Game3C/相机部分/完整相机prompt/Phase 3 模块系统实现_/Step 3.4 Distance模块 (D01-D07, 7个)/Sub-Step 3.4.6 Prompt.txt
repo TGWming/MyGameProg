@@ -1,0 +1,625 @@
+Sub-Step 3.4.6 Prompt
+
+================================================================================
+任务：在CameraModule_Distance. cpp中添加D05 Environment_Limit实现
+================================================================================
+
+【项目背景】
+类魂游戏第三人称相机系统，UE4.27 C++项目。
+D05根据环境限制相机距离，在狭小空间或低矮天花板区域强制拉近相机。
+这是Distance模块中的安全约束模块，防止相机穿墙或产生不适视角。
+
+【Pipeline中的位置】
+```
+Distance模块计算流程：
+1. D01:  BaseDistance = 400cm (Override)
+2. D02: ×1.2 → 480cm
+3. D03: +50cm → 530cm
+4. D04: -50cm → 480cm
+5. D05: min(480, 300) = 300cm (Minimum，环境限制) ← 当前
+   → 狭小空间强制限制到300cm
+6. D06-D07: 后续调整
+```
+
+【当前进度】
+Phase 3 Step 3.4 Sub-Step 3.4.6 (共190个Sub-Step中的第84个)
+前置完成：3.4.5 D04实现 ✅
+
+【任务目标】
+在CameraModule_Distance.cpp中完整实现D05模块，替换现有的占位符。
+
+【⚠️ 重要提醒】
+
+1. **编译前必做步骤：**
+   本Sub-Step只修改现有. cpp文件，不添加新文件。
+   因此**不需要Regenerate**，可以直接编译。
+
+2. **编码格式要求：**
+   - 文件编码：UTF-8 Without BOM
+   - 所有注释：英文
+
+3. **命名替换：**
+   确认StateConfig和InputContext的字段路径与项目实际结构一致。
+
+【具体要求】
+
+1. **文件路径：** Source/[ProjectName]/Private/Camera/Modules/CameraModule_Distance. cpp
+
+2. **定位修改位置：**
+
+在文件中找到D05的占位符实现部分：
+
+```cpp
+//========================================
+// D05: Environment Limit
+//========================================
+
+// TODO: Full implementation in Sub-Step 3.4.6
+// ...  占位符代码
+```
+
+**将上述占位符代码完整替换为下方的完整实现。**
+
+---
+
+3. **D05完整实现代码：**
+
+**A. ShouldActivate() 实现：**
+
+**当前占位符代码：**
+```cpp
+bool UCameraModule_D05_Environment_Limit:: ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Placeholder:  Will be properly implemented in Sub-Step 3.4.6
+	return false;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * ShouldActivate - Determine if environment distance limiting should be active
+ * 
+ * D05 activates when: 
+ * - Module is enabled
+ * - Player is in a tight space OR under a low ceiling
+ * 
+ * These flags are typically set by trigger volumes or environment detection
+ * systems in the game world. 
+ * 
+ * Priority 120 (high), uses Minimum policy. 
+ * This ensures the camera distance doesn't exceed what the environment allows,
+ * preventing wall clipping and awkward camera positioning.
+ * 
+ * Use Cases:
+ * - Indoor corridors
+ * - Caves and tunnels
+ * - Low ceiling areas
+ * - Small rooms
+ */
+bool UCameraModule_D05_Environment_Limit::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check if player is in a tight space
+	bool bInTightSpace = Context.InputContext.bInTightSpace;
+	
+	// Check if player is under a low ceiling
+	bool bUnderLowCeiling = Context.InputContext.bUnderLowCeiling;
+	
+	// Activate if either condition is true
+	if (! bInTightSpace && !bUnderLowCeiling)
+	{
+		return false;  // No environmental constraint
+	}
+	
+	// Environmental constraint detected - activate limiting
+	return true;
+}
+```
+
+**说明：**
+- 两种触发条件：狭小空间 OR 低天花板
+- 任一条件满足即激活
+- 优先级120（安全约束）
+- Minimum策略确保不超过限制
+
+**⚠️ 字段注意：**
+如果InputContext中没有bInTightSpace或bUnderLowCeiling字段，
+可以暂时简化为总是返回false（由Constraint模块在Stage 6处理碰撞）。
+
+---
+
+**B. Compute() 实现：**
+
+**当前占位符代码：**
+```cpp
+bool UCameraModule_D05_Environment_Limit::Compute(...)
+{
+	// Placeholder
+	OutOutput = CreateBaseOutput();
+	OutOutput. DistanceOutput = 9999.0f;
+	OutOutput.bHasDistanceOutput = true;
+	OutOutput.bDistanceIsMultiplier = false;
+	return true;
+}
+```
+
+**替换为完整实现：**
+```cpp
+/**
+ * Compute - Calculate maximum allowed distance based on environment
+ * 
+ * This module calculates a distance limit based on environmental constraints. 
+ * Using Minimum blend policy, it ensures the final distance doesn't exceed
+ * what the current environment allows.
+ * 
+ * Steps:
+ * 1. Start with configured max distance as baseline
+ * 2. If in tight space, apply tight space reduction
+ * 3. If under low ceiling, apply ceiling limit
+ * 4.  Ensure result doesn't go below minimum distance
+ * 5. Output with Minimum policy
+ * 
+ * Environment Types:
+ * - Tight Space:  Narrow corridors, small rooms
+ *   → Reduces distance significantly
+ * - Low Ceiling: Caves, tunnels, low roofs
+ *   → Limits distance to prevent ceiling clipping
+ * 
+ * The Minimum policy means:
+ * FinalDistance = min(CurrentDistance, ThisLimit)
+ * 
+ * @param Context The current pipeline execution context
+ * @param StateConfig The current camera state configuration
+ * @param OutOutput Output structure to fill with computed values
+ * @return True if computation succeeded
+ */
+bool UCameraModule_D05_Environment_Limit::Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output with module identity
+	OutOutput = CreateBaseOutput();
+	
+	// Ensure Minimum blend policy is set
+	// This is critical - we want to take the smaller of current and limit
+	OutOutput.BlendPolicy = EBlendPolicy::Minimum;
+	
+	// Step 1: Start with configured max distance as baseline
+	float MaxAllowedDistance = StateConfig.StateBase.Distance.MaxDistance;
+	
+	// If MaxDistance not configured, use a large default
+	if (MaxAllowedDistance <= 0.0f)
+	{
+		MaxAllowedDistance = 800.0f;  // Default max:  8 meters
+	}
+	
+	// Get base and min distances for calculations
+	float BaseDistance = StateConfig.StateBase.Distance.BaseDistance;
+	if (BaseDistance <= 0.0f)
+	{
+		BaseDistance = 400.0f;  // Default:  4 meters
+	}
+	
+	float MinDistance = StateConfig.StateBase.Distance.MinDistance;
+	if (MinDistance <= 0.0f)
+	{
+		MinDistance = 100.0f;  // Default min: 1 meter
+	}
+	
+	// Step 2: If in tight space, apply significant reduction
+	if (Context.InputContext. bInTightSpace)
+	{
+		// Tight spaces require shorter camera distance
+		// Reduce to 75% of base distance, or use configured reduction
+		float TightSpaceReduction = BaseDistance * 0.25f;  // Default: 25% reduction
+		
+		// Try to get configured reduction value
+		// If StateConfig has Collision.Special.TightSpaceDistanceReduction, use it
+		// For now, use calculated default
+		
+		float TightSpaceLimit = BaseDistance - TightSpaceReduction;
+		
+		// Apply tight space limit
+		MaxAllowedDistance = FMath:: Min(MaxAllowedDistance, TightSpaceLimit);
+	}
+	
+	// Step 3: If under low ceiling, apply additional limit
+	if (Context.InputContext. bUnderLowCeiling)
+	{
+		// Low ceiling typically requires even shorter distance
+		// Use 1.5x minimum distance as the ceiling limit
+		float LowCeilingLimit = MinDistance * 1.5f;
+		
+		// Apply ceiling limit (may further reduce MaxAllowedDistance)
+		MaxAllowedDistance = FMath::Min(MaxAllowedDistance, LowCeilingLimit);
+	}
+	
+	// Step 4: Ensure we don't go below minimum distance
+	// Even in tight spaces, camera needs some distance to function
+	MaxAllowedDistance = FMath::Max(MaxAllowedDistance, MinDistance);
+	
+	// Step 5: Fill output structure
+	OutOutput. DistanceOutput = MaxAllowedDistance;
+	OutOutput.bHasDistanceOutput = true;
+	OutOutput. bDistanceIsMultiplier = false;  // This is an absolute limit
+	
+	// Weight is 1.0 since this is a hard constraint
+	OutOutput.Weight = 1.0f;
+	
+	return true;
+}
+```
+
+**说明：**
+- Minimum策略：取较小值
+- 狭小空间：减少25%（可配置）
+- 低天花板：限制到1.5×最小距离
+- 确保不低于MinDistance
+- 硬约束（Weight=1.0）
+
+---
+
+4. **完整的D05代码块（用于复制粘贴）：**
+
+```cpp
+//========================================
+// D05: Environment Limit
+//========================================
+
+/**
+ * ShouldActivate - Activate in tight spaces or under low ceilings
+ */
+bool UCameraModule_D05_Environment_Limit::ShouldActivate(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig) const
+{
+	// Check if module is enabled
+	if (!bIsEnabled)
+	{
+		return false;
+	}
+	
+	// Check environment flags
+	bool bInTightSpace = Context.InputContext.bInTightSpace;
+	bool bUnderLowCeiling = Context.InputContext.bUnderLowCeiling;
+	
+	// Activate if either condition is true
+	if (!bInTightSpace && !bUnderLowCeiling)
+	{
+		return false;
+	}
+	
+	return true;
+}
+
+/**
+ * Compute - Calculate maximum allowed distance based on environment
+ */
+bool UCameraModule_D05_Environment_Limit:: Compute(
+	const FStageExecutionContext& Context, 
+	const FCameraStateConfig& StateConfig, 
+	FModuleOutput& OutOutput)
+{
+	// Create base output
+	OutOutput = CreateBaseOutput();
+	
+	// Set Minimum blend policy (critical)
+	OutOutput. BlendPolicy = EBlendPolicy:: Minimum;
+	
+	// Get configured distances
+	float MaxAllowedDistance = StateConfig.StateBase. Distance.MaxDistance;
+	if (MaxAllowedDistance <= 0.0f)
+	{
+		MaxAllowedDistance = 800.0f;
+	}
+	
+	float BaseDistance = StateConfig.StateBase.Distance.BaseDistance;
+	if (BaseDistance <= 0.0f)
+	{
+		BaseDistance = 400.0f;
+	}
+	
+	float MinDistance = StateConfig.StateBase. Distance.MinDistance;
+	if (MinDistance <= 0.0f)
+	{
+		MinDistance = 100.0f;
+	}
+	
+	// Apply tight space reduction
+	if (Context. InputContext.bInTightSpace)
+	{
+		// Reduce to 75% of base distance
+		float TightSpaceLimit = BaseDistance * 0.75f;
+		MaxAllowedDistance = FMath::Min(MaxAllowedDistance, TightSpaceLimit);
+	}
+	
+	// Apply low ceiling limit
+	if (Context.InputContext.bUnderLowCeiling)
+	{
+		// Limit to 1.5x minimum distance
+		float LowCeilingLimit = MinDistance * 1.5f;
+		MaxAllowedDistance = FMath:: Min(MaxAllowedDistance, LowCeilingLimit);
+	}
+	
+	// Ensure not below minimum
+	MaxAllowedDistance = FMath::Max(MaxAllowedDistance, MinDistance);
+	
+	// Fill output
+	OutOutput.DistanceOutput = MaxAllowedDistance;
+	OutOutput.bHasDistanceOutput = true;
+	OutOutput.bDistanceIsMultiplier = false;
+	OutOutput.Weight = 1.0f;
+	
+	return true;
+}
+```
+
+---
+
+【代码风格要求】
+
+1. **注释：**
+   - 说明Minimum策略的含义
+   - 解释不同环境类型的处理
+   - 说明与Constraint模块的关系
+   - 所有注释英文
+
+2. **格式：**
+   - Tab缩进
+   - 清晰步骤标注
+   - 方法间空两行
+
+3. **防御性编程：**
+   - 所有配置值有默认值
+   - 双重条件检查
+   - 确保不低于MinDistance
+
+【技术说明】
+
+**D05的核心机制：**
+
+### 1. Minimum策略的作用
+
+**为什么使用Minimum而非Override？**
+
+```
+Override策略（假设）：
+D01-D04计算结果：500cm
+D05限制：300cm
+结果：300cm（强制替换）
+
+问题：
+- 如果D05未激活，没有输出
+- 需要特殊处理
+
+Minimum策略（实际）：
+D01-D04计算结果：500cm
+D05限制：300cm
+结果：min(500, 300) = 300cm ✅
+
+如果D01-D04结果：250cm
+D05限制：300cm
+结果：min(250, 300) = 250cm ✅（保持较小值）
+
+优点：
+- 只在需要时生效
+- 不会增加距离
+- 自然的约束行为
+```
+
+### 2. 环境检测机制
+
+**bInTightSpace和bUnderLowCeiling的来源：**
+
+```
+这些标志通常由以下系统设置：
+
+1. 触发器Volume：
+   - 关卡中放置TightSpaceTrigger
+   - 玩家进入时设置bInTightSpace = true
+   - 离开时设置false
+
+2. 射线检测：
+   - 每帧向上/向后发射射线
+   - 检测到障碍物设置相应标志
+
+3. 碰撞检测系统：
+   - 与Constraint模块配合
+   - 预判环境约束
+
+当前实现：
+- D05读取这些标志
+- 不负责检测（由外部系统）
+- 仅负责响应
+```
+
+### 3. 狭小空间 vs 低天花板
+
+**两种情况的处理差异：**
+
+| 条件 | 限制计算 | 典型值 | 场景 |
+|------|---------|--------|------|
+| 狭小空间 | Base × 0.75 | 300cm | 走廊、小房间 |
+| 低天花板 | Min × 1.5 | 150cm | 洞穴、隧道 |
+| 两者同时 | 取更小值 | 150cm | 狭窄隧道 |
+
+**计算示例：**
+```
+配置：
+BaseDistance = 400cm
+MinDistance = 100cm
+MaxDistance = 800cm
+
+场景1：狭小空间
+TightSpaceLimit = 400 × 0.75 = 300cm
+MaxAllowed = min(800, 300) = 300cm
+
+场景2：低天花板
+LowCeilingLimit = 100 × 1.5 = 150cm
+MaxAllowed = min(800, 150) = 150cm
+
+场景3：狭小空间+低天花板
+TightSpaceLimit = 300cm
+LowCeilingLimit = 150cm
+MaxAllowed = min(800, 300, 150) = 150cm
+```
+
+### 4. 与Constraint模块的关系
+
+**D05 vs Stage 6 Constraint：**
+
+```
+D05 (Distance模块，Stage 3)：
+- 预防性限制
+- 基于区域标志
+- 提前减少距离
+- "软"约束
+
+Constraint模块 (Stage 6)：
+- 反应性调整
+- 基于射线检测
+- 实时碰撞处理
+- "硬"约束
+
+配合使用：
+1. D05预先减少距离（玩家进入狭小区域）
+2. Constraint进一步调整（检测到具体墙壁）
+3. 两层保护，确保不穿墙
+
+效果：
+- 更平滑的距离变化
+- 减少Constraint的工作量
+- 更好的视觉体验
+```
+
+### 5. 安全下限保护
+
+**为什么需要Max(result, MinDistance)？**
+
+```
+极端情况：
+bInTightSpace = true
+bUnderLowCeiling = true
+
+TightSpaceLimit = 400 × 0.75 = 300cm
+LowCeilingLimit = 100 × 1.5 = 150cm
+
+如果MinDistance = 200cm：
+MaxAllowed = min(800, 300, 150) = 150cm
+150cm < 200cm（低于最小！）
+
+不保护：
+- 相机距离150cm
+- 可能太近
+- 视角不适
+
+有保护：
+MaxAllowed = max(150, 200) = 200cm
+- 确保最低200cm
+- 保持可用视角
+```
+
+【验证标准】
+
+1. **编译验证：**
+   - [ ] 编译通过
+   - [ ] UTF-8 Without BOM
+   - [ ] 注释英文
+
+2. **代码完整性：**
+   - [ ] ShouldActivate()完整
+   - [ ] Compute()完整
+   - [ ] BlendPolicy设置正确
+
+3. **逻辑正确性：**
+   - [ ] 检查bInTightSpace或bUnderLowCeiling
+   - [ ] 使用Minimum策略
+   - [ ] 狭小空间减少25%
+   - [ ] 低天花板限制1.5×Min
+   - [ ] 确保不低于MinDistance
+   - [ ] bDistanceIsMultiplier = false
+
+4. **字段访问：**
+   - [ ] Context.InputContext.bInTightSpace
+   - [ ] Context.InputContext.bUnderLowCeiling
+   - [ ] StateConfig.StateBase. Distance.MaxDistance
+   - [ ] StateConfig.StateBase. Distance.BaseDistance
+   - [ ] StateConfig.StateBase.Distance.MinDistance
+
+【注意事项】
+
+1. **不需要Regenerate**
+
+2. **字段缺失处理：**
+   ```cpp
+   // 如果bInTightSpace/bUnderLowCeiling不存在
+   // 方案1：默认为false（模块不激活）
+   bool bInTightSpace = false;
+   bool bUnderLowCeiling = false;
+   
+   // 方案2：在InputContext中添加这些字段
+   ```
+
+3. **Minimum策略确认：**
+   确认EBlendPolicy枚举中有Minimum。如果没有：
+   ```cpp
+   // 替代方案：使用Override，但输出min值
+   float CurrentDistance = Context.Output.Distance;  // 如果可用
+   OutOutput. DistanceOutput = FMath::Min(CurrentDistance, MaxAllowedDistance);
+   OutOutput.BlendPolicy = EBlendPolicy::Override;
+   ```
+
+4. **测试建议：**
+   - 进入狭小区域 → 距离应限制到75%
+   - 进入低天花板 → 距离应限制到1.5×Min
+   - 两者同时 → 取更小值
+   - 离开区域 → 恢复正常
+
+【输出要求】
+
+```
+================================================================================
+Sub-Step 3.4. 6 完成报告
+================================================================================
+
+【修改内容】
+- 文件：CameraModule_Distance. cpp
+- 修改位置：D05模块
+- 代码行数：约XX行
+
+【实现的功能】
+- ✅ ShouldActivate：检查环境标志
+- ✅ Compute：计算环境距离限制
+
+【编译结果】
+- 编译状态：[成功/失败]
+
+【最终状态】
+✅ D05完成，环境约束距离限制
+
+================================================================================
+```
+
+【后续步骤】
+
+D05完成后：
+- [x] ✅ 3.4.4:  D03 - Speed_Offset
+- [x] ✅ 3.4.5: D04 - Combat_Adjust
+- [x] ✅ 3.4.6: D05 - Environment_Limit
+- [ ] ⏳ 3.4.7: D06 - Proximity_Adjust（下一步）
+- [ ] ⏳ 3.4.8: D07 - Boss_Phase
+
+**Distance模块完成度：5/7 (71. 4%)**
+
+================================================================================

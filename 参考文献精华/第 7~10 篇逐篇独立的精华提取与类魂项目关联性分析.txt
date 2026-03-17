@@ -1,0 +1,580 @@
+
+
+好的，以下是第 7~10 篇逐篇独立的精华提取与类魂项目关联性分析。（第 1~6 篇已在之前完成）
+
+---
+
+## 第 7 篇：《GameplayAbility框架在《幻塔》手游中的应用及优化》— Scylla
+
+### 精华提取
+
+**GAS 四大核心类：**
+
+```
+| 类                          | 职责                                          |
+|----------------------------|-----------------------------------------------|
+| AbilitySystemComponent(ASC) | 核心管理器，管理所有 GA/GE，处理技能系统交互     |
+| GameplayAbility(GA)         | 单个技能实现：激活/消耗/冷却/取消/结束            |
+| GameplayEffect(GE)          | Buff类：修改属性，三种时长（瞬间/持续/永久）       |
+| GameplayCue(GC)             | 表现效果：音效/特效，通过 GameplayTag 关联 GE     |
+```
+
+**技能释放完整流程：**
+
+```
+C++ 层面：
+  ASC::GiveAbility() → 返回 Handle
+  → TryActivateAbility() → CanActivateAbility()
+  → ActivateAbility() → CommitAbility()（消耗+冷却）
+  → EndAbility()
+
+蓝图层面：
+  PlayMontageAndWaitForEvent（核心Task）
+  → 播放 Montage + 监听 EventTag
+  → EventTag 触发时执行技能效果（伤害/特效等）
+```
+
+**连招两种方案 + 幻塔的混合方案：**
+
+```
+方案A：单 Montage 多 Section（JumpToSection）
+  优点：配置少，方便管理
+  缺点：复杂连招逻辑全挤在一个 GA 里
+
+方案B：每段连招独立 GA
+  优点：单个 GA 逻辑简单
+  缺点：GA 数量多，难管理
+
+幻塔方案：A + B 混合
+  一个 GA 内配置 Key-Value：
+    Key = 当前播放片段
+    Value = 跳转条件包（延迟时间 + 目标 Section + 可选跳转到另一个 GA）
+  → 简单连招在同一 Montage 内跳 Section
+  → 复杂分支跳转到另一个 GA 的 Montage
+```
+
+**关键 AbilityTask：**
+
+```
+| Task                           | 功能                                         |
+|-------------------------------|----------------------------------------------|
+| PlayMontageAndWaitForEvent     | 播放 Montage + 监听 AnimNotify 触发技能效果    |
+| WaitInputPress                 | 监听按键按下                                  |
+| WaitInputRelease               | 监听按键抬起（+AutoTriggerTime 0.3s 长按判定） |
+| ApplyRootMotionMoveToForce     | 程序控制位移（非动画RootMotion），支持网络同步   |
+```
+
+**GE 实现 Buff 系统：**
+
+```
+Buff 保存机制（上下线）：
+  监听 OnGameplayEffectAppliedDelegateToSelf → 记录 GE ID/开始时间/层数/持续时间
+  监听 OnAnyGameplayEffectRemovedDelegate → 删除记录
+  上线后重新计算剩余时间，重新 Apply
+
+Buff 衍生事件：
+  配置在 GE 派生类上
+  可监听攻击事件 → 叠加层数 → 触发后续 GE/GA
+```
+
+**网络优化三项：**
+
+```
+| 优化项                     | 方案                                          | 效果                  |
+|---------------------------|----------------------------------------------|-----------------------|
+| Montage 同步策略           | 同步 Section 而非具体时间                      | 大幅减少同步频率       |
+| GE 同步策略                | 玩家 Mixed / AI 用 Minimal                    | 减少 ActiveGE 同步开销 |
+| GameplayCue 内存           | 关闭启动时全加载，改为使用时异步加载             | 省几百MB内存           |
+```
+
+### 对我们类魂项目的关联性分析
+
+```
+| GAS 功能                    | 我们是否需要 | 优先级 | 说明                                     |
+|----------------------------|-------------|--------|----------------------------------------|
+| GAS 整体框架               | ❌ P0不用    | P1评估 | 我们P0用 CombatComponent 自建轻量系统      |
+| PlayMontageAndWaitForEvent | 思路可借鉴   | P0     | 我们用 C++ 直接 PlayMontage + Notify 回调  |
+| 连招方案（Section跳转）     | ✅ 直接采用  | P0     | 我们的轻击连段就是同一 Montage 跳 Section   |
+| WaitInputRelease 长按判定   | 可选         | P1     | 蓄力重击可参考（AutoTriggerTime 思路）      |
+| ApplyRootMotionMoveToForce | 可选         | P1     | 冲刺攻击/突进技能的程序位移方案              |
+| GE Buff 系统               | ❌ P0不用    | P1/P2  | 后期做状态异常（中毒/流血）时可引入 GAS      |
+| Montage 同步策略            | 后期需要     | P1     | 多人联机时必须考虑                          |
+| GC 内存优化                 | 后期需要     | P1     | 特效资源多时必须关闭全加载                   |
+```
+
+**核心结论：**
+
+- P0 阶段**不需要引入 GAS**，我们的 CombatComponent + TryDoAction + Notify 已经足够
+- 但 GAS 的设计思路验证了我们的方案正确性：
+  - 幻塔的连招方案 = 我们的 JumpToSection 方案（完全一致）
+  - PlayMontageAndWaitForEvent 的思路 = 我们的 Montage + AN_EnableHitbox/AN_ActionEnd 回调
+- **P1 阶段评估是否引入 GAS**：如果后期技能种类膨胀（变形斩/战技/魔法等），GAS 的 GA 封装 + GE Buff + Tag 系统会比自建系统更可维护
+- 幻塔的长按判定思路（WaitInputRelease + AutoTriggerTime）可直接用于蓄力重击设计
+
+---
+
+## 第 8 篇：《守望先锋动画制作管线（下篇）》— Jesse Davis / GDC 2017
+
+### 精华提取
+
+**基于代码的绑定流程（Code Based Rigging）：**
+
+```
+核心原则：
+  技术团队 → 负责功能实现和稳定性
+  绑定师 → 根据角色特性做绑定，不用担心人为错误（命名/层级）
+
+流程：
+  Python 脚本编程 → 快速创建任意肢体 → 镜像肢体
+  每次通过脚本重建绑定 → 快速/稳定/无错
+
+关键经验：
+  一套严格的绑定结构和命名规则是工具化的基础
+  很多项目中后期才想工具化，但命名无规律导致批量修改极其困难
+```
+
+**Maya 工具集：**
+
+```
+| 工具                      | 功能                                           |
+|--------------------------|------------------------------------------------|
+| 30fps 保证               | 单视图/四视图/旋转视图都保证 30fps 以上播放       |
+| HotReload                | Maya 一键导出 → 引擎立刻查看效果                  |
+| Copy-Paste Pose          | 世界坐标/Local 坐标/镜像 Pose 粘贴               |
+| 快速选择工具              | 自定义选择集                                     |
+| 手指控制工具              | 手指动画专用                                     |
+| 镜像动画                  | 快速生成对称动画                                 |
+| 位移归零层                | 跳跃动画前半段位移归零，便于引擎导出               |
+| IK/FK 混合               | 自由切换和混合                                   |
+| 约束父级切换              | 快速切换/添加约束的父级                           |
+```
+
+**Ragdoll 方案：**
+
+```
+三种模式灵活选择：
+  1. 完全手 Key（例：Torbjorn 的胡子，因为有慢动作）
+  2. 完全引擎解算
+  3. 部分手 Key + 引擎解算
+
+死亡动画：所有死亡都是从一个 Pose 发展出来的
+  → 由物理引擎技术 + 绑定大佬共同支持
+```
+
+**引擎端工具：**
+
+```
+动画 Debug 工具：
+  记录运行时动画过程 → 可回溯查看所有动画细节
+  查看动画之间的融合、资源来源
+  支持 Hot Reload 动画资源
+```
+
+**未来展望提到的技术：**
+
+```
+数据驱动模板：让动画师通过配置完成所有工作（类似蓝图思路）
+Spring 曲线过渡：两个 Pose 之间用曲线增加融合效果（但服务器同步压力大）
+MotionBlur 探索
+```
+
+### 对我们类魂项目的关联性分析
+
+```
+| 守望先锋技术                | 我们是否需要 | 优先级 | 说明                                    |
+|----------------------------|-------------|--------|----------------------------------------|
+| Code Based Rigging         | 不需要       | —      | 我们用现成动画资源，不做自定义绑定         |
+| HotReload Maya→引擎        | 不需要       | —      | 我们不做 Maya 动画制作                    |
+| 命名规则标准化              | ✅ 有参考    | P0     | 我们的动画资源命名要统一规范               |
+| Ragdoll 三种模式            | 后期参考     | P2     | 死亡布娃娃可参考"从一个Pose发展"的思路     |
+| 动画 Debug 工具             | 后期参考     | P1     | ShowDebug Animation 是 UE4 内置版本       |
+| 位移归零层思路              | 有参考       | P0     | 跳跃动画中 RootMotion 位移处理可借鉴       |
+| Spring 曲线过渡             | 不需要       | —      | 单机类魂不需要考虑服务器同步问题           |
+```
+
+**核心结论：**
+
+- 这篇主要面向**大型团队的美术制作管线**，与我们个人/小团队类魂开发直接相关性较低
+- 但有几个**间接价值点**：
+  1. **命名规则标准化**：文章强调"严格的绑定结构和命名规则是工具化的基础"——我们的动画资源、Montage、Notify 命名也必须从 P0 就统一规范
+  2. **Ragdoll 方案选择**：完全手 Key / 完全物理 / 混合三选一，后期做死亡动画时直接参考
+  3. **"从一个 Pose 发展出死亡"**的思路与我们的 Dead State（静态 Pose）方案一致
+
+---
+
+## 第 9 篇：《UE4 动画系统-基础梳理》— 书生
+
+### 精华提取
+
+**动画蓝图核心概念清单：**
+
+```
+| 概念                        | 说明                                                    |
+|----------------------------|---------------------------------------------------------|
+| AnimGraph                  | 状态机+动画节点的集合，输出最终动画                        |
+| StateMachine               | 管理 State 和 Transition                                 |
+| State                      | 单个状态，内含动画播放逻辑                                |
+| Conduit（导管）             | 中间转换节点，可做复杂条件判断                             |
+| Transition Rule            | 状态之间的转换条件                                       |
+| Shared Transition Rule     | 共享转换规则，一处修改多处生效                             |
+| Animation Layer（链接）     | 支持动态切换子部分，节约内存                               |
+```
+
+**混合节点完整清单：**
+
+```
+| 节点                         | 功能                                          | 我们是否用到    |
+|-----------------------------|-----------------------------------------------|---------------|
+| Apply Additive              | LocalSpace 叠加                                | 后期（呼吸）   |
+| Apply Mesh Additive         | MeshSpace 叠加                                 | 后期可选       |
+| Make Dynamic Additive       | 运行时动态生成叠加                              | 不需要         |
+| Blend                       | 标准混合                                       | 可能用到       |
+| Blend Poses by Bool         | 布尔值切换                                      | ✅ 锁定/非锁定 |
+| Blend Poses by Int          | 整数值切换                                      | 可选           |
+| Blend Poses by Enum         | 枚举值切换                                      | 可选（多武器） |
+| Layered Blend Per Bone      | 按骨骼分层混合（上下半身分离）                   | P0不需要       |
+| Slot                        | 蒙太奇覆盖槽位                                  | ✅ FullBody    |
+| Inertialization（惯性混合）   | 高性能过渡替代方案，停止计算源姿势               | 后期优化       |
+```
+
+**惯性混合关键特性：**
+
+```
+传统混合：过渡期间同时计算源姿势+目标姿势 → 组合成混合姿势
+惯性混合：一旦开始，停止计算源姿势 → 只用目标姿势 + 数学曲线过渡
+
+优点：性能更好（不计算源姿势）
+缺点：停止播放源序列后，不再触发源序列中的 AnimNotify
+       → 需要重构游戏逻辑和通知以兼容
+
+使用建议：将 Inertialization 节点尽量靠近 Output Pose 连接
+```
+
+**动画通知源码时序（核心重点）：**
+
+```
+每帧 TriggerAnimNotifies() 执行流程：
+
+1. 遍历当前帧通知队列 AnimNotifies[]
+   ├── 如果是 AnimNotifyState（有时长的）：
+   │   ├── 不在 ActiveAnimNotifyState 中 → 第一次触发 → 加入 NotifyStateBeginEvent
+   │   └── 在 ActiveAnimNotifyState 中 → 从旧列表移除 → 加入新列表
+   │
+   └── 如果是 AnimNotify（瞬时的）：
+       └── 直接执行 TriggerSingleAnimNotify()
+
+2. 遍历旧 ActiveAnimNotifyState（上一帧还在、这一帧不在的）
+   → 执行 NotifyEnd
+
+3. 遍历 NotifyStateBeginEvent（这一帧新加入的）
+   → 执行 NotifyBegin
+
+4. 用新列表覆盖 ActiveAnimNotifyState
+
+5. 遍历最新 ActiveAnimNotifyState
+   → 执行 NotifyTick
+```
+
+**⚠️ 关键 Bug 知识：NotifyEnd 晚一帧问题**
+
+```
+NotifyEnd 的触发是在"下一帧检测不到对应的 AnimNotifyState"时才执行
+→ 会比实际结束时间晚一帧
+
+后果：如果两段首尾相连的 AnimNotifyState 在同一帧：
+  第二段的 Begin 会早于第一段的 End 执行！
+
+对我们的影响：
+  ANS_ComboWindow 和 ANS_IFrame 如果首尾相连
+  → 可能出现新窗口 Begin 先于旧窗口 End 的情况
+  → 代码中需要处理这种重叠
+```
+
+**动画通知触发来源（4种）：**
+
+```
+| 来源                              | 触发方式                            |
+|----------------------------------|-------------------------------------|
+| Montage 动画                      | FAnimMontageInstance::HandleEvents  |
+| Sequence 动画                     | UAnimSequenceBase::HandleAssetPlayerTickedInternal |
+| BlendSpace 动画                   | UBlendSpaceBase::TickAssetPlayer    |
+| 动画蓝图（SM State/Transition）    | FAnimInstanceProxy::AddAnimNotifyFromGeneratedClass |
+```
+
+**TriggerSingleAnimNotify 判定顺序：**
+
+```
+1. HandleNotify() 拦截处理？→ 是则返回
+2. Notify 不为空？→ 执行蓝图类 UAnimNotify 的 Notify()
+3. 只有 NotifyName？→ 查找 AnimInstance 是否有 "AnimNotify_[名字]" 函数 → 有则执行
+```
+
+**同步组与同步标记：**
+
+```
+用途：混合的多个输入动画保持播放进度比例一致
+典型场景：八方向 BlendSpace 中保持两脚落地节奏同步，避免脚步交叉
+
+我们的用途：BS_Locomotion_FreeMove_2D 中的走/跑动画需要设置同步组
+```
+
+**其他内容：**
+
+```
+动画曲线：驱动状态切换 / 修改顶点和材质参数 / 支持在混合节点中读取
+动画修改器：批量修改 AnimSequence（批量添加同步标记/动画曲线）
+IK 类型：TwoBone / Spline / CCD / Hand / FABR
+调试：运行时 Attach 调试 / Blueprint Debugger / Watch Value / F9 断点
+```
+
+### 对我们类魂项目的关联性分析
+
+```
+| 知识点                      | 直接价值                                              | 阶段    |
+|----------------------------|------------------------------------------------------|--------|
+| Blend Poses by Bool        | 锁定/非锁定 BS 切换，P0 核心节点                       | P0     |
+| Slot 节点                   | FullBody Slot 覆盖 Montage，P0 核心节点                | P0     |
+| Blend Poses by Enum        | 多武器动画切换（后期）                                  | P1     |
+| 惯性混合                    | 后期优化 State 过渡性能                                 | P2     |
+| NotifyEnd 晚一帧问题        | ⚠️ 极其重要！ANS_ComboWindow/IFrame 首尾相连时必须处理  | P0     |
+| Notify 触发时序             | 写所有 Notify C++ 类时的核心参考                        | P0     |
+| 同步组                      | BS 中走/跑动画脚步同步                                  | P0     |
+| 共享转换规则                 | SM 中多个 State 到 Dead 的转换可共享                    | P0     |
+| 动画曲线驱动状态切换         | 后期可用曲线精确控制过渡时机                             | P1     |
+| TwoBone IK                  | 后期脚部 IK（地面适配）                                 | P2     |
+| 动画蓝图调试                 | 开发期间持续使用                                        | P0     |
+```
+
+**核心结论：**
+
+- 这篇是 **P0 阶段最实用的文章**，直接指导 AnimBP 搭建和 Notify 开发
+- **最关键发现：NotifyEnd 晚一帧问题**——我们的 ANS_ComboWindow 和 ANS_IFrame 代码必须考虑这种边界情况，不能假设 End 一定在下一个 Begin 之前
+- 同步组是 BlendSpace 里避免"脚步打架"的必备设置，P0 搭建 BS 时就要配置
+- 惯性混合是后期优化的利器，但要注意"停止触发源序列 Notify"的副作用
+
+---
+
+## 第 10 篇：《【UE4】图解动画系统源码》— 爱吃菠萝不吃萝卜
+
+### 精华提取
+
+**动画系统三大阶段完整流程：**
+
+```
+阶段1：组件注册（游戏启动时，GameThread）
+  RegisterComponent()
+  → ExecuteRegisterEvents()
+    → ComputeRequiredBones()（填充所需骨骼列表）
+    → TickAnimation()（主动更新一次动画）
+    → RefreshBoneTransforms()（刷新骨骼坐标）
+    → CreateRenderState_Concurrent()（创建渲染状态，分配 MeshObject）
+       → 选择 FSkeletalMeshObjectStatic / CPUSkin / GPUSkin
+    → UpdateBounds()（更新边界）
+    → CreateSceneProxy()（创建 FPrimitiveSceneProxy）
+    → FSkeletalMeshObjectGPUSkin::Update()（GPU渲染更新）
+    → UpdatePreviousRefToLocalMatrices()（初始化渲染数据结构）
+
+阶段2：动画更新（每帧，可并行）
+  TickComponent()
+  → TickPose() → TickAnimation()
+    → UpdateAnimation()（三种实例：AnimScript / Linked / PostProcess）
+      → PreUpdateAnimation()（重置通知队列 + RootMotionBlendQueue + 变量赋值）
+      → UpdateMontage()（权重更新 + RootMotion 位移提取）
+      → UpdateMontageSyncGroup()（同步组 Leader 计算）
+      → UpdateMontageEvaluationData()（重置并填充 Proxy 数据）
+      → BlueprintUpdateAnimation()（蓝图变量更新）
+  → RefreshBoneTransforms()
+    → 给 AnimEvaluationContext 赋值
+    → PreEvaluateAnimation()（设置 Proxy/Skeleton）
+    → 分发并行任务：
+      如果并行 → DispatchParallelEvaluationTasks()
+        → SwapEvaluationContextBuffers()（交换缓冲）
+        → 创建 FParallelAnimationEvaluationTask
+        → 创建 FParallelAnimationCompletionTask
+      如果非并行 → DoParallelEvaluationTasks_OnGameThread()
+
+  FParallelAnimationEvaluationTask（子线程执行）：
+    → ParallelUpdateAnimation()
+      → UpdateAnimation()（动画蓝图节点递归更新）
+      → TickAssetPlayerInstances()（动画资源Tick + RootMotion提取）
+    → EvaluateAnimation()（解算 Pose）
+    → EvaluatePostProcessMeshInstance()
+    → FinalizePoseEvaluationResult()（填充 BoneSpaceTransforms）
+    → FillComponentSpaceTransforms()（转换到 ComponentSpace）
+
+  FParallelAnimationCompletionTask（子线程完成后）：
+    → SwapEvaluationContextBuffers()（交换回来）
+    → PostAnimEvaluation()
+    → 标记 bRenderDynamicDataDirty → 通知渲染线程
+
+阶段3：渲染
+  GameThread：
+    → DoDeferredRenderUpdates_Concurrent()
+    → SendRenderTransform_Concurrent()
+    → 检查 bRenderDynamicDataDirty
+    → FSkeletalMeshObjectGPUSkin::Update()（创建渲染命令）
+
+  RenderThread：
+    → FRenderingThread::Run()
+    → FSkeletalMeshObjectGPUSkin::Update()（更新渲染数据）
+    → FGPUBaseSkinVertexFactory::UpdateBoneData()（更新骨骼数据到GPU）
+```
+
+**胶囊体 / Skeleton / Bone / Mesh 关系：**
+
+```
+胶囊体（CapsuleComponent）：
+  根组件，决定角色在世界中的位置
+  移动组件修改的是胶囊体位置
+  用 show Collision 可查看
+
+Skeleton（骨架）：
+  由 Bone 构成的层级树结构
+  位移信息存储在 Skeleton 里，不是 Mesh
+  USkeleton 资源：BoneTree + ReferenceSkeleton（Bone Info + Transform）
+
+Bone（骨骼/关节）：
+  有名字和父节点ID
+  记录相对于父级的 Transform
+
+Mesh（网格/皮）：
+  仅仅是一层皮，依附于骨骼存在
+  "修改 Mesh 坐标"实际上是修改根骨骼的位置和朝向
+  RootMotion 的位移也写在骨骼中
+
+层级关系（角色蓝图）：
+  CapsuleComponent（根组件）
+    └── SkeletalMeshComponent（子组件）
+  Mesh 坐标随父组件相对变化
+```
+
+**USkeleton vs USkeletalMesh 资源结构：**
+
+```
+USkeleton：
+  ├── BoneTree[]（FBoneNode：名字+父节点ID）
+  ├── ReferenceSkeleton（Bone Info + Transform + Virtual Bone Data）
+  └── VirtualBones[]（Source/Target/VirtualBoneName）
+
+USkeletalMesh：
+  ├── ImportedModel（几何信息）
+  ├── SkeletalMeshRenderData（渲染数据）
+  ├── Skeleton*（所属骨架引用）
+  ├── Materials[]（材质）
+  ├── LODInfo[]（LOD）
+  ├── PhysicsAsset*（物理资源）
+  ├── RetargetBasePose[]（重定向Pose缓冲）
+  ├── MeshClothingAssets[]（布料）
+  └── SkinWeightProfiles[]（蒙皮权重配置）
+```
+
+**SkeletalMeshComponent 坐标设置机制：**
+
+```
+移动组件 PerformMovement()
+  → FScopedMovementUpdate 结构
+  → 析构时 EndScopedMovementUpdate()
+  → 位置有变化 → PropagateTransformUpdate()
+  → UpdateComponentToWorldWithParent()（直接设置坐标）
+
+即：Mesh 坐标每帧跟随父组件（胶囊体）变化
+模拟端不执行 PerformMovement，有单独的 Mesh 插值平滑流程
+```
+
+**动画位移提取流程（RootMotion）：**
+
+```
+ParallelUpdateAnimation()
+  → TickAssetPlayerInstances()
+    → UAnimSequence: ExtractRootMotion() → ExtractRootMotionFromRange()
+    → UAnimMontage: ExtractRootMotionFromTrackRange()
+    → UAnimCompositeBase: ExtractRootMotionFromTrack()
+
+以 UAnimSequence 为例：
+  TickAssetPlayer() 设置 Time
+  → ExtractRootMotionFromRange() 提取 StartTransform/EndTransform
+  → GetBoneTransform()
+    → CompressedDataStructure 生成 DecompContext
+    → Time → Seek() → 设置 RelativePos
+    → DecompressBone() 提取 FTransform
+      → GetBoneAtomTranslation() / GetBoneAtomRotation() 都用 RelativePos
+```
+
+**蒙皮数据结构：**
+
+```
+FSkeletalMeshRenderData
+  └── FSkeletalMeshLODRenderData
+       ├── FSkinWeightVertexBuffer（蒙皮权重容器）
+       │   ├── FSkinWeightDataVertexBuffer（骨骼索引/权重数据）
+       │   └── FSkinWeightLookupVertexBuffer（偏移/影响计数查找）
+       └── ActiveBoneIndices[]（活动骨骼）
+
+序列化流程：
+  USkeletalMesh::PostLoad()
+  → FSkeletalMeshRenderData::Serialize()
+  → FSkeletalMeshLODRenderData::Serialize()
+  → SerializeStreamedData()
+  → SkinWeightVertexBuffer 序列化
+  → InitResources() 初始化渲染资源
+```
+
+**Mesh Tick 优化四种选项：**
+
+```
+| 选项                              | 行为                                    | 性能    |
+|----------------------------------|-----------------------------------------|--------|
+| AlwaysTickPoseAndRefreshBones    | 总是 Tick + 刷新骨骼                     | 最耗    |
+| AlwaysTickPose                   | 总是 Tick，只在渲染时刷新骨骼             | 较耗    |
+| OnlyTickMontagesWhenNotRendered  | 不渲染时只更新 Montage，跳过其他          | 较省    |
+| OnlyTickPoseWhenRendered         | 只在渲染时 Tick + 刷新骨骼               | 最省    |
+```
+
+### 对我们类魂项目的关联性分析
+
+```
+| 源码知识点                      | 直接价值                                            | 阶段    |
+|--------------------------------|----------------------------------------------------|--------|
+| 三阶段流程（注册→更新→渲染）     | 理解整体架构，定位性能瓶颈                            | 参考    |
+| UpdateAnimation 内部流程        | 理解我们的变量何时被 AnimBP 读到                      | P0     |
+| 并行 Task 机制                  | 确认 Update/Evaluate 可放子线程（优化#1）             | P0     |
+| 胶囊体/Skeleton/Mesh 关系       | 理解 RootMotion 位移写在骨骼中，Mesh 跟随胶囊体       | P0     |
+| RootMotion 提取流程             | 翻滚 Montage 的 RootMotion 如何被引擎提取和应用       | P0     |
+| Mesh Tick 四种选项              | 不渲染的敌人用 OnlyTickMontages 省性能                | P0     |
+| 蒙皮数据结构                    | 遇到渲染 Bug 时查阅                                  | 参考    |
+| MeshObject 三种类型             | GPUSkin（默认）/ CPUSkin / Static 选择               | 参考    |
+| SwapEvaluationContextBuffers   | 双缓冲机制，避免多线程竞争                            | 深层参考 |
+| 模拟端 Mesh 插值平滑            | 后期多人联机时模拟端动画平滑的底层原理                  | P1     |
+```
+
+**核心结论：**
+
+- 这篇是**最底层的源码参考手册**，不需要现在全部掌握，但在以下场景必须查阅：
+  1. **性能优化**：理解 TickComponent 里到底发生了什么（UpdateAnimation + EvaluateAnimation + Notify），才能针对性优化
+  2. **RootMotion 问题**：翻滚位移不对时，需要理解 ExtractRootMotion 的提取流程
+  3. **多线程相关 Bug**：理解 SwapEvaluationContextBuffers 双缓冲和并行 Task 的执行顺序
+  4. **Mesh Tick 选项**：P0 就应该给不渲染的敌人设置 `OnlyTickMontagesWhenNotRendered`
+- 关键认知：**位移信息存储在 Skeleton 里，Mesh 只是一层皮**——这解释了为什么 RootMotion 是通过骨骼提取位移，而不是直接移动 Mesh
+
+---
+
+## 全部 10 篇完成总览
+
+```
+| #  | 文件名                              | 核心价值                          | P0 优先级 |
+|----|-------------------------------------|----------------------------------|----------|
+| 1  | 搭建动画树思路（Janisa）              | 验证我们3层结构正确性              | ⭐⭐⭐⭐   |
+| 2  | 动画源码总览（书生）                  | 核心类/数据结构/SM源码字典          | ⭐⭐⭐    |
+| 3  | 叠加动画源码（hunter）                | Local vs MeshSpace，后期呼吸/疲劳  | ⭐⭐     |
+| 4  | 战神4战斗系统（GDC）                  | 目标选择/吸附/发票系统，战斗核心    | ⭐⭐⭐⭐⭐ |
+| 5  | 动画性能优化（quabqi）                | 12条优化手段，GameThread核心参考    | ⭐⭐⭐⭐  |
+| 6  | 物理动画（星球大战绝地）              | 死亡布娃娃方案，后期参考            | ⭐⭐     |
+| 7  | GAS框架（幻塔）                      | 验证连招方案+后期GAS评估参考        | ⭐⭐⭐   |
+| 8  | 守望先锋动画管线                      | 命名规范+Ragdoll方案选择参考        | ⭐⭐     |
+| 9  | 动画基础梳理（书生）                  | Notify时序/晚一帧Bug/同步组/混合节点 | ⭐⭐⭐⭐⭐ |
+| 10 | 图解动画系统源码                      | 完整三阶段流程/RootMotion提取/Tick优化| ⭐⭐⭐   |
+```
+
+---
+
+全部 10 篇分析完成。请你先进行本地备份，完成后告诉我，我再帮你整理成独立文档提交到 `参考文献精华/` 文件夹。

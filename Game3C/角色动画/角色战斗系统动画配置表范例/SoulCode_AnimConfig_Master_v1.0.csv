@@ -1,0 +1,322 @@
+Category,SubCategory,Owner,ID,Name,Type,Duration_s,BlendIn_s,BlendOut_s,RootMotion,Damage,StaminaCost,Poise,Notify_Start_s,Notify_End_s,Axis_X,Axis_Y,AnimCount,Phase,SizeCategory,Speed,Range_cm,Condition_In,Condition_Out,Priority,Notes
+GlobalParam,TimeUnit,Global,G001,Montage时间单位,Param,,,,,,,,,,,,,,,,,,,秒（s）
+GlobalParam,FrameRate,Global,G002,目标帧率,Param,,,,,,,,,,,,,,,,,,,30FPS(PS4)/60FPS(PC)
+GlobalParam,InputBuffer,Global,G003,输入缓存时长,Param,0.20,,,,,,,,,,,,,,,,,,InputBufferDuration
+GlobalParam,BlendInDefault,Global,G004,BlendIn默认范围,Param,,,,,,,,,,,,,,,,,,,0.05~0.15s 类魂硬切手感
+GlobalParam,BlendOutDefault,Global,G005,BlendOut默认范围,Param,,,,,,,,,,,,,,,,,,,0.15~0.30s 平滑回到移动
+GlobalParam,RootMotionMode,Global,G006,Root Motion模式,Param,,,,,,,,,,,,,,,,,,,Root Motion From Montages Only
+SizeClass,Small,Global,SC01,小型,SizeClass,,,,,,,,,,,,,,S,,,,44~88半高 17~34半径,犬类/老鼠/蜘蛛
+SizeClass,Medium,Global,SC02,中型人形,SizeClass,,,,,,,,,,,,,,M,,,,88~96半高 34~42半径,小兵/NPC/精英
+SizeClass,Large,Global,SC03,大型,SizeClass,,,,,,,,,,,,,,L,,,,120~200半高 50~90半径,迷你Boss/兽类
+SizeClass,XL,Global,SC04,巨型,SizeClass,,,,,,,,,,,,,,XL,,,,200~400半高 90~180半径,最终Boss/大型生物
+LockOnConfig,Small,Global,LK01,小型锁定配置,LockOn,,,,,,,,,,,,,,,Small,,,spine_01/pelvis,UI Scale 0.8x 距离修正×0.8
+LockOnConfig,Medium,Global,LK02,中型锁定配置,LockOn,,,,,,,,,,,,,,,Medium,,,spine_02,UI Scale 1.0x 距离修正×1.0
+LockOnConfig,Large,Global,LK03,大型锁定配置,LockOn,,,,,,,,,,,,,,,Large,,,spine_02/neck_01,UI Scale 1.2x 距离修正×1.3
+BlendSpace,FreeMove,Player,BS01,BS_Player_FreeMove_2D,2D_BS,,,,,,,,,,Dir(-180~180),Speed(0~600),17,,,,,非锁定探索移动,bIsLockedOn==false
+BlendSpace,LockOn,Player,BS02,BS_Player_LockOn_2D,2D_BS,,,,,,,,,,Right(-1~1),Forward(-1~1),9,,,,,锁定战斗移动,bIsLockedOn==true
+BlendSpace,Patrol,Grunt,BS03,BS_Grunt_Patrol_1D,1D_BS,,,,,,,,,,Speed(0~200),,2,,,,,巡逻移动,
+BlendSpace,CombatMove,Grunt,BS04,BS_Grunt_CombatMove_2D,2D_BS,,,,,,,,,,Forward(-1~1),Right(-1~1),5~9,,,,,战斗绕行,
+BlendSpace,Patrol,Elite,BS05,BS_Elite_Patrol_1D,1D_BS,,,,,,,,,,Speed(0~200),,2,,,,,巡逻移动,
+BlendSpace,CombatMove,Elite,BS06,BS_Elite_CombatMove_2D,2D_BS,,,,,,,,,,Forward(-1~1),Right(-1~1),5~9,,,,,战斗绕行,
+BlendSpace,Walk,MiniBoss,BS07,BS_MiniBoss_Walk_1D,1D_BS,,,,,,,,,,Speed(0~250),,2,,,,,步行移动,
+BlendSpace,CombatMove,MiniBoss,BS08,BS_MiniBoss_CombatMove_2D,2D_BS,,,,,,,,,,Forward(-1~1),Right(-1~1),5~9,,,,,战斗绕行,
+BlendSpace,CombatMove_P1,TutBoss,BS09,BS_TutBoss_P1_CombatMove_2D,2D_BS,,,,,,,,,,Forward(-1~1),Right(-1~1),5~9,P1,,,,战斗绕行Phase1,
+BlendSpace,CombatMove_P2,TutBoss,BS10,BS_TutBoss_P2_CombatMove_2D,2D_BS,,,,,,,,,,Forward(-1~1),Right(-1~1),5~9,P2,,,,战斗绕行Phase2,
+BlendSpace,CombatMove,FinalBoss,BS11,BS_FBoss_CombatMove_2D,2D_BS,,,,,,,,,,Forward(-1~1),Right(-1~1),5~9,,,,,战斗绕行,
+BlendSpace,CombatMove,Mimic,BS12,BS_Mimic_CombatMove_1D,1D_BS,,,,,,,,,,Speed(0~350),,2,,,,,爬行移动,
+StateMachine,Idle,Player,SM01,Idle,AnimSeq_Loop,,,,,,,,,,,,,,,,,Speed==0 && !bIsFalling,Speed>0 || bIsFalling,,AS_Player_Idle
+StateMachine,Movement,Player,SM02,Movement,BlendSpace,,,,,,,,,,,,,,,,,Speed>0 && !bIsFalling && Gait!=Sprint,Speed==0 || bIsFalling || Gait==Sprint,,用bIsLockedOn选BS
+StateMachine,Sprint,Player,SM03,Sprint,AnimSeq_Loop,,,,,,,,,,,,,,,,,Gait==Sprint && !bIsFalling,Gait!=Sprint || bIsFalling,,AS_Player_Sprint
+StateMachine,JumpStart,Player,SM04,JumpStart,AnimSeq_Once,,,,,,,,,,,,,,,,,bIsFalling && !bWasAlreadyFalling,动画播完→InAir,,AS_Player_JumpStart
+StateMachine,InAir,Player,SM05,InAir,AnimSeq_Loop,,,,,,,,,,,,,,,,,,bIsGrounded→Land,,AS_Player_FallLoop
+StateMachine,Land,Player,SM06,Land,AnimSeq_Once,,,,,,,,,,,,,,,,,bIsGrounded && WasInAir,动画播完→Idle/Movement,,AS_Player_Land
+StateMachine,Dead,Player,SM07,Dead,Pose,,,,,,,,,,,,,,,,,bIsDead,终态不退出,,AS_Player_Death_LastFrame
+StateMachine,Idle,Grunt,SM08,Idle,AnimSeq_Loop,,,,,,,,,,,,,,,,,,,,AS_Grunt_Idle 待机/巡逻待机
+StateMachine,Patrol,Grunt,SM09,Patrol,1D_BS,,,,,,,,,,,,,,,,,,,,BS_Grunt_Patrol_1D
+StateMachine,Chase,Grunt,SM10,Chase,AnimSeq_Loop,,,,,,,,,,,,,,,,,,,,AS_Grunt_Run
+StateMachine,CombatMove,Grunt,SM11,Combat_Move,2D_BS,,,,,,,,,,,,,,,,,,,,BS_Grunt_CombatMove_2D
+StateMachine,Dead,Grunt,SM12,Dead,Pose,,,,,,,,,,,,,,,,,,,,AS_Grunt_Death_LastFrame
+StateMachine,Idle,Elite,SM13,Idle,AnimSeq,,,,,,,,,,,,,,,,,,,,AS_Elite_Idle
+StateMachine,Patrol,Elite,SM14,Patrol,1D_BS,,,,,,,,,,,,,,,,,,,,BS_Elite_Patrol_1D
+StateMachine,Chase,Elite,SM15,Chase,AnimSeq,,,,,,,,,,,,,,,,,,,,AS_Elite_Run
+StateMachine,CombatMove,Elite,SM16,Combat_Move,2D_BS,,,,,,,,,,,,,,,,,,,,BS_Elite_CombatMove_2D
+StateMachine,Guard,Elite,SM17,Guard,AnimSeq,,,,,,,,,,,,,,,,,,,,AS_Elite_GuardIdle
+StateMachine,Dead,Elite,SM18,Dead,Pose,,,,,,,,,,,,,,,,,,,,AS_Elite_Death_LastFrame
+StateMachine,Idle,MiniBoss,SM19,Idle,AnimSeq,,,,,,,,,,,,,,,,,,,,AS_MiniBoss_Idle
+StateMachine,Walk,MiniBoss,SM20,Walk,1D_BS,,,,,,,,,,,,,,,,,,,,BS_MiniBoss_Walk_1D
+StateMachine,Chase,MiniBoss,SM21,Chase,AnimSeq,,,,,,,,,,,,,,,,,,,,AS_MiniBoss_Run
+StateMachine,CombatMove,MiniBoss,SM22,Combat_Move,2D_BS,,,,,,,,,,,,,,,,,,,,BS_MiniBoss_CombatMove_2D
+StateMachine,Phase2Idle,MiniBoss,SM23,Phase2_Idle,AnimSeq,,,,,,,,,,,,,P2,,,,,,AS_MiniBoss_Phase2_Idle
+StateMachine,Enraged,MiniBoss,SM24,Enraged,AnimSeq,,,,,,,,,,,,,,,,,,,,AS_MiniBoss_Enraged_Idle
+StateMachine,Dead,MiniBoss,SM25,Dead,Pose,,,,,,,,,,,,,,,,,,,,AS_MiniBoss_Death_LastFrame
+StateMachine,Disguised,Mimic,SM26,Disguised,AnimSeq_Loop,,,,,,,,,,,,,,,,,,,,AS_Mimic_ChestClosed 微呼吸
+StateMachine,Awakening,Mimic,SM27,Awakening,Montage覆盖,,,,,,,,,,,,,,,,,,,,破箱而出
+StateMachine,CombatIdle,Mimic,SM28,Combat_Idle,AnimSeq,,,,,,,,,,,,,,,,,,,,AS_Mimic_CombatIdle
+StateMachine,CombatMove,Mimic,SM29,Combat_Move,1D_BS,,,,,,,,,,,,,,,,,,,,BS_Mimic_CombatMove_1D
+StateMachine,Dead,Mimic,SM30,Dead,Pose,,,,,,,,,,,,,,,,,,,,AS_Mimic_Death_LastFrame
+Montage,Roll,Player,M001,AM_Player_Roll_F,Roll,0.60,0.05,0.20,✅,,30,,,,,,,,,,,,前方翻滚
+Montage,Roll,Player,M002,AM_Player_Roll_B,Roll,0.60,0.05,0.20,✅,,30,,,,,,,,,,,,后方翻滚
+Montage,Roll,Player,M003,AM_Player_Roll_L,Roll,0.55,0.05,0.20,✅,,30,,,,,,,,,,,,左方翻滚
+Montage,Roll,Player,M004,AM_Player_Roll_R,Roll,0.55,0.05,0.20,✅,,30,,,,,,,,,,,,右方翻滚
+Montage,Roll,Player,M005,AM_Player_Roll_FL,Roll,0.58,0.05,0.20,✅,,30,,,,,,,,,,,,前左翻滚
+Montage,Roll,Player,M006,AM_Player_Roll_FR,Roll,0.58,0.05,0.20,✅,,30,,,,,,,,,,,,前右翻滚
+Montage,Roll,Player,M007,AM_Player_Roll_BL,Roll,0.58,0.05,0.20,✅,,30,,,,,,,,,,,,后左翻滚
+Montage,Roll,Player,M008,AM_Player_Roll_BR,Roll,0.58,0.05,0.20,✅,,30,,,,,,,,,,,,后右翻滚
+Montage,Roll,Player,M009,AM_Player_Backstep,Backstep,0.45,0.05,0.20,✅,,20,,,,,,,,,,,,后撤步
+Montage,LightCombo,Player,M010,AM_Sword_LightCombo,Attack,2.40,0.08,0.20,✅,,20/段,,,,,,,,,,,,,直剑轻击3Section
+Montage,Heavy,Player,M011,AM_Sword_Heavy,Attack,1.00,0.10,0.25,✅,,35,,,,,,,,,,,,,直剑重击
+Montage,RunAttack,Player,M012,AM_Sword_RunAttack,Attack,0.85,0.05,0.20,✅,,25,,,,,,,,,,,,,直剑冲刺攻击
+Montage,JumpAttack,Player,M013,AM_Sword_JumpAttack,Attack,0.90,0.05,0.25,✅,,30,,,,,,,,,,,,,直剑跳劈
+Montage,LightCombo,Player,M014,AM_GS_LightCombo,Attack,3.00,0.10,0.25,✅,,28/段,,,,,,,,,,,,,大剑轻击3Section
+Montage,Heavy,Player,M015,AM_GS_Heavy,Attack,1.40,0.12,0.30,✅,,45,,,,,,,,,,,,,大剑重击
+Montage,RunAttack,Player,M016,AM_GS_RunAttack,Attack,1.00,0.08,0.25,✅,,32,,,,,,,,,,,,,大剑冲刺攻击
+Montage,JumpAttack,Player,M017,AM_GS_JumpAttack,Attack,1.10,0.05,0.25,✅,,38,,,,,,,,,,,,,大剑跳劈
+Montage,LightCombo,Player,M018,AM_CS_LightCombo,Attack,2.10,0.06,0.18,✅,,18/段,,,,,,,,,,,,,曲剑轻击3Section
+Montage,Heavy,Player,M019,AM_CS_Heavy,Attack,0.90,0.08,0.22,✅,,30,,,,,,,,,,,,,曲剑重击
+Montage,RunAttack,Player,M020,AM_CS_RunAttack,Attack,0.75,0.05,0.18,✅,,22,,,,,,,,,,,,,曲剑冲刺攻击
+Montage,JumpAttack,Player,M021,AM_CS_JumpAttack,Attack,0.85,0.05,0.20,✅,,28,,,,,,,,,,,,,曲剑跳劈
+Montage,LightCombo,Player,M022,AM_Axe_LightCombo,Attack,2.70,0.10,0.25,✅,,25/段,,,,,,,,,,,,,斧轻击3Section
+Montage,Heavy,Player,M023,AM_Axe_Heavy,Attack,1.20,0.12,0.28,✅,,40,,,,,,,,,,,,,斧重击
+Montage,RunAttack,Player,M024,AM_Axe_RunAttack,Attack,0.90,0.06,0.22,✅,,28,,,,,,,,,,,,,斧冲刺攻击
+Montage,JumpAttack,Player,M025,AM_Axe_JumpAttack,Attack,1.00,0.05,0.25,✅,,35,,,,,,,,,,,,,斧跳劈
+Montage,LightCombo,Player,M026,AM_Spear_LightCombo,Attack,2.50,0.08,0.22,✅,,22/段,,,,,,,,,,,,,矛轻击3Section
+Montage,Heavy,Player,M027,AM_Spear_Heavy,Attack,1.10,0.10,0.25,✅,,38,,,,,,,,,,,,,矛重击
+Montage,RunAttack,Player,M028,AM_Spear_RunAttack,Attack,0.80,0.05,0.20,✅,,26,,,,,,,,,,,,,矛冲刺攻击
+Montage,JumpAttack,Player,M029,AM_Spear_JumpAttack,Attack,0.95,0.05,0.22,✅,,32,,,,,,,,,,,,,矛跳劈
+Montage,HitReact,Player,M030,AM_Player_HitReact_F,HitReact,0.50,0.05,0.20,❌,,,,,,,,,,,,,,,前方轻受击
+Montage,HitReact,Player,M031,AM_Player_HitReact_B,HitReact,0.50,0.05,0.20,❌,,,,,,,,,,,,,,,后方轻受击
+Montage,HitReact,Player,M032,AM_Player_HitReact_L,HitReact,0.45,0.05,0.20,❌,,,,,,,,,,,,,,,左方轻受击
+Montage,HitReact,Player,M033,AM_Player_HitReact_R,HitReact,0.45,0.05,0.20,❌,,,,,,,,,,,,,,,右方轻受击
+Montage,HitReact,Player,M034,AM_Player_HitReact_Heavy,HitReact,0.80,0.05,0.25,❌,,,,,,,,,,,,,,,重受击
+Montage,Knockdown,Player,M035,AM_Player_Knockdown,HitReact,1.20,0.05,0.15,❌,,,,,,,,,,,,,,,击倒
+Montage,GetUp,Player,M036,AM_Player_GetUp,HitReact,0.80,0.10,0.25,❌,,,,,,,,,,,,,,,倒地起身
+Montage,Death,Player,M037,AM_Player_Death_F,Death,1.20,0.05,0.00,✅,,,,,,,,,,,,,,,前倒死亡
+Montage,Death,Player,M038,AM_Player_Death_B,Death,1.10,0.05,0.00,✅,,,,,,,,,,,,,,,后倒死亡
+Montage,Execution,Player,M039,AM_Player_Backstab,Execution,2.50,0.08,0.25,✅,,,,,,,,,,,,,,,背刺处决(施放方)
+Montage,Execution,Player,M040,AM_Player_Riposte,Execution,2.80,0.08,0.25,✅,,,,,,,,,,,,,,,弹反处决(施放方)
+Montage,Execution,Player,M041,AM_Player_BeingExecuted,Execution,2.50,0.05,0.00,✅,,,,,,,,,,,,,,,被处决(受害方)
+Montage,Execution,Player,M042,AM_Player_ViscAttack,Execution,3.00,0.08,0.25,✅,,,,,,,,,,,,,,,血源式内脏攻击
+Montage,Guard,Player,M043,AM_Player_GuardHold,Guard,Loop,0.08,0.15,❌,,,,,,,,,,,,,,,盾防持续
+Montage,Guard,Player,M044,AM_Player_GuardBreak,Guard,0.80,0.05,0.20,❌,,,,,,,,,,,,,,,破防硬直
+Montage,Parry,Player,M045,AM_Player_Parry,Parry,0.50,0.05,0.20,❌,,,,,,,,,,,,,,,弹反动作
+Montage,Parry,Player,M046,AM_Player_ParrySuccess,Parry,0.30,0.05,0.15,❌,,,,,,,,,,,,,,,弹反成功反馈
+Montage,Interact,Player,M047,AM_Player_PickUp,Interact,0.80,0.10,0.25,❌,,,,,,,,,,,,,,,,拾取物品 锁定输入
+Montage,Interact,Player,M048,AM_Player_OpenDoor,Interact,1.20,0.10,0.25,✅,,,,,,,,,,,,,,,,开门 锁定输入
+Montage,Interact,Player,M049,AM_Player_OpenChest,Interact,1.50,0.10,0.25,❌,,,,,,,,,,,,,,,,开箱 锁定输入
+Montage,Interact,Player,M050,AM_Player_DrinkEstus,Interact,1.80,0.08,0.20,❌,,,,,,,,,,,,,,,,喝药 可被打断
+Montage,Interact,Player,M051,AM_Player_SitBonfire,Interact,2.00,0.15,0.25,✅,,,,,,,,,,,,,,,,坐篝火 锁定输入
+Montage,Interact,Player,M052,AM_Player_EnterFogGate,Interact,1.50,0.10,0.20,✅,,,,,,,,,,,,,,,,进雾门 锁定输入
+Montage,ItemUse,Player,M053,AM_Player_ThrowItem,ItemUse,0.70,0.08,0.20,❌,,,,,,,,,,,,,,,,投掷道具
+Montage,ItemUse,Player,M054,AM_Player_ApplyBuff,ItemUse,1.20,0.10,0.25,❌,,,,,,,,,,,,,,,,上Buff/涂松脂
+Montage,ItemUse,Player,M055,AM_Player_UseLantern,ItemUse,0.60,0.08,0.20,❌,,,,,,,,,,,,,,,,开随身灯
+Montage,ItemUse,Player,M056,AM_Player_SwitchWeapon,ItemUse,0.40,0.08,0.15,❌,,,,,,,,,,,,,,,,换武器
+Montage,LightAtk,Grunt,M057,AM_Grunt_LightAtk_01,Attack,0.80,0.08,0.20,✅(短),15~25,,,,,,,,,,,,,,小兵轻击1
+Montage,LightAtk,Grunt,M058,AM_Grunt_LightAtk_02,Attack,0.85,0.08,0.20,✅(短),18~28,,,,,,,,,,,,,,小兵轻击2
+Montage,ComboAtk,Grunt,M059,AM_Grunt_ComboAtk,Attack,1.60,0.08,0.22,✅,15+18,,,,,,,,,,,,,,小兵两连段
+Montage,HeavyAtk,Grunt,M060,AM_Grunt_HeavyAtk,Attack,1.10,0.10,0.25,✅(中),30~45,,,,,,,,,,,,,,小兵重击
+Montage,HitReact,Grunt,M061,AM_Grunt_HitReact_Light,HitReact,0.50,0.05,0.18,❌,,,,,,,,,,,,,,,小兵轻受击
+Montage,HitReact,Grunt,M062,AM_Grunt_HitReact_Heavy,HitReact,0.80,0.05,0.22,❌,,,,,,,,,,,,,,,小兵重受击
+Montage,Stagger,Grunt,M063,AM_Grunt_Stagger,HitReact,1.00,0.05,0.20,❌,,,,,,,,,,,,,,,小兵失衡
+Montage,Death,Grunt,M064,AM_Grunt_Death_F,Death,1.00,0.05,0.00,✅,,,,,,,,,,,,,,,小兵前倒死亡
+Montage,Death,Grunt,M065,AM_Grunt_Death_B,Death,1.00,0.05,0.00,✅,,,,,,,,,,,,,,,小兵后倒死亡
+Montage,Execution,Grunt,M066,AM_Grunt_BeingBackstabbed,Execution,2.50,0.05,0.00,✅,,,,,,,,,,,,,,,小兵被背刺
+Montage,Execution,Grunt,M067,AM_Grunt_BeingRiposted,Execution,2.80,0.05,0.00,✅,,,,,,,,,,,,,,,小兵被弹反处决
+Montage,LightAtk,Elite,M068,AM_Elite_Light_01,Attack,0.75,0.08,0.20,✅,25~35,,,,,,,,,,,,,,精英轻击1
+Montage,LightAtk,Elite,M069,AM_Elite_Light_02,Attack,0.80,0.08,0.20,✅,28~38,,,,,,,,,,,,,,精英轻击2
+Montage,LightAtk,Elite,M070,AM_Elite_Light_03,Attack,0.90,0.08,0.20,✅,32~42,,,,,,,,,,,,,,精英轻击3终结段
+Montage,ComboAtk,Elite,M071,AM_Elite_Combo_3Hit,Attack,2.40,0.08,0.22,✅,25+28+35,,,,,,,,,,,,,,精英三连段有追踪
+Montage,HeavyAtk,Elite,M072,AM_Elite_Heavy,Attack,1.20,0.10,0.25,✅(大位移),50~70,,,,,,,,,,,,,,精英重击霸体全程
+Montage,ChargeAtk,Elite,M073,AM_Elite_ChargeAtk,Attack,1.50,0.08,0.22,✅(长位移),45~60,,,,,,,,,,,,,,精英冲刺突进
+Montage,Guard,Elite,M074,AM_Elite_Guard,Guard,Loop,0.08,0.15,❌,,,,,,,,,,,,,,,精英举盾
+Montage,GuardCounter,Elite,M075,AM_Elite_GuardCounter,Attack,0.90,0.08,0.20,✅,35~45,,,,,,,,,,,,,,精英格挡反击
+Montage,Kick,Elite,M076,AM_Elite_Kick,Attack,0.60,0.05,0.18,✅(短),10(破防),,,,,,,,,,,,,,精英踢击破防
+Montage,HitReact,Elite,M077,AM_Elite_HitReact_Light,HitReact,0.45,0.05,0.18,❌,,,,,,,,,,,,,,,精英轻受击
+Montage,HitReact,Elite,M078,AM_Elite_HitReact_Heavy,HitReact,0.70,0.05,0.22,❌,,,,,,,,,,,,,,,精英重受击
+Montage,Stagger,Elite,M079,AM_Elite_Stagger,HitReact,1.10,0.05,0.20,❌,,,,,,,,,,,,,,,精英失衡可处决
+Montage,Death,Elite,M080,AM_Elite_Death_F,Death,1.10,0.05,0.00,✅,,,,,,,,,,,,,,,精英前倒死亡
+Montage,Death,Elite,M081,AM_Elite_Death_B,Death,1.00,0.05,0.00,✅,,,,,,,,,,,,,,,精英后倒死亡
+Montage,Execution,Elite,M082,AM_Elite_BeingBackstabbed,Execution,2.50,0.05,0.00,✅,,,,,,,,,,,,,,,精英被背刺
+Montage,Execution,Elite,M083,AM_Elite_BeingRiposted,Execution,2.80,0.05,0.00,✅,,,,,,,,,,,,,,,精英被弹反处决
+Montage,Swipe,MiniBoss,M084,AM_MiniBoss_P1_Swipe_L,Attack,1.00,0.08,0.22,✅,40~55,,,,,,,,,P1,,,,迷你Boss P1左横扫
+Montage,Swipe,MiniBoss,M085,AM_MiniBoss_P1_Swipe_R,Attack,1.00,0.08,0.22,✅,40~55,,,,,,,,,P1,,,,迷你Boss P1右横扫
+Montage,Slam,MiniBoss,M086,AM_MiniBoss_P1_Slam,Attack,1.40,0.10,0.25,✅,65~80,,,,,,,,,P1,,,,迷你Boss P1下砸
+Montage,ComboAtk,MiniBoss,M087,AM_MiniBoss_P1_Combo_2Hit,Attack,1.80,0.08,0.22,✅,40+50,,,,,,,,,P1,,,,迷你Boss P1二连
+Montage,Charge,MiniBoss,M088,AM_MiniBoss_P1_Charge,Attack,1.60,0.08,0.22,✅(长),55~70,,,,,,,,,P1,,,,迷你Boss P1冲锋
+Montage,JumpAtk,MiniBoss,M089,AM_MiniBoss_P1_JumpAtk,Attack,1.80,0.08,0.25,✅,70~90,,,,,,,,,P1,,,,迷你Boss P1跳劈AOE
+Montage,ComboAtk,MiniBoss,M090,AM_MiniBoss_P2_Combo_3Hit,Attack,2.40,0.08,0.22,✅,45+50+65,,,,,,,,,P2,,,,迷你Boss P2三连
+Montage,Slam,MiniBoss,M091,AM_MiniBoss_P2_Slam_AOE,Attack,1.60,0.10,0.25,✅,80~100,,,,,,,,,P2,,,,迷你Boss P2 AOE下砸
+Montage,Roar,MiniBoss,M092,AM_MiniBoss_P2_RageRoar,Transition,2.00,0.10,0.25,❌,,,,,,,,,,P2,,,,迷你Boss P2咆哮转阶段
+Montage,SpinAtk,MiniBoss,M093,AM_MiniBoss_P2_SpinAtk,Attack,1.80,0.08,0.22,✅,55(×2),,,,,,,,,P2,,,,迷你Boss P2旋转攻击
+Montage,HitReact,MiniBoss,M094,AM_MiniBoss_HitReact,HitReact,0.60,0.05,0.20,❌,,,,,,,,,,,,,,迷你Boss轻硬直
+Montage,Stagger,MiniBoss,M095,AM_MiniBoss_Stagger,HitReact,1.20,0.05,0.22,❌,,,,,,,,,,,,,,迷你Boss重硬直可处决
+Montage,Death,MiniBoss,M096,AM_MiniBoss_Death,Death,2.50,0.05,0.00,✅,,,,,,,,,,,,,,迷你Boss演出级死亡
+Montage,LightAtk,TutBoss,M097,AM_TutBoss_P1_Light_01,Attack,0.80,0.08,0.20,✅(短),30,,,,,,,,,P1,,,,教程Boss P1直剑横��
+Montage,LightAtk,TutBoss,M098,AM_TutBoss_P1_Light_02,Attack,0.85,0.08,0.20,✅(短),33,,,,,,,,,P1,,,,教程Boss P1直剑竖斩
+Montage,ComboAtk,TutBoss,M099,AM_TutBoss_P1_Combo_3Hit,Attack,2.30,0.08,0.22,✅,30+33+40,,,,,,,,,P1,,,,教程Boss P1三连段
+Montage,HeavyAtk,TutBoss,M100,AM_TutBoss_P1_Heavy,Attack,1.10,0.10,0.25,✅(中),50,,,,,,,,,P1,,,,教程Boss P1蓄力重击
+Montage,ShieldBash,TutBoss,M101,AM_TutBoss_P1_ShieldBash,Attack,0.70,0.05,0.18,✅(短),15(破防),,,,,,,,,P1,,,,教程Boss P1盾击
+Montage,Charge,TutBoss,M102,AM_TutBoss_P1_Charge,Attack,1.30,0.08,0.22,✅(长),45,,,,,,,,,P1,,,,教程Boss P1冲撞
+Montage,Guard,TutBoss,M103,AM_TutBoss_P1_Guard,Guard,Loop,0.08,0.15,❌,,,,,,,,,,P1,,,,教程Boss P1举盾
+Montage,Transform,TutBoss,M104,AM_TutBoss_P2_Transform,Transition,3.50,0.10,0.25,❌,,,,,,,,,,P2,,,,教程Boss变身演出全程霸体+AOE
+Montage,WildAtk,TutBoss,M105,AM_TutBoss_P2_Wild_01,Attack,0.70,0.05,0.18,✅,35,,,,,,,,,P2,,,,教程Boss P2狂暴爪击
+Montage,WildAtk,TutBoss,M106,AM_TutBoss_P2_Wild_02,Attack,0.75,0.05,0.18,✅,38,,,,,,,,,P2,,,,教程Boss P2狂暴爪击变体
+Montage,ComboAtk,TutBoss,M107,AM_TutBoss_P2_Combo_4Hit,Attack,2.80,0.08,0.22,✅,35+35+40+55,,,,,,,,,P2,,,,教程Boss P2四连段
+Montage,LeapAtk,TutBoss,M108,AM_TutBoss_P2_LeapAtk,Attack,1.60,0.08,0.25,✅(大),60,,,,,,,,,P2,,,,教程Boss P2跳扑攻击
+Montage,GrabAtk,TutBoss,M109,AM_TutBoss_P2_GrabAtk,Attack,2.80,0.08,0.25,✅,80,,,,,,,,,P2,,,,教程Boss P2抓取攻击
+Montage,Roar,TutBoss,M110,AM_TutBoss_P2_Roar,Special,1.50,0.08,0.22,❌,—(推开),,,,,,,,,P2,,,,教程Boss P2咆哮弹开
+Montage,HitReact,TutBoss,M111,AM_TutBoss_HitReact,HitReact,0.55,0.05,0.20,❌,,,,,,,,,,,,,,教程Boss轻硬直
+Montage,Stagger,TutBoss,M112,AM_TutBoss_Stagger,HitReact,1.30,0.05,0.22,❌,,,,,,,,,,,,,,教程Boss重硬直可处决
+Montage,Death,TutBoss,M113,AM_TutBoss_Death,Death,3.00,0.05,0.00,✅,,,,,,,,,,,,,,教程Boss死亡演出
+Montage,Execution,TutBoss,M114,AM_TutBoss_BeingRiposted,Execution,2.80,0.05,0.00,✅,,,,,,,,,,,,,,教程Boss被处决
+Montage,Roll,HostileNPC,M115,AM_NPC_Roll_F/B/L/R,Roll,0.55,0.05,0.20,✅,,,,,,,,,,,,,,NPC翻滚4方向
+Montage,Backstep,HostileNPC,M116,AM_NPC_Backstep,Backstep,0.45,0.05,0.20,✅,,,,,,,,,,,,,,NPC后撤步
+Montage,Parry,HostileNPC,M117,AM_NPC_Parry,Parry,0.50,0.05,0.20,❌,,,,,,,,,,,,,,NPC弹反
+Montage,Heal,HostileNPC,M118,AM_NPC_DrinkEstus,Interact,1.80,0.08,0.20,❌,,,,,,,,,,,,,,NPC喝药可被打断
+Montage,Execution,HostileNPC,M119,AM_NPC_Backstab,Execution,2.50,0.08,0.25,✅,,,,,,,,,,,,,,NPC���刺(对玩家)
+Montage,Execution,HostileNPC,M120,AM_NPC_Riposte,Execution,2.80,0.08,0.25,✅,,,,,,,,,,,,,,NPC弹反处决(对玩家)
+Montage,HitReact,HostileNPC,M121,AM_NPC_HitReact_Light,HitReact,0.50,0.05,0.20,❌,,,,,,,,,,,,,,NPC轻受击
+Montage,HitReact,HostileNPC,M122,AM_NPC_HitReact_Heavy,HitReact,0.75,0.05,0.22,❌,,,,,,,,,,,,,,NPC重受击
+Montage,Stagger,HostileNPC,M123,AM_NPC_Stagger,HitReact,1.10,0.05,0.20,❌,,,,,,,,,,,,,,NPC失衡
+Montage,Death,HostileNPC,M124,AM_NPC_Death,Death,1.20,0.05,0.00,✅,,,,,,,,,,,,,,NPC死亡
+Montage,Execution,HostileNPC,M125,AM_NPC_BeingBackstabbed,Execution,2.50,0.05,0.00,✅,,,,,,,,,,,,,,NPC被背刺
+Montage,Execution,HostileNPC,M126,AM_NPC_BeingRiposted,Execution,2.80,0.05,0.00,✅,,,,,,,,,,,,,,NPC被弹反处决
+Montage,Slash,FinalBoss,M127,AM_FBoss_P1_Slash_01,Attack,1.10,0.08,0.22,✅,50,,,,,,,,,P1,,,,最终Boss P1横斩
+Montage,Slash,FinalBoss,M128,AM_FBoss_P1_Slash_02,Attack,1.15,0.08,0.22,✅,55,,,,,,,,,P1,,,,最终Boss P1反手横斩
+Montage,Thrust,FinalBoss,M129,AM_FBoss_P1_Thrust,Attack,1.00,0.08,0.20,✅,60,,,,,,,,,P1,,,,最终Boss P1突刺
+Montage,ComboAtk,FinalBoss,M130,AM_FBoss_P1_Combo_3Hit,Attack,2.80,0.08,0.22,✅,50+55+70,,,,,,,,,P1,,,,最终Boss P1三连
+Montage,HeavyAtk,FinalBoss,M131,AM_FBoss_P1_Heavy,Attack,1.50,0.10,0.25,✅,80,,,,,,,,,P1,,,,最终Boss P1蓄力劈
+Montage,Sweep,FinalBoss,M132,AM_FBoss_P1_Sweep_360,Attack,1.60,0.08,0.22,✅,60,,,,,,,,,P1,,,,最终Boss P1 360横扫
+Montage,JumpSlam,FinalBoss,M133,AM_FBoss_P1_JumpSlam,Attack,2.00,0.08,0.25,✅,85(AOE),,,,,,,,,P1,,,,最终Boss P1跳砸
+Montage,WalkSlash,FinalBoss,M134,AM_FBoss_P1_Walk_Slash,Attack,1.20,0.08,0.22,✅,55,,,,,,,,,P1,,,,最终Boss P1行进斩
+Montage,Transition,FinalBoss,M135,AM_FBoss_P2_PhaseTransition,Transition,4.00,0.12,0.28,❌,30(AOE),,,,,,,,,P2,,,,最终Boss P2阶段转换
+Montage,ComboAtk,FinalBoss,M136,AM_FBoss_P2_FastCombo_4Hit,Attack,2.60,0.08,0.22,✅,45+45+50+65,,,,,,,,,P2,,,,最终Boss P2四连快砍
+Montage,DashSlash,FinalBoss,M137,AM_FBoss_P2_Dash_Slash,Attack,1.20,0.05,0.20,✅,60,,,,,,,,,P2,,,,最终Boss P2瞬移突进斩
+Montage,WaveAtk,FinalBoss,M138,AM_FBoss_P2_Wave_Atk,Attack,1.50,0.08,0.22,✅,50(远程),,,,,,,,,P2,,,,最终Boss P2剑气波
+Montage,AOE,FinalBoss,M139,AM_FBoss_P2_AOE_Explosion,Attack,2.00,0.10,0.25,✅,70(AOE),,,,,,,,,P2,,,,最终Boss P2范围爆炸
+Montage,GrabAtk,FinalBoss,M140,AM_FBoss_P2_GrabAtk,Attack,3.00,0.08,0.25,✅,100,,,,,,,,,P2,,,,最终Boss P2抓取处决
+Montage,ComboAtk,FinalBoss,M141,AM_FBoss_P2_Combo_5Hit,Attack,3.50,0.08,0.22,✅,40+40+45+50+70,,,,,,,,,P2,,,,最终Boss P2五连
+Montage,Transition,FinalBoss,M142,AM_FBoss_P3_PhaseTransition,Transition,5.00,0.12,0.30,❌,50(全场AOE),,,,,,,,,P3,,,,最终Boss P3终极转换
+Montage,ComboAtk,FinalBoss,M143,AM_FBoss_P3_BerserkCombo_6Hit,Attack,4.00,0.08,0.22,✅,40×5+80,,,,,,,,,P3,,,,最终Boss P3六连暴走
+Montage,TeleportSlash,FinalBoss,M144,AM_FBoss_P3_TeleportSlash,Attack,1.00,0.05,0.18,✅,70,,,,,,,,,P3,,,,最终Boss P3瞬移斩
+Montage,UltSlam,FinalBoss,M145,AM_FBoss_P3_UltimateSlam,Attack,2.50,0.10,0.25,✅,120(AOE),,,,,,,,,P3,,,,最终Boss P3终极下砸
+Montage,Barrage,FinalBoss,M146,AM_FBoss_P3_Barrage,Attack,3.00,0.08,0.22,✅,30×8,,,,,,,,,P3,,,,最终Boss P3连续弹幕
+Montage,Buff,FinalBoss,M147,AM_FBoss_P3_Enrage_Buff,Special,2.00,0.10,0.25,❌,,,,,,,,,,P3,,,,最终Boss P3自身强化
+Montage,GrabAtk,FinalBoss,M148,AM_FBoss_P3_FinalStand,Attack,3.50,0.08,0.25,✅,150(处决),,,,,,,,,P3,,,,最终Boss P3濒死抓取
+Montage,HitReact,FinalBoss,M149,AM_FBoss_HitReact,HitReact,0.60,0.05,0.20,❌,,,,,,,,,,,,,,最终Boss轻硬直
+Montage,Stagger,FinalBoss,M150,AM_FBoss_Stagger,HitReact,1.50,0.05,0.25,❌,,,,,,,,,,,,,,最终Boss重硬直可处决
+Montage,Death,FinalBoss,M151,AM_FBoss_Death,Death,5.00,0.05,0.00,✅,,,,,,,,,,,,,,最终Boss终极死亡演出
+Montage,Execution,FinalBoss,M152,AM_FBoss_BeingRiposted,Execution,3.50,0.05,0.00,✅,,,,,,,,,,,,,,最终Boss被处决
+Montage,Bite,Dog,M153,AM_Dog_Bite,Attack,0.50,0.05,0.15,✅(短),15~25,,,,,,,,,,Small,,,,犬类快速撕咬
+Montage,Lunge,Dog,M154,AM_Dog_Lunge,Attack,0.70,0.05,0.18,✅(长),20~30,,,,,,,,,,Small,,,,犬类扑咬
+Montage,ComboAtk,Dog,M155,AM_Dog_Combo_2Bite,Attack,0.90,0.05,0.18,✅,15+20,,,,,,,,,,Small,,,,犬类两连咬
+Montage,HitReact,Dog,M156,AM_Dog_HitReact,HitReact,0.40,0.03,0.15,❌,,,,,,,,,,,Small,,,,犬类受击一刀即硬直
+Montage,Death,Dog,M157,AM_Dog_Death,Death,0.80,0.05,0.00,✅,,,,,,,,,,,Small,,,,犬类死亡
+Montage,Swipe,LargeBeast,M158,AM_Beast_Swipe_L,Attack,1.00,0.08,0.22,✅,40~55,,,,,,,,,,Large,,,,巨兽左爪扫
+Montage,Swipe,LargeBeast,M159,AM_Beast_Swipe_R,Attack,1.00,0.08,0.22,✅,40~55,,,,,,,,,,Large,,,,巨兽右爪扫
+Montage,Slam,LargeBeast,M160,AM_Beast_Slam,Attack,1.40,0.10,0.25,✅,60~80,,,,,,,,,,Large,,,,巨兽头锤下砸
+Montage,Charge,LargeBeast,M161,AM_Beast_Charge,Attack,1.80,0.08,0.22,✅(长),50~65,,,,,,,,,,Large,,,,巨兽冲撞
+Montage,Bite,LargeBeast,M162,AM_Beast_Bite,Attack,0.90,0.06,0.20,✅,35~50,,,,,,,,,,Large,,,,巨兽啃咬
+Montage,ComboAtk,LargeBeast,M163,AM_Beast_Combo,Attack,2.00,0.08,0.22,✅,40+45+55,,,,,,,,,,Large,,,,巨兽三连爪
+Montage,Roar,LargeBeast,M164,AM_Beast_Roar,Special,1.20,0.08,0.22,❌,—,,,,,,,,,,Large,,,,巨兽吼叫推开/Debuff
+Montage,HitReact,LargeBeast,M165,AM_Beast_HitReact,HitReact,0.55,0.05,0.20,❌,,,,,,,,,,,Large,,,,巨兽受击
+Montage,Stagger,LargeBeast,M166,AM_Beast_Stagger,HitReact,1.20,0.05,0.22,❌,,,,,,,,,,,Large,,,,巨兽重硬直
+Montage,Death,LargeBeast,M167,AM_Beast_Death,Death,2.00,0.05,0.00,✅,,,,,,,,,,,Large,,,,巨兽死亡
+Montage,DiveAtk,FlyingInsect,M168,AM_Insect_DiveAtk,Attack,0.60,0.05,0.15,✅,10~20,,,,,,,,,,Small,,,,飞虫俯冲攻击
+Montage,Sting,FlyingInsect,M169,AM_Insect_Sting,Attack,0.50,0.05,0.15,✅,12~18,,,,,,,,,,Small,,,,飞虫毒针
+Montage,HitReact,FlyingInsect,M170,AM_Insect_HitReact,HitReact,0.30,0.03,0.10,❌,,,,,,,,,,,Small,,,,飞虫一击即退
+Montage,Death,FlyingInsect,M171,AM_Insect_Death,Death,0.50,0.05,0.00,✅,,,,,,,,,,,Small,,,,飞虫坠落死亡
+Montage,GrabAtk,Mimic,M172,AM_Mimic_GrabAtk,Attack,3.00,0.08,0.25,✅,80~120,,,,,,,,,,Medium,,,,宝箱怪开箱抓取
+Montage,Awaken,Mimic,M173,AM_Mimic_Awaken,Transition,2.00,0.10,0.25,✅,,,,,,,,,,,Medium,,,,宝箱怪破箱觉醒
+Montage,Kick,Mimic,M174,AM_Mimic_Kick_R,Attack,0.80,0.06,0.20,✅,25~35,,,,,,,,,,Medium,,,,宝箱怪右脚踢
+Montage,Kick,Mimic,M175,AM_Mimic_Kick_L,Attack,0.80,0.06,0.20,✅,25~35,,,,,,,,,,Medium,,,,宝箱怪左脚踢
+Montage,Bite,Mimic,M176,AM_Mimic_Bite,Attack,1.00,0.08,0.22,✅(中),40~55,,,,,,,,,,Medium,,,,宝箱怪撕咬
+Montage,TailSwipe,Mimic,M177,AM_Mimic_TailSwipe,Attack,1.10,0.08,0.22,✅,30~40,,,,,,,,,,Medium,,,,宝箱怪横扫
+Montage,Lunge,Mimic,M178,AM_Mimic_Lunge,Attack,1.30,0.08,0.22,✅(长),50~65,,,,,,,,,,Medium,,,,宝箱怪扑咬
+Montage,BodySlam,Mimic,M179,AM_Mimic_BodySlam,Attack,1.40,0.10,0.25,✅,55~70,,,,,,,,,,Medium,,,,宝箱怪身体压制
+Montage,HitReact,Mimic,M180,AM_Mimic_HitReact,HitReact,0.50,0.05,0.20,❌,,,,,,,,,,,Medium,,,,宝箱怪受击
+Montage,Stagger,Mimic,M181,AM_Mimic_Stagger,HitReact,1.00,0.05,0.20,❌,,,,,,,,,,,Medium,,,,宝箱怪重硬直
+Montage,Death,Mimic,M182,AM_Mimic_Death,Death,2.00,0.05,0.00,✅,,,,,,,,,,,Medium,,,,宝箱怪扭曲倒地死亡
+Montage,Sleep,Mimic,M183,AM_Mimic_Sleep,Special,1.50,0.08,0.20,❌,,,,,,,,,,,Medium,,,,宝箱怪被催眠睡着
+Notify,DodgeCancelWindow,Player,N001,ANS_DodgeCancelWindow,NotifyState,,,,,,,,0.15,0.93,,,,,,,,1,翻滚取消优先级最高(比例值)
+Notify,TransformWindow,Player,N002,ANS_TransformWindow,NotifyState,,,,,,,,0.25,0.93,,,,,,,,2,变形斩/战技窗口(比例值)
+Notify,ComboWindow,Player,N003,ANS_ComboWindow,NotifyState,,,,,,,,0.45,0.85,,,,,,,,3,普通连段窗口优先级最低(比例值)
+Notify,EnableHitbox,Player,N004,AN_EnableHitbox,NotifyInstant,,,,,,,,0.15~0.20,,,,,,,,,0,视武器速度(比例值)
+Notify,DisableHitbox,Player,N005,AN_DisableHitbox,NotifyInstant,,,,,,,,0.40~0.55,,,,,,,,,0,视武器速度(比例值)
+Notify,ActionEnd,Player,N006,AN_ActionEnd,NotifyInstant,,,,,,,,0.90~0.95,,,,,,,,,0,BlendOut前(比例值)
+Notify,IFrame_FastRoll,Player,N007,ANS_IFrame,NotifyState,,,,,,,,0.05,0.58,,,,,,,,0,快速翻滚(<30%负重)~0.33s
+Notify,IFrame_MediumRoll,Player,N008,ANS_IFrame,NotifyState,,,,,,,,0.08,0.50,,,,,,,,0,中速翻滚(30%~70%)~0.25s
+Notify,IFrame_FatRoll,Player,N009,ANS_IFrame,NotifyState,,,,,,,,0.10,0.35,,,,,,,,0,肥胖翻滚(>70%)~0.17s
+Notify,IFrame_Backstep,Player,N010,ANS_IFrame,NotifyState,,,,,,,,0.05,0.35,,,,,,,,0,后撤步~0.13s
+Notify,SuperArmor,Grunt,N011,ANS_SuperArmor,NotifyState,,,,,,,,0.18,0.56,,,,,,,,0,小兵轻击霸体(比例值)
+Notify,SuperArmor_Heavy,Grunt,N012,ANS_SuperArmor,NotifyState,,,,,,,,0.12,0.70,,,,,,,,0,小兵重击霸体(比例值)
+Notify,SuperArmor,Elite,N013,ANS_SuperArmor,NotifyState,,,,,,,,0.15,0.60,,,,,,,,0,精英轻击霸体(比例值)
+Notify,SuperArmor_Heavy,Elite,N014,ANS_SuperArmor,NotifyState,,,,,,,,0.08,0.80,,,,,,,,0,精英重击霸体(比例值)
+Notify,SuperArmor,Boss,N015,ANS_SuperArmor,NotifyState,,,,,,,,0.10,0.75,,,,,,,,0,Boss普通攻击霸体(比例值)
+Notify,SuperArmor_Heavy,Boss,N016,ANS_SuperArmor,NotifyState,,,,,,,,0.05,0.85,,,,,,,,0,Boss重击霸体(比例值)
+Notify,SuperArmor_Ultimate,Boss,N017,ANS_SuperArmor_Permanent,NotifyState,,,,,,,,0.00,1.00,,,,,,,,0,Boss终极招式全程霸体(比例值)
+Notify,Hitbox_Grunt_Light,Grunt,N018,AN_EnableHitbox,NotifyInstant,,,,,,,,0.25,0.50,,,,,,,,0,小兵轻击判定(比例值)
+Notify,Hitbox_Grunt_Heavy,Grunt,N019,AN_EnableHitbox,NotifyInstant,,,,,,,,0.40,0.60,,,,,,,,0,小兵重击判定(比例值)
+Notify,Hitbox_Elite_Light,Elite,N020,AN_EnableHitbox,NotifyInstant,,,,,,,,0.20,0.50,,,,,,,,0,精英轻击判定(比例值)
+Notify,Hitbox_Elite_Heavy,Elite,N021,AN_EnableHitbox,NotifyInstant,,,,,,,,0.35,0.65,,,,,,,,0,精英重击判定(比例值)
+Notify,Hitbox_Boss_Normal,Boss,N022,AN_EnableHitbox,NotifyInstant,,,,,,,,0.25,0.55,,,,,,,,0,Boss普通攻击判定(比例值)
+Notify,Hitbox_Boss_Heavy,Boss,N023,AN_EnableHitbox,NotifyInstant,,,,,,,,0.35,0.70,,,,,,,,0,Boss重击判定(比例值)
+Notify,Hitbox_Boss_Ult,Boss,N024,AN_EnableHitbox,NotifyInstant,,,,,,,,0.30,0.80,,,,,,,,0,Boss终极判定(比例值)
+Notify,PhaseCheck,Boss,N025,AN_Boss_PhaseCheck,NotifyInstant,,,,,,,,,,,,,,,,,0,阶段切换血量检查点
+Notify,AOE_Warning,Boss,N026,AN_Boss_AOE_Warning,NotifyInstant,,,,,,,,,,,,,,,,,0,AOE预警粒子/地面标记
+Notify,Summon_Minion,Boss,N027,AN_Boss_Summon_Minion,NotifyInstant,,,,,,,,,,,,,,,,,0,召唤小怪P3可选
+Notify,Camera_Shake,Boss,N028,AN_Boss_Camera_Shake,NotifyInstant,,,,,,,,,,,,,,,,,0,触发相机震动
+Notify,AI_DodgeCancel,HostileNPC,N029,AN_AI_CanDodgeCancel,NotifyInstant,,,,,,,,,,,,,,,,,0,AI翻滚取消窗口
+Notify,AI_EvalDistance,HostileNPC,N030,AN_AI_EvaluateDistance,NotifyInstant,,,,,,,,,,,,,,,,,0,攻击后AI重新评估距离
+Notify,AI_AllowHeal,HostileNPC,N031,AN_AI_AllowHeal,NotifyInstant,,,,,,,,,,,,,,,,,0,AI允许喝药判定窗口
+Notify,DisguiseBreak,Mimic,N032,AN_Mimic_DisguiseBreak,NotifyInstant,,,,,,,,,,,,,,,,,0,破箱时刻切换碰撞体/Mesh
+Notify,GrabStart,Mimic,N033,AN_Mimic_GrabStart,NotifyInstant,,,,,,,,,,,,,,,,,0,抓取判定开始
+Notify,GrabEnd,Mimic,N034,AN_Mimic_GrabEnd,NotifyInstant,,,,,,,,,,,,,,,,,0,抓取判定结束
+Notify,DropLoot,Mimic,N035,AN_Mimic_DropLoot,NotifyInstant,,,,,,,,,,,,,,,,,0,死亡时掉落物品
+Notify,Sword_Light01_EnableHit,Player,N036,AN_EnableHitbox,NotifyInstant,,,,,,,,,,,,,,,,,0,直剑轻击1 开启判定 绝对时间0.10s
+Notify,Sword_Light01_DisableHit,Player,N037,AN_DisableHitbox,NotifyInstant,,,,,,,,,,,,,,,,,0,直剑轻击1 关闭判定 绝对时间0.35s
+Notify,Sword_Light01_DodgeCancel,Player,N038,ANS_DodgeCancelWindow,NotifyState,,,,,,,,0.10,0.65,,,,,,,,1,直剑轻击1 翻滚取消 绝对时间
+Notify,Sword_Light01_Transform,Player,N039,ANS_TransformWindow,NotifyState,,,,,,,,0.20,0.65,,,,,,,,2,直剑轻击1 变形斩窗口 绝对时间
+Notify,Sword_Light01_Combo,Player,N040,ANS_ComboWindow,NotifyState,,,,,,,,0.35,0.60,,,,,,,,3,直剑轻击1 连段窗口 绝对时间
+Notify,Sword_Light01_SFX,Player,N041,AN_PlaySFX,NotifyInstant,,,,,,,,,,,,,,,,,0,直剑轻击1 音效 绝对时间0.12s
+Notify,Sword_Light01_ActionEnd,Player,N042,AN_ActionEnd,NotifyInstant,,,,,,,,,,,,,,,,,0,直剑轻击1 结束 绝对时间0.65s
+Notify,Roll_F_IFrame,Player,N043,ANS_IFrame,NotifyState,,,,,,,,0.05,0.35,,,,,,,,0,前翻滚无敌帧 绝对时间
+Notify,Roll_F_ActionEnd,Player,N044,AN_ActionEnd,NotifyInstant,,,,,,,,,,,,,,,,,0,前翻滚结束 绝对时间0.55s
+Notify,Grunt_Light01_EnableHit,Grunt,N045,AN_EnableHitbox,NotifyInstant,,,,,,,,,,,,,,,,,0,小兵轻击01 开判定 绝对时间0.20s
+Notify,Grunt_Light01_DisableHit,Grunt,N046,AN_DisableHitbox,NotifyInstant,,,,,,,,,,,,,,,,,0,小兵轻击01 关判定 绝对时间0.40s
+Notify,Grunt_Light01_SuperArmor,Grunt,N047,ANS_SuperArmor,NotifyState,,,,,,,,0.15,0.45,,,,,,,,0,小兵���击01 霸体 绝对时间
+Notify,Grunt_Light01_SFX,Grunt,N048,AN_PlaySFX,NotifyInstant,,,,,,,,,,,,,,,,,0,小兵轻击01 音效 绝对时间0.22s
+Notify,Grunt_Light01_ActionEnd,Grunt,N049,AN_ActionEnd,NotifyInstant,,,,,,,,,,,,,,,,,0,小兵轻击01 结束 绝对时间0.72s
+Notify,Elite_Heavy_SuperArmor,Elite,N050,ANS_SuperArmor,NotifyState,,,,,,,,0.10,0.90,,,,,,,,0,精英重击全程霸体 绝对时间
+Notify,Elite_Heavy_EnableHit,Elite,N051,AN_EnableHitbox,NotifyInstant,,,,,,,,,,,,,,,,,0,精英重击 开判定 绝对时间0.45s
+Notify,Elite_Heavy_DisableHit,Elite,N052,AN_DisableHitbox,NotifyInstant,,,,,,,,,,,,,,,,,0,精英重击 关判定 绝对时间0.70s
+Notify,Elite_Heavy_SFX,Elite,N053,AN_PlaySFX,NotifyInstant,,,,,,,,,,,,,,,,,0,精英重击 蓄力咆哮音效 绝对时间0.40s
+Notify,Elite_Heavy_ActionEnd,Elite,N054,AN_ActionEnd,NotifyInstant,,,,,,,,,,,,,,,,,0,精英重击 结束 绝对时间1.10s
+BlendRef,LightAttack,Global,BR01,轻攻击Blend参考,BlendRef,,0.05~0.08,0.18~0.22,,,,,,,,,,,,,,Linear,干脆利落
+BlendRef,HeavyAttack,Global,BR02,重攻击Blend参考,BlendRef,,0.08~0.12,0.22~0.30,,,,,,,,,,,,,,Ease In,蓄力感
+BlendRef,Roll,Global,BR03,翻滚Blend参考,BlendRef,,0.05,0.18~0.22,,,,,,,,,,,,,,Linear,最快响应
+BlendRef,Backstep,Global,BR04,后撤步Blend参考,BlendRef,,0.05,0.15~0.20,,,,,,,,,,,,,,Linear,
+BlendRef,HitReact_Light,Global,BR05,轻受击Blend参考,BlendRef,,0.03~0.05,0.15~0.20,,,,,,,,,,,,,,Linear,被打断要快
+BlendRef,HitReact_Heavy,Global,BR06,重受击Blend参考,BlendRef,,0.03~0.05,0.20~0.25,,,,,,,,,,,,,,Ease Out,恢复稍慢
+BlendRef,Knockdown,Global,BR07,击倒Blend参考,BlendRef,,0.05,0.10~0.15,,,,,,,,,,,,,,Linear,
+BlendRef,GetUp,Global,BR08,起身Blend参考,BlendRef,,0.10,0.20~0.25,,,,,,,,,,,,,,Ease In Out,柔和起身
+BlendRef,Execution_Attacker,Global,BR09,处决施放���Blend参考,BlendRef,,0.08,0.20~0.25,,,,,,,,,,,,,,Linear,
+BlendRef,Execution_Victim,Global,BR10,处决受害方Blend参考,BlendRef,,0.05,0.00,,,,,,,,,,,,,,—,死亡不BlendOut
+BlendRef,Death,Global,BR11,死亡Blend参考,BlendRef,,0.05,0.00,,,,,,,,,,,,,,—,最后一帧保持
+BlendRef,DrinkEstus,Global,BR12,喝药Blend参考,BlendRef,,0.08~0.10,0.20~0.25,,,,,,,,,,,,,,Ease In Out,
+BlendRef,Interact,Global,BR13,交互Blend参考,BlendRef,,0.10~0.15,0.20~0.25,,,,,,,,,,,,,,Ease In Out,
+BlendRef,BossTransition,Global,BR14,Boss阶段转换Blend参考,BlendRef,,0.10~0.15,0.25~0.30,,,,,,,,,,,,,,Ease In Out,演出感
+BlendRef,BossUltimate,Global,BR15,Boss终极招式Blend参考,BlendRef,,0.08~0.10,0.20~0.25,,,,,,,,,,,,,,Ease In,
+CharStats,Player,Player,CS01,玩家角色,CharStats,,,,,,,,,,,,,,,,,300/600,WalkSpeed/RunSpeed LockedOnSpeed=400
+CharStats,Grunt,Grunt,CS02,小兵,CharStats,,,,,,,,,,,,,,Medium,,150/400/250,150~250,,,MaxHP=200~400 Poise=15~30 PoiseRegen=5/s
+CharStats,Elite,Elite,CS03,精英,CharStats,,,,,,,,,,,,,,Medium,,300/450,200~350,,,MaxHP=600~1200 Poise=40~70 PoiseRegen=10/s
+CharStats,MiniBoss,MiniBoss,CS04,迷你Boss,CharStats,,,,,,,,,,,,,,Large,,350/500,250~500,,,MaxHP=2000~4000 Poise=80~120 2阶段50%触发
+CharStats,TutBoss_P1,TutBoss,CS05,教程Boss P1,CharStats,,,,,,,,,,,,,,Medium,P1,,350,250,,,MaxHP=3000 Poise=50 PoiseRegen=10/s
+CharStats,TutBoss_P2,TutBoss,CS06,教程Boss P2,CharStats,,,,,,,,,,,,,,Large,P2,,450,350,,,Poise=80 PoiseRegen=15/s HP<50%触发
+CharStats,HostileNPC,HostileNPC,CS07,敌对NPC,CharStats,,,,,,,,,,,,,,Medium,,,400~500,,,,MaxHP=800~2000 Poise=30~60 可翻滚/弹反/喝药
+CharStats,FinalBoss_P1,FinalBoss,CS08,最终Boss P1,CharStats,,,,,,,,,,,,,,Large,P1,,350,350~500,,,MaxHP=8000 Poise=80 PoiseRegen=15/s
+CharStats,FinalBoss_P2,FinalBoss,CS09,最终Boss P2,CharStats,,,,,,,,,,,,,,Large,P2,,420,350~600,,,Poise=100 PoiseRegen=20/s HP<65%触发
+CharStats,FinalBoss_P3,FinalBoss,CS10,最终Boss P3,CharStats,,,,,,,,,,,,,,Large,P3,,500,400~700,,,Poise=120 PoiseRegen=25/s HP<30%触发 AOE频繁
+CharStats,Dog,Dog,CS11,犬类,CharStats,,,,,,,,,,,,,,Small,,600,,120~180,,,MaxHP=120~200 Poise=5~10 比玩家快
+CharStats,LargeBeast,LargeBeast,CS12,巨型兽,CharStats,,,,,,,,,,,,,,Large,,450,,300~500,,,MaxHP=1500~3000 Poise=60~100
+CharStats,FlyingInsect,FlyingInsect,CS13,飞行虫类,CharStats,,,,,,,,,,,,,,Small,,350(飞���),,100~150,,,MaxHP=80~150 Poise=0~5
+CharStats,Mimic,Mimic,CS14,宝箱怪,CharStats,,,,,,,,,,,,,,Medium,,350,,200~350,,,MaxHP=800~1500 Poise=40~60 被动触发→激活

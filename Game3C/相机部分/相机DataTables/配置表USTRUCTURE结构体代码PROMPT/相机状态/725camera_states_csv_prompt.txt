@@ -1,0 +1,574 @@
+在我的UE4.27工程中创建相机状态数据表的C++结构体代码。
+
+## 任务要求
+
+### 任务1：创建 CameraStateEnums.h
+路径：Source/[YourProject]/Public/Camera/Data/CameraStateEnums.h
+
+创建必要的枚举类型：
+
+**1. ECameraStateCategory - 主分类枚举（15个）**
+- None（无）
+- FreeExploration（自由探索）
+- Combat（战斗）
+- Environment（环境交互）
+- Item（物品）
+- NPC（NPC交互）
+- RestPoint（休息点）
+- Death（死亡）
+- Cinematic（过场动画）
+- Magic（魔法）
+- Multiplayer（多人游戏）
+- UI（用户界面）
+- Modifier（修改器）
+
+**2. ECameraStateSubCategory - 子分类枚举（约60个，按Category分组）**
+
+FreeExploration下：
+- None, BasicMovement, Idle, Alignment, Shoulder, Collision, Movement, Climbing, Mount, Edge, Stealth, AreaTransition
+
+Combat下：
+- BasicCombat, Threat, LockOn, Attack, Defend, Dodge, Hit, Status, Special, Boss, Ranged, CombatMultiplayer, DeadAngle, Summon
+
+Environment下：
+- Door, Destructible, Mechanism, Trap, Elevator, Light, POI, Puzzle, Hazard, Altar
+
+Item下：
+- Pickup, Bloodstain, Message, Use, Equip, Upgrade, Craft, Map
+
+NPC下：
+- Dialogue, Service, NPCSpecial
+
+RestPoint下：
+- Bonfire, Checkpoint, Hub
+
+Death下：
+- DeathProcess, DeathCamera, Respawn, Revive, Ghost
+
+Cinematic下：
+- CutsceneType, Reveal, Character, WorldEvent, Flashback, CinematicTransition
+
+Magic下：
+- SpellCast, MagicSummon, Skill
+
+Multiplayer下：
+- MultiplayerSummon, PvP, Coop
+
+UI下：
+- Menu, PhotoMode
+
+Modifier下：
+- Core
+
+**3. ECameraStateReference - 参考来源枚举（10个）**
+- None（无）
+- All（通用）
+- EldenRing（艾尔登法环）
+- Bloodborne（血源诅咒）
+- DarkSouls（黑暗之魂）
+- DarkSouls3（黑暗之魂3）
+- Sekiro（只狼）
+- LiesOfP（匹诺曹的谎言）
+- Some（部分游戏）
+- Few（少数游戏）
+
+### 任务2：创建 CameraStateData.h
+路径：Source/[YourProject]/Public/Camera/Data/CameraStateData.h
+
+创建一个继承自 FTableRowBase 的 USTRUCT，用于从CSV导入相机状态配置数据
+
+CSV文件结构如下（共725行数据）：
+- ID:  FName - 全局唯一标识（注意：此字段会自动成为RowName，结构体中可保留但导入后为空）
+- Category: FString - 主分类
+- SubCategory: FString - 子分类
+- StateName: FName - 状态英文名称
+- ChineseName: FString - 状态中文名称
+- Description:  FString - 状态功能描述
+- Priority: int32 - 优先级1-4，数字越小优先级越高
+- Reference: FString - 参考游戏来源
+
+结构体命名为 `FCameraStateRow`
+
+添加必要的UPROPERTY宏，确保：
+- 所有属性可在编辑器中编辑（EditAnywhere）
+- 所有属性可在蓝图中读取（BlueprintReadWrite）
+- 添加Category分组便于编辑器查看
+- Priority字段添加 meta=(ClampMin=1, ClampMax=4)
+- Description字段添加 meta=(MultiLine=true)
+
+**重要：结构体中不要包含任何UFUNCTION函数，只保留UPROPERTY属性和构造函数**
+
+### 任务3：创建 CameraStateHelpers. h
+路径：Source/[YourProject]/Public/Camera/Data/CameraStateHelpers.h
+
+创建 UCameraStateHelpers 类，继承自 UBlueprintFunctionLibrary
+
+所有函数标记为 UFUNCTION(BlueprintPure, Category = "Camera|State")
+所有函数为静态函数
+
+需要实现的函数：
+```cpp
+// Category枚举转换
+static ECameraStateCategory StringToCategory(const FString& CategoryString);
+static FString CategoryToString(ECameraStateCategory Category);
+
+// SubCategory枚举转换
+static ECameraStateSubCategory StringToSubCategory(const FString& SubCategoryString);
+static FString SubCategoryToString(ECameraStateSubCategory SubCategory);
+
+// Reference枚举转换
+static ECameraStateReference StringToReference(const FString& ReferenceString);
+static FString ReferenceToString(ECameraStateReference Reference);
+
+// 分类检查函数
+static bool IsFreeExplorationCategory(const FCameraStateRow& Row);
+static bool IsCombatCategory(const FCameraStateRow& Row);
+static bool IsEnvironmentCategory(const FCameraStateRow& Row);
+static bool IsItemCategory(const FCameraStateRow& Row);
+static bool IsNPCCategory(const FCameraStateRow& Row);
+static bool IsRestPointCategory(const FCameraStateRow& Row);
+static bool IsDeathCategory(const FCameraStateRow& Row);
+static bool IsCinematicCategory(const FCameraStateRow& Row);
+static bool IsMagicCategory(const FCameraStateRow& Row);
+static bool IsMultiplayerCategory(const FCameraStateRow& Row);
+static bool IsUICategory(const FCameraStateRow& Row);
+static bool IsModifierCategory(const FCameraStateRow& Row);
+
+// 优先级检查函数
+static bool IsHighestPriority(const FCameraStateRow& Row);
+static bool IsHighPriority(const FCameraStateRow& Row);
+static bool IsMediumPriority(const FCameraStateRow& Row);
+static bool IsLowPriority(const FCameraStateRow& Row);
+
+// 参考来源检查函数
+static bool IsUniversalReference(const FCameraStateRow& Row);
+static bool IsFromEldenRing(const FCameraStateRow& Row);
+static bool IsFromBloodborne(const FCameraStateRow& Row);
+static bool IsFromDarkSouls(const FCameraStateRow& Row);
+static bool IsFromSekiro(const FCameraStateRow& Row);
+
+// 中文显示名称
+static FString GetCategoryDisplayName(ECameraStateCategory Category);
+static FString GetSubCategoryDisplayName(ECameraStateSubCategory SubCategory);
+static FString GetReferenceDisplayName(ECameraStateReference Reference);
+```
+
+### 任务4：创建 CameraStateHelpers.cpp
+路径：Source/[YourProject]/Private/Camera/Data/CameraStateHelpers.cpp
+
+实现头文件中声明的所有静态函数
+
+## 函数实现逻辑参考
+
+### StringToCategory
+```cpp
+FString TrimmedString = CategoryString.TrimStartAndEnd();
+if (TrimmedString. Equals(TEXT("FreeExploration"), ESearchCase:: IgnoreCase))
+    return ECameraStateCategory::FreeExploration;
+else if (TrimmedString.Equals(TEXT("Combat"), ESearchCase::IgnoreCase))
+    return ECameraStateCategory::Combat;
+else if (TrimmedString.Equals(TEXT("Environment"), ESearchCase::IgnoreCase))
+    return ECameraStateCategory::Environment;
+else if (TrimmedString.Equals(TEXT("Item"), ESearchCase::IgnoreCase))
+    return ECameraStateCategory::Item;
+else if (TrimmedString.Equals(TEXT("NPC"), ESearchCase:: IgnoreCase))
+    return ECameraStateCategory::NPC;
+else if (TrimmedString. Equals(TEXT("RestPoint"), ESearchCase::IgnoreCase))
+    return ECameraStateCategory::RestPoint;
+else if (TrimmedString.Equals(TEXT("Death"), ESearchCase::IgnoreCase))
+    return ECameraStateCategory:: Death;
+else if (TrimmedString.Equals(TEXT("Cinematic"), ESearchCase:: IgnoreCase))
+    return ECameraStateCategory::Cinematic;
+else if (TrimmedString. Equals(TEXT("Magic"), ESearchCase::IgnoreCase))
+    return ECameraStateCategory::Magic;
+else if (TrimmedString. Equals(TEXT("Multiplayer"), ESearchCase::IgnoreCase))
+    return ECameraStateCategory::Multiplayer;
+else if (TrimmedString. Equals(TEXT("UI"), ESearchCase::IgnoreCase))
+    return ECameraStateCategory::UI;
+else if (TrimmedString. Equals(TEXT("Modifier"), ESearchCase::IgnoreCase))
+    return ECameraStateCategory:: Modifier;
+return ECameraStateCategory:: None;
+```
+
+### CategoryToString
+```cpp
+switch (Category)
+{
+case ECameraStateCategory:: FreeExploration:  return TEXT("FreeExploration");
+case ECameraStateCategory::Combat:           return TEXT("Combat");
+case ECameraStateCategory::Environment:     return TEXT("Environment");
+case ECameraStateCategory::Item:            return TEXT("Item");
+case ECameraStateCategory::NPC:              return TEXT("NPC");
+case ECameraStateCategory::RestPoint:       return TEXT("RestPoint");
+case ECameraStateCategory::Death:           return TEXT("Death");
+case ECameraStateCategory::Cinematic:        return TEXT("Cinematic");
+case ECameraStateCategory::Magic:           return TEXT("Magic");
+case ECameraStateCategory:: Multiplayer:     return TEXT("Multiplayer");
+case ECameraStateCategory::UI:               return TEXT("UI");
+case ECameraStateCategory::Modifier:        return TEXT("Modifier");
+case ECameraStateCategory:: None: 
+default:                                    return TEXT("None");
+}
+```
+
+### StringToSubCategory（由于SubCategory较多，这里提供结构模板）
+```cpp
+FString TrimmedString = SubCategoryString.TrimStartAndEnd();
+// FreeExploration相关
+if (TrimmedString. Equals(TEXT("BasicMovement"), ESearchCase::IgnoreCase))
+    return ECameraStateSubCategory::BasicMovement;
+else if (TrimmedString. Equals(TEXT("Idle"), ESearchCase::IgnoreCase))
+    return ECameraStateSubCategory:: Idle;
+// ...  继续添加所有SubCategory的转换
+// Combat相关
+else if (TrimmedString.Equals(TEXT("BasicCombat"), ESearchCase::IgnoreCase))
+    return ECameraStateSubCategory:: BasicCombat;
+else if (TrimmedString. Equals(TEXT("LockOn"), ESearchCase::IgnoreCase))
+    return ECameraStateSubCategory::LockOn;
+// ... 依此类推
+return ECameraStateSubCategory::None;
+```
+
+### SubCategoryToString（提供结构模板）
+```cpp
+switch (SubCategory)
+{
+// FreeExploration相关
+case ECameraStateSubCategory::BasicMovement:  return TEXT("BasicMovement");
+case ECameraStateSubCategory:: Idle:           return TEXT("Idle");
+// ... 继续添加所有SubCategory的转换
+// Combat相关
+case ECameraStateSubCategory::BasicCombat:    return TEXT("BasicCombat");
+case ECameraStateSubCategory::LockOn:          return TEXT("LockOn");
+// ... 依此类推
+case ECameraStateSubCategory::None:
+default:                                      return TEXT("None");
+}
+```
+
+### StringToReference
+```cpp
+FString TrimmedString = ReferenceString. TrimStartAndEnd();
+if (TrimmedString.Equals(TEXT("All"), ESearchCase::IgnoreCase))
+    return ECameraStateReference:: All;
+else if (TrimmedString.Equals(TEXT("EldenRing"), ESearchCase::IgnoreCase))
+    return ECameraStateReference::EldenRing;
+else if (TrimmedString. Equals(TEXT("Bloodborne"), ESearchCase::IgnoreCase))
+    return ECameraStateReference::Bloodborne;
+else if (TrimmedString. Equals(TEXT("DarkSouls"), ESearchCase:: IgnoreCase))
+    return ECameraStateReference::DarkSouls;
+else if (TrimmedString.Equals(TEXT("DarkSouls3"), ESearchCase::IgnoreCase))
+    return ECameraStateReference::DarkSouls3;
+else if (TrimmedString. Equals(TEXT("Sekiro"), ESearchCase::IgnoreCase))
+    return ECameraStateReference:: Sekiro;
+else if (TrimmedString.Equals(TEXT("LiesOfP"), ESearchCase::IgnoreCase))
+    return ECameraStateReference:: LiesOfP;
+else if (TrimmedString. Equals(TEXT("Some"), ESearchCase::IgnoreCase))
+    return ECameraStateReference::Some;
+else if (TrimmedString. Equals(TEXT("Few"), ESearchCase::IgnoreCase))
+    return ECameraStateReference::Few;
+return ECameraStateReference:: None;
+```
+
+### ReferenceToString
+```cpp
+switch (Reference)
+{
+case ECameraStateReference::All:        return TEXT("All");
+case ECameraStateReference::EldenRing:  return TEXT("EldenRing");
+case ECameraStateReference:: Bloodborne: return TEXT("Bloodborne");
+case ECameraStateReference::DarkSouls:  return TEXT("DarkSouls");
+case ECameraStateReference::DarkSouls3: return TEXT("DarkSouls3");
+case ECameraStateReference:: Sekiro:     return TEXT("Sekiro");
+case ECameraStateReference::LiesOfP:    return TEXT("LiesOfP");
+case ECameraStateReference:: Some:       return TEXT("Some");
+case ECameraStateReference::Few:        return TEXT("Few");
+case ECameraStateReference:: None: 
+default:                                return TEXT("None");
+}
+```
+
+### IsFreeExplorationCategory
+```cpp
+return Row.Category. Equals(TEXT("FreeExploration"), ESearchCase::IgnoreCase);
+```
+
+### IsCombatCategory
+```cpp
+return Row.Category.Equals(TEXT("Combat"), ESearchCase:: IgnoreCase);
+```
+
+### IsEnvironmentCategory
+```cpp
+return Row.Category.Equals(TEXT("Environment"), ESearchCase::IgnoreCase);
+```
+
+### IsItemCategory
+```cpp
+return Row.Category.Equals(TEXT("Item"), ESearchCase:: IgnoreCase);
+```
+
+### IsNPCCategory
+```cpp
+return Row. Category.Equals(TEXT("NPC"), ESearchCase:: IgnoreCase);
+```
+
+### IsRestPointCategory
+```cpp
+return Row.Category.Equals(TEXT("RestPoint"), ESearchCase::IgnoreCase);
+```
+
+### IsDeathCategory
+```cpp
+return Row.Category. Equals(TEXT("Death"), ESearchCase::IgnoreCase);
+```
+
+### IsCinematicCategory
+```cpp
+return Row.Category. Equals(TEXT("Cinematic"), ESearchCase::IgnoreCase);
+```
+
+### IsMagicCategory
+```cpp
+return Row.Category.Equals(TEXT("Magic"), ESearchCase::IgnoreCase);
+```
+
+### IsMultiplayerCategory
+```cpp
+return Row.Category.Equals(TEXT("Multiplayer"), ESearchCase:: IgnoreCase);
+```
+
+### IsUICategory
+```cpp
+return Row.Category. Equals(TEXT("UI"), ESearchCase::IgnoreCase);
+```
+
+### IsModifierCategory
+```cpp
+return Row.Category.Equals(TEXT("Modifier"), ESearchCase::IgnoreCase);
+```
+
+### IsHighestPriority
+```cpp
+return Row.Priority == 1;
+```
+
+### IsHighPriority
+```cpp
+return Row.Priority == 2;
+```
+
+### IsMediumPriority
+```cpp
+return Row.Priority == 3;
+```
+
+### IsLowPriority
+```cpp
+return Row. Priority == 4;
+```
+
+### IsUniversalReference
+```cpp
+return Row.Reference.Equals(TEXT("All"), ESearchCase:: IgnoreCase);
+```
+
+### IsFromEldenRing
+```cpp
+return Row.Reference.Equals(TEXT("EldenRing"), ESearchCase::IgnoreCase);
+```
+
+### IsFromBloodborne
+```cpp
+return Row.Reference. Equals(TEXT("Bloodborne"), ESearchCase::IgnoreCase);
+```
+
+### IsFromDarkSouls
+```cpp
+return Row.Reference.Equals(TEXT("DarkSouls"), ESearchCase::IgnoreCase) ||
+       Row.Reference. Equals(TEXT("DarkSouls3"), ESearchCase::IgnoreCase);
+```
+
+### IsFromSekiro
+```cpp
+return Row.Reference.Equals(TEXT("Sekiro"), ESearchCase::IgnoreCase);
+```
+
+### GetCategoryDisplayName
+```cpp
+switch (Category)
+{
+case ECameraStateCategory:: FreeExploration: return TEXT("自由探索");
+case ECameraStateCategory::Combat:          return TEXT("战斗");
+case ECameraStateCategory::Environment:      return TEXT("环境交互");
+case ECameraStateCategory::Item:            return TEXT("物品");
+case ECameraStateCategory:: NPC:             return TEXT("NPC交互");
+case ECameraStateCategory::RestPoint:       return TEXT("休息点");
+case ECameraStateCategory::Death:           return TEXT("死亡");
+case ECameraStateCategory:: Cinematic:       return TEXT("过场动画");
+case ECameraStateCategory::Magic:           return TEXT("魔法");
+case ECameraStateCategory::Multiplayer:     return TEXT("多人游戏");
+case ECameraStateCategory::UI:              return TEXT("用户界面");
+case ECameraStateCategory::Modifier:        return TEXT("修改器");
+case ECameraStateCategory::None:
+default:                                    return TEXT("无");
+}
+```
+
+### GetSubCategoryDisplayName（提供结构模板）
+```cpp
+switch (SubCategory)
+{
+// FreeExploration相关
+case ECameraStateSubCategory:: BasicMovement:    return TEXT("基础移动");
+case ECameraStateSubCategory::Idle:             return TEXT("待机");
+case ECameraStateSubCategory::Alignment:        return TEXT("对齐");
+case ECameraStateSubCategory::Shoulder:         return TEXT("肩部视角");
+case ECameraStateSubCategory:: Collision:        return TEXT("碰撞");
+case ECameraStateSubCategory::Movement:         return TEXT("移动");
+case ECameraStateSubCategory::Climbing:         return TEXT("攀爬");
+case ECameraStateSubCategory:: Mount:            return TEXT("坐骑");
+case ECameraStateSubCategory::Edge:             return TEXT("边缘");
+case ECameraStateSubCategory::Stealth:          return TEXT("潜行");
+case ECameraStateSubCategory::AreaTransition:   return TEXT("区域过渡");
+// Combat相关
+case ECameraStateSubCategory:: BasicCombat:       return TEXT("基础战斗");
+case ECameraStateSubCategory:: Threat:           return TEXT("威胁");
+case ECameraStateSubCategory::LockOn:           return TEXT("锁定");
+case ECameraStateSubCategory:: Attack:           return TEXT("攻击");
+case ECameraStateSubCategory::Defend:           return TEXT("防御");
+case ECameraStateSubCategory::Dodge:            return TEXT("闪避");
+case ECameraStateSubCategory::Hit:              return TEXT("受击");
+case ECameraStateSubCategory::Status:           return TEXT("状态");
+case ECameraStateSubCategory::Special:          return TEXT("特殊");
+case ECameraStateSubCategory::Boss:             return TEXT("Boss");
+case ECameraStateSubCategory:: Ranged:           return TEXT("远程");
+case ECameraStateSubCategory::CombatMultiplayer: return TEXT("战斗多人");
+case ECameraStateSubCategory::DeadAngle:        return TEXT("死角");
+case ECameraStateSubCategory:: Summon:           return TEXT("召唤");
+// Environment相关
+case ECameraStateSubCategory::Door:             return TEXT("门");
+case ECameraStateSubCategory:: Destructible:     return TEXT("可破坏物");
+case ECameraStateSubCategory:: Mechanism:        return TEXT("机关");
+case ECameraStateSubCategory:: Trap:             return TEXT("陷阱");
+case ECameraStateSubCategory:: Elevator:         return TEXT("电梯");
+case ECameraStateSubCategory::Light:            return TEXT("光源");
+case ECameraStateSubCategory::POI:              return TEXT("兴趣点");
+case ECameraStateSubCategory::Puzzle:           return TEXT("谜题");
+case ECameraStateSubCategory::Hazard:           return TEXT("危险区域");
+case ECameraStateSubCategory:: Altar:            return TEXT("祭坛");
+// Item相关
+case ECameraStateSubCategory:: Pickup:           return TEXT("拾取");
+case ECameraStateSubCategory:: Bloodstain:       return TEXT("血迹");
+case ECameraStateSubCategory::Message:          return TEXT("消息");
+case ECameraStateSubCategory::Use:              return TEXT("使用");
+case ECameraStateSubCategory::Equip:            return TEXT("装备");
+case ECameraStateSubCategory:: Upgrade:          return TEXT("升级");
+case ECameraStateSubCategory:: Craft:            return TEXT("制作");
+case ECameraStateSubCategory::Map:              return TEXT("地图");
+// NPC相关
+case ECameraStateSubCategory:: Dialogue:         return TEXT("对话");
+case ECameraStateSubCategory::Service:          return TEXT("服务");
+case ECameraStateSubCategory::NPCSpecial:       return TEXT("NPC特殊");
+// RestPoint相关
+case ECameraStateSubCategory::Bonfire:          return TEXT("篝火");
+case ECameraStateSubCategory::Checkpoint:       return TEXT("检查点");
+case ECameraStateSubCategory:: Hub:              return TEXT("中心");
+// Death相关
+case ECameraStateSubCategory::DeathProcess:      return TEXT("死亡过程");
+case ECameraStateSubCategory::DeathCamera:      return TEXT("死亡相机");
+case ECameraStateSubCategory:: Respawn:          return TEXT("重生");
+case ECameraStateSubCategory:: Revive:           return TEXT("复活");
+case ECameraStateSubCategory::Ghost:            return TEXT("幽灵");
+// Cinematic相关
+case ECameraStateSubCategory::CutsceneType:     return TEXT("过场类型");
+case ECameraStateSubCategory:: Reveal:           return TEXT("揭示");
+case ECameraStateSubCategory::Character:        return TEXT("角色");
+case ECameraStateSubCategory::WorldEvent:       return TEXT("世界事件");
+case ECameraStateSubCategory::Flashback:         return TEXT("闪回");
+case ECameraStateSubCategory::CinematicTransition: return TEXT("过场过渡");
+// Magic相关
+case ECameraStateSubCategory::SpellCast:        return TEXT("施法");
+case ECameraStateSubCategory::MagicSummon:      return TEXT("魔法召唤");
+case ECameraStateSubCategory::Skill:            return TEXT("技能");
+// Multiplayer相关
+case ECameraStateSubCategory::MultiplayerSummon:  return TEXT("多人召唤");
+case ECameraStateSubCategory::PvP:               return TEXT("PvP");
+case ECameraStateSubCategory::Coop:              return TEXT("合作");
+// UI相关
+case ECameraStateSubCategory::Menu:             return TEXT("菜单");
+case ECameraStateSubCategory::PhotoMode:        return TEXT("拍照模式");
+// Modifier相关
+case ECameraStateSubCategory::Core:             return TEXT("核心");
+case ECameraStateSubCategory::None: 
+default:                                        return TEXT("无");
+}
+```
+
+### GetReferenceDisplayName
+```cpp
+switch (Reference)
+{
+case ECameraStateReference::All:        return TEXT("通用");
+case ECameraStateReference::EldenRing:  return TEXT("艾尔登法环");
+case ECameraStateReference:: Bloodborne: return TEXT("血源诅咒");
+case ECameraStateReference::DarkSouls:  return TEXT("黑暗之魂");
+case ECameraStateReference::DarkSouls3: return TEXT("黑暗之魂3");
+case ECameraStateReference::Sekiro:     return TEXT("只狼");
+case ECameraStateReference:: LiesOfP:     return TEXT("匹诺曹的谎言");
+case ECameraStateReference:: Some:       return TEXT("部分游戏");
+case ECameraStateReference::Few:        return TEXT("少数游戏");
+case ECameraStateReference::None:
+default:                                return TEXT("无");
+}
+```
+
+## 示例数据参考
+```csv
+CameraStatesFull_1,FreeExploration,BasicMovement,Explore_Default,探索默认,玩家在开放世界中自由探索时的默认相机状态,1,All
+CameraStatesFull_50,Combat,LockOn,LockOn_Normal,普通锁定,锁定普通敌人时的相机状态,1,All
+CameraStatesFull_100,Combat,Boss,Boss_Giant,巨型Boss,面对巨型Boss时的特殊相机状态,2,EldenRing
+CameraStatesFull_200,Environment,Door,Door_FogWall,迷雾墙,进入Boss房间前的迷雾墙相机,3,DarkSouls
+CameraStatesFull_300,Death,DeathCamera,Death_Normal,普通死亡,普通死亡时的相机表现,1,All
+```
+
+## 文件结构
+```
+Source/[YourProject]/
+├── Public/
+│   └── Camera/
+│       └── Data/
+│           ├── CameraStateEnums.h        (新建-枚举，包含3个枚举类型)
+│           ├── CameraStateData.h         (新建-结构体)
+│           └── CameraStateHelpers.h      (新建-辅助类)
+└── Private/
+    └── Camera/
+        └── Data/
+            └── CameraStateHelpers.cpp    (新建-辅助类实现)
+```
+
+## UE4.27 兼容性要求
+1. 使用 GENERATED_BODY() 宏
+2. #include "XXX.generated.h" 必须是最后一个include
+3. 辅助类继承 UBlueprintFunctionLibrary
+4. 所有蓝图可调用函数使用 UFUNCTION(BlueprintPure, Category = "...")
+5. **USTRUCT结构体中不能包含UFUNCTION，只能有UPROPERTY和普通构造函数**
+6. Priority字段使用 meta=(ClampMin=1, ClampMax=4)
+7. Description字段使用 meta=(MultiLine=true)
+
+## 完成后验证
+1. 编译项目确认无错误
+2. 确认FCameraStateRow结构体中不包含任何UFUNCTION（只有UPROPERTY属性和构造函数）
+3. 确认UCameraStateHelpers类包含所有32个静态辅助函数
+4. 确认3个枚举类型正确定义并可在蓝图中使用
+5. SubCategory枚举应包含约60个值
+
+## 注意事项
+- SubCategory枚举值较多（约60个），注意避免命名冲突
+- 对于可能重复的名称，使用前缀区分：
+  - Combat下的Summon → Summon
+  - Magic下的Summon → MagicSummon
+  - Multiplayer下的Summon → MultiplayerSummon
+  - Combat下的Multiplayer → CombatMultiplayer
+  - Cinematic下的Transition → CinematicTransition
+  - NPC下的Special → NPCSpecial
