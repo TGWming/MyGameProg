@@ -1,0 +1,1191 @@
+================================================================================
+  FlowVisualizer — UE4.27 通用运行时数据流可视化插件
+  设计纲领与需求规格文档 v1.0
+  
+  日期: 2026-03-17
+  作者: TGWming (需求) + Copilot (架构设计)
+  目标引擎: Unreal Engine 4.27
+  文档状态: 待确认
+================================================================================
+
+目录
+────────────────────────────────────────────────────────────────────────────────
+  1. 项目定位与需求概述
+  2. 核心设计约束（三项关键决策）
+  3. 总体架构设计
+  4. 插件文件结构
+  5. 模块一：FlowVisualizerRuntime（运行时模块）
+  6. 模块二：FlowVisualizerEditor（编辑器模块）
+  7. 视觉风格与渲染规格
+  8. 管线定义与数据拓扑
+  9. 动画系统设计
+  10. 项目接入方式（以 Soul 项目为例）
+  11. .uplugin 描述文件
+  12. 开发阶段规划（9 Phase）
+  13. 风险与约束
+  14. 确认清单
+────────────────────────────────────────────────────────────────────────────────
+
+
+================================================================================
+1. 项目定位与需求概述
+================================================================================
+
+1.1 一句话定义
+──────────────
+一个 UE4.27 通用 Editor Plugin，以独立弹出的终端风格黑框窗口为载体，
+在游戏 PIE（Play-In-Editor）运行时，用高亮彩色文字、ASCII 箭头和流动
+光点动画，实时展示用户所选模块的 C++ 数据流链路。
+
+1.2 核心体验
+──────────────
+- 不是精细的节点图编辑器，不需要 Blueprint 那种可编辑交互
+- 是一个只读的运行时观察工具
+- 类似 DeepWiki 依赖时序图的信息组织方式：让用户一眼看清模块间依赖、
+  数据流向、层级关系
+- 终端/Console 美学：黑色背景 + 高亮彩色文字 + 流动箭头动画
+- 用户可选择观察不同的"管线"（Pipeline），例如：
+    · 角色输入 → 移动系统 → 动画状态机 → Viewport 渲染结果
+    · 锁定输入 → LockOn 组件 → 相机跟随 → Viewport 渲染结果
+    · 攻击输入 → 体力判定 → 连击系统 → 伤害计算 → 状态更新
+
+1.3 适用范围
+──────────────
+- 通用插件，适配所有 UE4.27 C++ 项目
+- 不绑定任何特定游戏项目
+- 任何项目只需放入 Plugins/ 文件夹、勾选启用、重启引擎即可使用
+
+1.4 参考项目背景
+──────────────
+当前首个接入项目为 SoulCode-main（黑魂风格 3C 游戏），其核心架构：
+  
+  AMycharacter (主角色类)
+    ├── USoulsCameraManager          (相机系统管理)
+    │     ├── USoulsCameraPipeline   (8-Stage 相机管线)
+    │     ├── UCameraModifierManager (26 种相机修改器)
+    │     └── UCameraCollisionBase   (碰撞策略基类)
+    ├── UTargetDetectionComponent    (锁定目标检测)
+    ├── UUIManagerComponent          (锁定 UI 管理)
+    ├── USubTargetManager            (子锁点管理)
+    ├── USoulsCameraDebugComponent   (相机调试可视化)
+    └── USphereComponent             (锁定检测球)
+
+  角色状态枚举 ECharacterState:
+    Idle / Walking / Running / Dodging / Attacking / Blocking / Staggered / Dead
+
+  系统模块:
+    移动系统 (WalkSpeed/RunSpeed/LockedOnSpeed)
+    体力系统 (MaxStamina/RegenRate/DodgeCost/AttackCost)
+    闪避系统 (DodgeDistance/InvincibilityDuration)
+    战斗系统 (ComboResetTime/BlockDamageReduction)
+    锁定系统 (LockOnRange/LockOnBreakDistance)
+    相机系统 (CameraResetSpeed/AutoRealign/8-Stage Pipeline)
+
+
+================================================================================
+2. 核心设计约束（三项关键决策）
+================================================================================
+
+2.1 视觉风格：终端高亮文字流
+──────────────────────────────
+- 终端/Console 风格：黑色背景 + 高亮彩色文字
+- Slate FSlateDrawElement 自绘制：保持终端美学但动画流畅
+- 不复刻 Blueprint 风格的精致 UI 方框
+- 截图（DeepWiki 时序图）的参考意义在于信息组织方式，不在于视觉形式
+- 节点用彩色高亮文字表示，连线用 ASCII 箭头符号 + 自绘制光点
+
+预期面板效果示意：
+
+  +========================================================================+
+  |  FLOW VISUALIZER v0.1 | Pipeline: [CharacterMovement] | Pause         |
+  +========================================================================+
+  |                                                                        |
+  |  [PlayerInput] ===@===> [MovementProcess] ===@===> [StaminaSys]       |
+  |   MoveF=0.71             Vel=(420,0,0)         Cur=85/100             |
+  |   MoveR=0.71             Spd=600 (Running)     Regen=20/s             |
+  |                                |                                       |
+  |                                v                                       |
+  |                         [AnimStateMachine] ===@===> [Viewport]        |
+  |                          State: Running              Final Render      |
+  |                          Prev: Walking                                 |
+  |                                                                        |
+  +========================================================================+
+  |  Frame: 14523 | FPS: 60 | Active: 4/5 | Last Signal: 0.016s ago      |
+  +========================================================================+
+
+  Legend: @ = flowing highlight dot    > = data flow direction
+         Bright text = currently active node
+
+2.2 通用插件形式
+──────────────────────────────
+- 放入任意 UE4.27 项目的 Plugins/ 文件夹
+- 打开编辑器 → Edit → Plugins → 搜索 "FlowVisualizer" → 勾选 → 重启
+- 与用户的 Debug Manager 插件使用方式完全一致
+- Runtime 模块只依赖 Core, CoreUObject, Engine（最小依赖）
+- 不引用任何游戏项目的头文件或类
+
+2.3 独立弹出窗口
+──────────────────────────────
+- 使用 SWindow（Slate 独立操作系统窗口），不是 Editor 内嵌 Tab
+- 可自由拖动、调整大小
+- 可放在第二显示器上
+- 游戏全屏时仍可见（独立窗口层级）
+- 从 Editor 菜单栏启动：Window → Flow Visualizer
+- 类似用户现有项目中的 Debug Manager Console 窗口
+
+
+================================================================================
+3. 总体架构设计
+================================================================================
+
+3.1 分层架构
+──────────────
+
+  +---------------------------------------------------------------+
+  |            Layer 1: Runtime Module (FlowVisualizerRuntime)     |
+  |            Placed in Plugins/, works with any project          |
+  |                                                               |
+  |  FFlowTracer (Global Singleton)                               |
+  |  +-- Signal(NodeID, Data)    <-- Only API for game code       |
+  |  +-- EventRingBuffer         <-- Stores recent N events       |
+  |  +-- OnFlowEvent Delegate    <-- Editor module listens        |
+  |  +-- FLOW_SIGNAL macro       <-- Convenience + auto-strip     |
+  |                                                               |
+  |  FFlowPipeline / FFlowNode / FFlowEdge                       |
+  |  +-- Pipeline topology structs (pure data, no game deps)      |
+  |  +-- Registerable via code or external JSON                   |
+  |                                                               |
+  +---------------------------------------------------------------+
+  |            Layer 2: Editor Module (FlowVisualizerEditor)       |
+  |            Editor-only, does not affect packaging             |
+  |                                                               |
+  |  FlowVisualizerEditorModule                                   |
+  |  +-- Register menu entry (Window -> Flow Visualizer)          |
+  |  +-- Register toolbar button (optional)                       |
+  |  +-- Create SWindow independent window                        |
+  |                                                               |
+  |  SFlowVisualizerPanel (Slate Widget, embedded in SWindow)     |
+  |  +-- Black background self-draw area                          |
+  |  +-- Top bar: Pipeline dropdown + Pause + Clear               |
+  |  +-- Main area: Terminal-style nodes + arrows + flow anim     |
+  |  +-- Bottom bar: Frame info + FPS + active signal stats       |
+  |                                                               |
+  |  FlowPipelineRegistry (Pipeline registration center)          |
+  |  +-- Built-in empty pipeline template                         |
+  |  +-- Supports runtime dynamic registration from projects      |
+  |                                                               |
+  +---------------------------------------------------------------+
+
+3.2 Universality: Plugin vs Project code relationship
+──────────────────────────────────────────────────────
+
+  FlowVisualizer Plugin                 Game Project Code
+  (Universal, any UE4.27)               (e.g., Soul project)
+
+  +---------------------+              +-----------------------------+
+  |FlowVisualizerRuntime|              | soul.Build.cs               |
+  |                     |              |  depends on                 |
+  | Provides:           |              |  FlowVisualizerRuntime      |
+  |  FLOW_SIGNAL macro  |<-- include --| MyCharacter.cpp:            |
+  |  FFlowTracer        |              |  FLOW_SIGNAL("Movement",   |
+  |  FFlowPipeline      |              |    "Vel=...");              |
+  |                     |              |                             |
+  | Does NOT reference  |              | SoulFlowPipelines.cpp:     |
+  | any game classes    |              |  Registers project-specific |
+  | Does NOT #include   |              |  pipelines                  |
+  | any project headers |              |  RegisterPipeline(...)      |
+  +---------------------+              +-----------------------------+
+  
+  +---------------------+
+  |FlowVisualizerEditor |
+  |                     | <-- reads FFlowTracer event stream
+  |SFlowVisualizerPanel | <-- reads registered Pipelines
+  | (independent window)| <-- renders terminal-style visualization
+  +---------------------+
+
+3.3 Data flow (one complete signal cycle)
+──────────────────────────────────────
+
+  Game runtime: AMycharacter::Tick() movement logic called
+      |
+      v
+  Macro in code: FLOW_SIGNAL("Movement", "Vel=(300,0,0) State=Walking")
+      |
+      v
+  FFlowTracer::Signal()
+      +-- Write to EventRingBuffer {Timestamp, NodeID, Data, FrameNumber}
+      +-- Broadcast OnFlowEvent
+              |
+              v
+  SFlowVisualizerPanel::OnFlowEventReceived()  [same Game Thread]
+      +-- Find NodeID position in current pipeline
+      +-- Mark node as Active (set LastActiveTime = Now)
+      +-- Mark incoming edge as Active (trigger flow dot animation)
+      +-- Update data label text
+      +-- Invalidate() to trigger repaint
+              |
+              v
+  SFlowVisualizerPanel::OnPaint()
+      +-- Draw black background
+      +-- Iterate nodes -> draw text (active=cyan, inactive=dark gray)
+      |   +-- Active nodes show data values below (bright green)
+      +-- Iterate edges -> draw line segments + arrow heads
+      |   +-- Active edges draw moving dot (white, Lerp by time)
+      +-- Draw bottom status bar stats
+
+
+================================================================================
+4. 插件文件结构
+================================================================================
+
+FlowVisualizer/
++-- FlowVisualizer.uplugin
+|
++-- Source/
+|   +-- FlowVisualizerRuntime/          <-- Runtime module
+|   |   +-- FlowVisualizerRuntime.Build.cs
+|   |   |     Dependencies: Core, CoreUObject, Engine
+|   |   +-- Public/
+|   |   |   +-- FlowVisualizerRuntimeModule.h
+|   |   |   +-- FlowTracer.h
+|   |   |   +-- FlowTracerMacros.h
+|   |   |   +-- FlowPipelineTypes.h
+|   |   +-- Private/
+|   |       +-- FlowVisualizerRuntimeModule.cpp
+|   |       +-- FlowTracer.cpp
+|   |
+|   +-- FlowVisualizerEditor/           <-- Editor module
+|       +-- FlowVisualizerEditor.Build.cs
+|       |     Dependencies: Core, CoreUObject, Engine, Slate, SlateCore,
+|       |                   UnrealEd, EditorStyle, FlowVisualizerRuntime
+|       +-- Public/
+|       |   +-- FlowVisualizerEditorModule.h
+|       |   +-- SFlowVisualizerPanel.h
+|       |   +-- FlowPipelineRegistry.h
+|       +-- Private/
+|           +-- FlowVisualizerEditorModule.cpp
+|           +-- SFlowVisualizerPanel.cpp
+|           +-- FlowPipelineRegistry.cpp
+|           +-- FlowVisualizerStyle.cpp
+|
++-- Resources/
+    +-- Icon128.png
+
+
+================================================================================
+5. 模块一：FlowVisualizerRuntime（运行时模块）
+================================================================================
+
+5.1 FFlowTracer — 全局单例事件采集器
+──────────────────────────────────────
+
+职责：接收游戏代码的信号广播，存储事件流，通知 Editor 层
+
+  class FLOWVISUALIZERRUNTIME_API FFlowTracer
+  {
+  public:
+      static FFlowTracer& Get();  // 全局单例访问
+  
+      // 核心 API：游戏代码调用此函数发送信号
+      void Signal(FName NodeID, const FString& DataPayload = TEXT(""));
+  
+      // Editor 层监听此 Delegate
+      DECLARE_MULTICAST_DELEGATE_OneParam(FOnFlowEvent, const FFlowEvent&);
+      FOnFlowEvent OnFlowEvent;
+  
+      // 获取最近的事件（供 Editor 查询）
+      TArray<FFlowEvent> GetRecentEvents(int32 Count) const;
+  
+      // 清空缓冲区
+      void ClearBuffer();
+  
+  private:
+      TCircularBuffer<FFlowEvent> EventBuffer;   // 容量 1024
+      FCriticalSection BufferLock;                // 防御式线程安全
+  };
+
+5.2 FFlowEvent — 事件数据结构
+──────────────────────────────────────
+
+  struct FLOWVISUALIZERRUNTIME_API FFlowEvent
+  {
+      double Timestamp;          // FPlatformTime::Seconds()
+      uint64 FrameNumber;        // GFrameNumber
+      FName NodeID;              // "Movement", "Camera", "LockOn" etc
+      FString DataPayload;       // Free-form data string
+  };
+
+5.3 FLOW_SIGNAL 宏
+──────────────────────────────────────
+
+  // FlowTracerMacros.h
+  
+  #if !UE_BUILD_SHIPPING
+  #define FLOW_SIGNAL(NodeID, Data) \
+      FFlowTracer::Get().Signal(FName(TEXT(NodeID)), Data)
+  #define FLOW_SIGNAL_SIMPLE(NodeID) \
+      FFlowTracer::Get().Signal(FName(TEXT(NodeID)))
+  #else
+  #define FLOW_SIGNAL(NodeID, Data)        // empty operation
+  #define FLOW_SIGNAL_SIMPLE(NodeID)       // empty operation
+  #endif
+
+特性：
+  - Shipping 构建时宏展开为空操作，零性能开销
+  - 游戏代码只需 #include "FlowTracerMacros.h" 即可使用
+  - 不需要 include 任何其他插件头文件
+
+5.4 管线数据结构
+──────────────────────────────────────
+
+  struct FLOWVISUALIZERRUNTIME_API FFlowNode
+  {
+      FName NodeID;              // Unique ID, matches FLOW_SIGNAL's NodeID
+      FText DisplayName;         // Display name on panel
+      FVector2D RelativePosition;// Relative coordinates on panel (0~1 range)
+  };
+  
+  struct FLOWVISUALIZERRUNTIME_API FFlowEdge
+  {
+      FName SourceNodeID;
+      FName TargetNodeID;
+  };
+  
+  struct FLOWVISUALIZERRUNTIME_API FFlowPipeline
+  {
+      FName PipelineID;          // "CharacterMovement", "LockOn" etc
+      FText DisplayName;         // Display name in dropdown
+      TArray<FFlowNode> Nodes;
+      TArray<FFlowEdge> Edges;
+  };
+
+5.5 FlowPipelineRegistry — 管线注册中心
+──────────────────────────────────────
+
+  class FLOWVISUALIZERRUNTIME_API FFlowPipelineRegistry
+  {
+  public:
+      static FFlowPipelineRegistry& Get();
+  
+      void RegisterPipeline(const FFlowPipeline& Pipeline);
+      void UnregisterPipeline(FName PipelineID);
+      
+      const FFlowPipeline* FindPipeline(FName PipelineID) const;
+      TArray<FName> GetAllPipelineIDs() const;
+      
+      DECLARE_MULTICAST_DELEGATE(FOnPipelineRegistryChanged);
+      FOnPipelineRegistryChanged OnRegistryChanged;
+  
+  private:
+      TMap<FName, FFlowPipeline> RegisteredPipelines;
+  };
+
+5.6 Build.cs 依赖
+──────────────────────────────────────
+
+  FlowVisualizerRuntime.Build.cs:
+  
+  PublicDependencyModuleNames: "Core", "CoreUObject", "Engine"
+  
+  Note: Minimal dependencies. Does not depend on UMG, InputCore, Slate, etc.
+  Any UE4.27 project can reference this module directly.
+
+
+================================================================================
+6. 模块二：FlowVisualizerEditor（编辑器模块）
+================================================================================
+
+6.1 FlowVisualizerEditorModule — 模块入口
+──────────────────────────────────────
+
+职责：
+  - 注册菜单入口（Window → Flow Visualizer）
+  - 可选：注册工具栏按钮
+  - 管理独立 SWindow 窗口的生命周期
+
+核心逻辑：
+
+  void FFlowVisualizerEditorModule::StartupModule()
+  {
+      // Register menu item
+      // Use FExtender + FMenuBarBuilder for UE4.27 compatibility
+      // (UToolMenus may have differences in UE4.27 vs UE5)
+      
+      TSharedPtr<FExtender> MenuExtender = MakeShareable(new FExtender());
+      MenuExtender->AddMenuExtension(
+          "WindowLayout",
+          EExtensionHook::After,
+          PluginCommands,
+          FMenuExtensionDelegate::CreateRaw(
+              this, &FFlowVisualizerEditorModule::AddMenuExtension));
+      
+      FLevelEditorModule& LevelEditorModule = 
+          FModuleManager::LoadModuleChecked<FLevelEditorModule>("LevelEditor");
+      LevelEditorModule.GetMenuExtensibilityManager()
+          ->AddExtender(MenuExtender);
+  }
+  
+  void FFlowVisualizerEditorModule::AddMenuExtension(FMenuBuilder& Builder)
+  {
+      Builder.AddMenuEntry(
+          FText::FromString("Flow Visualizer"),
+          FText::FromString("Open runtime data flow visualization window"),
+          FSlateIcon(),
+          FUIAction(FExecuteAction::CreateRaw(
+              this, &FFlowVisualizerEditorModule::OpenVisualizerWindow))
+      );
+  }
+
+6.2 SWindow 独立窗口创建
+──────────────────────────────────────
+  
+  void FFlowVisualizerEditorModule::OpenVisualizerWindow()
+  {
+      if (VisualizerWindow.IsValid())
+      {
+          VisualizerWindow->BringToFront();
+          return;
+      }
+  
+      VisualizerWindow = SNew(SWindow)
+          .Title(FText::FromString("Flow Visualizer"))
+          .ClientSize(FVector2D(1200, 700))
+          .SupportsMinimize(true)
+          .SupportsMaximize(true)
+          .IsTopmostWindow(false)
+          .SizingRule(ESizingRule::UserSized)
+          .AutoCenter(EAutoCenter::PreferredWorkArea)
+          [
+              SNew(SFlowVisualizerPanel)
+          ];
+  
+      VisualizerWindow->SetOnWindowClosed(
+          FOnWindowClosed::CreateRaw(
+              this, &FFlowVisualizerEditorModule::OnWindowClosed));
+  
+      FSlateApplication::Get().AddWindow(VisualizerWindow.ToSharedRef());
+  }
+
+  特性：
+  - 独立操作系统窗口，可自由拖动/调整大小
+  - 可放在第二显示器上
+  - 游戏全屏时仍可见
+  - 窗口关闭后再次点击菜单可重新打开
+  - 重复点击菜单不会创建多个窗口（BringToFront）
+
+6.3 SFlowVisualizerPanel — 主渲染面板
+──────────────────────────────────────
+
+  class SFlowVisualizerPanel : public SCompoundWidget
+  {
+      SLATE_BEGIN_ARGS(SFlowVisualizerPanel) {}
+      SLATE_END_ARGS()
+  
+      void Construct(const FArguments& InArgs);
+      virtual void Tick(const FGeometry&, double, float DeltaTime) override;
+      virtual int32 OnPaint(...) const override;
+  
+  private:
+      // Currently selected pipeline
+      FName CurrentPipelineID;
+      
+      // Node state tracking
+      TMap<FName, double> NodeLastActiveTime;
+      TMap<FName, FString> NodeLastData;
+      
+      // Edge state tracking
+      TMap<TPair<FName,FName>, double> EdgeLastActiveTime;
+      
+      // Animation parameters
+      float HighlightFadeDuration = 1.5f;   // Highlight fade duration (seconds)
+      float FlowDotSpeed = 200.0f;          // Flow dot speed (pixels/sec)
+      
+      // Control state
+      bool bIsPaused = false;
+      
+      // Delegate handle
+      FDelegateHandle FlowEventHandle;
+      
+      // Event handling
+      void OnFlowEventReceived(const FFlowEvent& Event);
+      
+      // Drawing sub-functions
+      void DrawBackground(...) const;
+      void DrawNode(...) const;
+      void DrawEdge(...) const;
+      void DrawFlowDot(...) const;
+      void DrawDataLabel(...) const;
+      void DrawStatusBar(...) const;
+      void DrawTopBar(...) const;
+  };
+
+6.4 Build.cs 依赖
+──────────────────────────────────────
+
+  FlowVisualizerEditor.Build.cs:
+  
+  PublicDependencyModuleNames:
+      "Core", "CoreUObject", "Engine", "FlowVisualizerRuntime"
+  
+  PrivateDependencyModuleNames:
+      "Slate", "SlateCore", "UnrealEd", "EditorStyle",
+      "LevelEditor", "InputCore"
+
+
+================================================================================
+7. 视觉风格与渲染规格
+================================================================================
+
+7.1 配色方案
+──────────────────────────────────────
+
+  Element                   Color HEX     RGB                 Purpose
+  ──────────────────────────────────────────────────────────────────────
+  Background                #0D0D14       (13, 13, 20)        Window bg
+  Node name (active)        #33CCFF       (51, 204, 255)      Currently executing
+  Node name (inactive)      #666666       (102, 102, 102)     Not triggered
+  Data values               #4AFF82       (74, 255, 130)      Realtime data snapshot
+  Arrows/lines (default)    #888888       (136, 136, 136)     Default connections
+  Arrows/lines (active)     #33CCFF       (51, 204, 255)      Data flowing through
+  Flow dot                  #FFFFFF       (255, 255, 255)     Moving dot on line
+  Border/separator          #333340       (51, 51, 64)        Area separators
+  Title bar background      #1A1A25       (26, 26, 37)        Top area
+  Warning/error             #FF6644       (255, 102, 68)      Signal anomalies
+  Status bar text           #999999       (153, 153, 153)     Statistics info
+
+7.2 渲染方式
+──────────────────────────────────────
+
+采用 Slate FSlateDrawElement 自绘制方式：
+
+  - FSlateDrawElement::MakeBox      -> Background, node highlight base
+  - FSlateDrawElement::MakeText     -> Node name text, data value text
+  - FSlateDrawElement::MakeLines    -> Connection lines, arrows
+  - FSlateDrawElement::MakeBox      -> Flow dot (small square)
+
+选择理由：
+  - Keeps terminal aesthetic (black bg + colored text)
+  - Smooth animation (true pixel-level dot movement, not string refresh)
+  - Completely free layout (draw lines/text at any coordinate)
+  - No SRichTextBlock row/column limitations
+
+7.3 字体规格
+──────────────────────────────────────
+
+  Node title:    FSlateFontInfo("Roboto", 14, Bold)      White/Cyan
+  Data values:   FSlateFontInfo("Roboto Mono", 11)        Bright green
+  Status bar:    FSlateFontInfo("Roboto Mono", 10)        Dark gray
+  Pipeline name: FSlateFontInfo("Roboto", 12, Bold)       White
+
+  Note: Use Roboto Mono monospace font for data values to simulate terminal.
+
+
+================================================================================
+8. 管线定义与数据拓扑
+================================================================================
+
+以下管线基于 SoulCode-main 实际代码定义，作为首批管线模板。
+其他项目接入时按同样格式自定义即可。
+
+8.1 Pipeline: CharacterMovement（角色移动链路）
+──────────────────────────────────────
+
+  Nodes:
+    PlayerInput       (0.05, 0.30)  "Player Input"
+    MovementProcess   (0.28, 0.30)  "Movement Process"
+    StaminaSystem     (0.52, 0.30)  "Stamina System"
+    AnimStateMachine  (0.52, 0.70)  "Anim State Machine"
+    ViewportOutput    (0.80, 0.70)  "Viewport Output"
+  
+  Edges:
+    PlayerInput      -> MovementProcess
+    MovementProcess  -> StaminaSystem
+    MovementProcess  -> AnimStateMachine
+    AnimStateMachine -> ViewportOutput
+  
+  Corresponding instrumentation functions:
+    PlayerInput       -> SetupPlayerInputComponent / MoveForward / MoveRight
+    MovementProcess   -> Tick movement logic section
+    StaminaSystem     -> Stamina consume/regen logic
+    AnimStateMachine  -> State transition logic (ECharacterState)
+    ViewportOutput    -> No instrumentation needed (terminal node)
+
+8.2 Pipeline: LockOnSystem（锁定系统链路）
+──────────────────────────────────────
+
+  Nodes:
+    LockOnInput       (0.05, 0.30)  "LockOn Input (Q)"
+    TargetDetection   (0.28, 0.30)  "Target Detection"
+    StartLockOn       (0.52, 0.30)  "Start LockOn"
+    CameraLockOn      (0.52, 0.70)  "Camera LockOn"
+    UIManager         (0.75, 0.30)  "UI Manager"
+    ViewportOutput    (0.80, 0.70)  "Viewport Output"
+  
+  Edges:
+    LockOnInput     -> TargetDetection
+    TargetDetection -> StartLockOn
+    StartLockOn     -> CameraLockOn
+    StartLockOn     -> UIManager
+    CameraLockOn    -> ViewportOutput
+  
+  Corresponding instrumentation functions:
+    LockOnInput       -> ToggleLockOn()
+    TargetDetection   -> UTargetDetectionComponent::FindLockOnCandidates()
+    StartLockOn       -> StartLockOn(AActor* Target)
+    CameraLockOn      -> USoulsCameraManager state change to LockOn_Hard
+    UIManager         -> UUIManagerComponent::ShowLockOnWidget()
+
+8.3 Pipeline: CameraPipeline（相机 8-Stage 管线）
+──────────────────────────────────────
+
+  Nodes:
+    CamS1_Input       (0.05, 0.20)  "S1: Input Gather"
+    CamS2_State       (0.20, 0.20)  "S2: State Machine"
+    CamS3_Module      (0.35, 0.20)  "S3: Module Compute"
+    CamS4_Modifier    (0.50, 0.20)  "S4: Modifier Apply"
+    CamS5_Blend       (0.65, 0.20)  "S5: Blend & Solve"
+    CamS6_Collision   (0.65, 0.60)  "S6: Collision"
+    CamS7_PostProcess (0.50, 0.60)  "S7: Post Process"
+    CamS8_Render      (0.35, 0.60)  "S8: Render Apply"
+  
+  Edges:
+    CamS1 -> CamS2 -> CamS3 -> CamS4 -> CamS5
+    CamS5 -> CamS6 -> CamS7 -> CamS8
+  
+  Special note:
+    USoulsCameraPipeline already has FPipelineStats recording each Stage's
+    execution time and skip status. Can directly hook and read Stats output,
+    requiring minimal manual instrumentation. Only need to read Stats after
+    Pipeline Execute to drive all 8 node visualizations.
+
+8.4 Pipeline: CombatSystem（战斗系统链路）
+──────────────────────────────────────
+
+  Nodes:
+    AttackInput       (0.05, 0.30)  "Attack Input"
+    StaminaCheck      (0.25, 0.30)  "Stamina Check"
+    ComboSystem       (0.45, 0.30)  "Combo System"
+    DamageCalc        (0.65, 0.30)  "Damage Calc"
+    StateUpdate       (0.65, 0.65)  "State Update"
+    AnimMontage       (0.45, 0.65)  "Anim Montage"
+    ViewportOutput    (0.25, 0.65)  "Viewport Output"
+  
+  Edges:
+    AttackInput  -> StaminaCheck -> ComboSystem -> DamageCalc
+    DamageCalc   -> StateUpdate  -> AnimMontage -> ViewportOutput
+
+
+================================================================================
+9. 动画系统设计
+================================================================================
+
+9.1 节点高亮渐灭
+──────────────────────────────────────
+
+  When receiving a signal for a NodeID:
+    NodeLastActiveTime[NodeID] = FPlatformTime::Seconds()
+  
+  Each frame in OnPaint:
+    Elapsed = CurrentTime - NodeLastActiveTime[NodeID]
+    
+    if Elapsed < HighlightFadeDuration (1.5s):
+        Alpha = 1.0 - (Elapsed / HighlightFadeDuration)
+        Node name color = Lerp(DarkGray #666666, Cyan #33CCFF, Alpha)
+        Data text = visible (bright green, Alpha)
+    else:
+        Node name color = DarkGray #666666
+        Data text = hidden or very dim
+
+9.2 流动光点动画
+──────────────────────────────────────
+
+  When an Edge is triggered (source and target nodes active in short sequence):
+    EdgeLastActiveTime[SourceID, TargetID] = Now
+  
+  Each frame in OnPaint:
+    Elapsed = CurrentTime - EdgeLastActiveTime
+    
+    if Elapsed < HighlightFadeDuration:
+        // Calculate dot position along edge
+        EdgeLength = Distance(SourcePosition, TargetPosition)
+        Progress = fmod(Elapsed * FlowDotSpeed / EdgeLength, 1.0)
+        DotPosition = Lerp(SourcePosition, TargetPosition, Progress)
+        DotAlpha = 1.0 - (Elapsed / HighlightFadeDuration)
+        
+        // Draw dot: 6x6 pixel bright white square
+        DrawBox(DotPosition - (3,3), (6,6), White, DotAlpha)
+        
+        // Edge line color also brightens
+        LineColor = Lerp(DarkGray #888888, Cyan #33CCFF, DotAlpha)
+
+9.3 Edge 自动推导
+──────────────────────────────────────
+
+  When receiving Signal("NodeB", ...):
+    Iterate all Edges in current pipeline where Target == "NodeB"
+    Check if that Edge's Source node LastActiveTime is within last 200ms
+    If yes -> auto-mark this Edge as Active
+    If no  -> only mark node Active, do not light up edge
+
+  This way, even if users only instrument node signals, edge animations
+  can be automatically inferred.
+
+9.4 采样节流
+──────────────────────────────────────
+
+  For signals triggered every frame in Tick (e.g., MovementProcess),
+  the panel does not need to update every frame. Throttling strategy:
+  
+  Consecutive signals for the same NodeID must be at least 100ms apart.
+  Signals arriving within this 100ms window only update the DataPayload
+  (take latest value), without resetting LastActiveTime (prevents
+  highlight from never fading).
+
+
+================================================================================
+10. 项目接入方式（以 Soul 项目为例）
+================================================================================
+
+10.1 Step 1: Place plugin
+──────────────────────────────────────
+
+  YourUE4.27Project/
+  +-- Content/
+  +-- Source/
+  |   +-- soul/
+  +-- Plugins/
+      +-- FlowVisualizer/     <-- Copy entire folder here
+
+10.2 Step 2: Add module dependency
+──────────────────────────────────────
+
+  Modify soul.Build.cs:
+  
+  PublicDependencyModuleNames.AddRange(new string[] { 
+      "Core", "CoreUObject", "Engine", "InputCore", "UMG",
+      "FlowVisualizerRuntime"   // <-- Add this line
+  });
+
+10.3 Step 3: Instrument key locations
+──────────────────────────────────────
+
+  Each instrumentation point is one line of code.
+
+  File: MyCharacter.cpp
+  ──────────────────────
+  
+  #include "FlowTracerMacros.h"  // Add at top of file
+  
+  // Movement logic in Tick
+  void AMycharacter::Tick(float DeltaTime)
+  {
+      Super::Tick(DeltaTime);
+      FLOW_SIGNAL("MovementProcess", FString::Printf(TEXT("Vel=%s Spd=%.0f State=%s"),
+          *GetVelocity().ToString(),
+          GetCharacterMovement()->MaxWalkSpeed,
+          *UEnum::GetValueAsString(CurrentState)));
+      // ... original logic unchanged ...
+  }
+  
+  // Lock-on toggle
+  void AMycharacter::ToggleLockOn()
+  {
+      FLOW_SIGNAL("LockOnInput", FString::Printf(TEXT("bIsLockedOn=%s"),
+          bIsLockedOn ? TEXT("true") : TEXT("false")));
+      // ... original logic ...
+  }
+  
+  // Start lock-on
+  void AMycharacter::StartLockOn(AActor* Target)
+  {
+      FLOW_SIGNAL("StartLockOn", FString::Printf(TEXT("Target=%s"),
+          Target ? *Target->GetName() : TEXT("None")));
+      // ... original logic ...
+  }
+  
+  // Cancel lock-on
+  void AMycharacter::CancelLockOn()
+  {
+      FLOW_SIGNAL_SIMPLE("CancelLockOn");
+      // ... original logic ...
+  }
+  
+  // Stamina consumption
+  (in stamina-related function)
+  {
+      FLOW_SIGNAL("StaminaSystem", FString::Printf(TEXT("Cur=%.0f/%.0f Cost=%.0f"),
+          CurrentStamina, MaxStamina, Cost));
+  }
+  
+  // Attack
+  void AMycharacter::PerformAttack(...)
+  {
+      FLOW_SIGNAL("Combat", FString::Printf(TEXT("Type=%s Combo=%d"),
+          bHeavy ? TEXT("Heavy") : TEXT("Light"), ComboIndex));
+  }
+  
+  File: TargetDetectionComponent.cpp
+  ──────────────────────────────────
+  
+  #include "FlowTracerMacros.h"
+  
+  void UTargetDetectionComponent::FindLockOnCandidates()
+  {
+      FLOW_SIGNAL("TargetDetection", FString::Printf(TEXT("Candidates=%d"),
+          LockOnCandidates.Num()));
+      // ... original logic ...
+  }
+  
+  File: UIManagerComponent.cpp
+  ────────────────────────────
+  
+  #include "FlowTracerMacros.h"
+  
+  void UUIManagerComponent::ShowLockOnWidget(AActor* Target)
+  {
+      FLOW_SIGNAL("UIManager", FString::Printf(TEXT("Target=%s"),
+          Target ? *Target->GetName() : TEXT("None")));
+      // ... original logic ...
+  }
+  
+  File: SoulsCameraPipeline.cpp (optional, leverages existing Stats)
+  ──────────────────────────────────────────────────────────────────
+  
+  #include "FlowTracerMacros.h"
+  
+  // At end of Execute()
+  void USoulsCameraPipeline::Execute(float DeltaTime)
+  {
+      // ... original 8 Stage execution logic ...
+      
+      // After execution, send signals based on Stats
+      const FPipelineStats& Stats = GetLastStats();
+      for (int32 i = 0; i < 8; i++)
+      {
+          if (Stats.StageTimesMs[i] > 0.0f)
+          {
+              FString NodeID = FString::Printf(TEXT("CamS%d"), i + 1);
+              FString Data = FString::Printf(TEXT("Time=%.2fms"), Stats.StageTimesMs[i]);
+              FFlowTracer::Get().Signal(FName(*NodeID), Data);
+          }
+      }
+  }
+
+10.4 Step 4: Register project-specific pipelines
+──────────────────────────────────────
+
+  Create new file in project: SoulFlowSetup.cpp
+  
+  #include "FlowTracer.h"
+  #include "FlowPipelineTypes.h"
+  
+  void RegisterSoulPipelines()
+  {
+      // Pipeline 1: Character Movement
+      FFlowPipeline P1;
+      P1.PipelineID = "CharacterMovement";
+      P1.DisplayName = FText::FromString("Character Movement");
+      P1.Nodes = {
+          {FName("PlayerInput"),      FText::FromString("Player Input"),       FVector2D(0.05, 0.30)},
+          {FName("MovementProcess"),  FText::FromString("Movement Process"),   FVector2D(0.28, 0.30)},
+          {FName("StaminaSystem"),    FText::FromString("Stamina System"),     FVector2D(0.52, 0.30)},
+          {FName("AnimStateMachine"), FText::FromString("Anim State Machine"), FVector2D(0.52, 0.70)},
+          {FName("ViewportOutput"),   FText::FromString("Viewport Output"),    FVector2D(0.80, 0.70)},
+      };
+      P1.Edges = {
+          {FName("PlayerInput"),      FName("MovementProcess")},
+          {FName("MovementProcess"),  FName("StaminaSystem")},
+          {FName("MovementProcess"),  FName("AnimStateMachine")},
+          {FName("AnimStateMachine"), FName("ViewportOutput")},
+      };
+      FFlowPipelineRegistry::Get().RegisterPipeline(P1);
+      
+      // Pipeline 2: LockOn System
+      FFlowPipeline P2;
+      P2.PipelineID = "LockOnSystem";
+      P2.DisplayName = FText::FromString("LockOn System");
+      P2.Nodes = {
+          {FName("LockOnInput"),     FText::FromString("LockOn Input (Q)"),  FVector2D(0.05, 0.30)},
+          {FName("TargetDetection"), FText::FromString("Target Detection"),  FVector2D(0.28, 0.30)},
+          {FName("StartLockOn"),     FText::FromString("Start LockOn"),      FVector2D(0.52, 0.30)},
+          {FName("CameraLockOn"),    FText::FromString("Camera LockOn"),     FVector2D(0.52, 0.70)},
+          {FName("UIManager"),       FText::FromString("UI Manager"),        FVector2D(0.75, 0.30)},
+          {FName("ViewportOutput"),  FText::FromString("Viewport Output"),   FVector2D(0.80, 0.70)},
+      };
+      P2.Edges = {
+          {FName("LockOnInput"),     FName("TargetDetection")},
+          {FName("TargetDetection"), FName("StartLockOn")},
+          {FName("StartLockOn"),     FName("CameraLockOn")},
+          {FName("StartLockOn"),     FName("UIManager")},
+          {FName("CameraLockOn"),    FName("ViewportOutput")},
+      };
+      FFlowPipelineRegistry::Get().RegisterPipeline(P2);
+      
+      // Pipeline 3: Camera Pipeline (8-Stage)
+      FFlowPipeline P3;
+      P3.PipelineID = "CameraPipeline";
+      P3.DisplayName = FText::FromString("Camera 8-Stage Pipeline");
+      P3.Nodes = {
+          {FName("CamS1"), FText::FromString("S1: Input Gather"),   FVector2D(0.05, 0.20)},
+          {FName("CamS2"), FText::FromString("S2: State Machine"),  FVector2D(0.20, 0.20)},
+          {FName("CamS3"), FText::FromString("S3: Module Compute"), FVector2D(0.35, 0.20)},
+          {FName("CamS4"), FText::FromString("S4: Modifier Apply"), FVector2D(0.50, 0.20)},
+          {FName("CamS5"), FText::FromString("S5: Blend & Solve"),  FVector2D(0.65, 0.20)},
+          {FName("CamS6"), FText::FromString("S6: Collision"),      FVector2D(0.65, 0.60)},
+          {FName("CamS7"), FText::FromString("S7: Post Process"),   FVector2D(0.50, 0.60)},
+          {FName("CamS8"), FText::FromString("S8: Render Apply"),   FVector2D(0.35, 0.60)},
+      };
+      P3.Edges = {
+          {FName("CamS1"), FName("CamS2")},
+          {FName("CamS2"), FName("CamS3")},
+          {FName("CamS3"), FName("CamS4")},
+          {FName("CamS4"), FName("CamS5")},
+          {FName("CamS5"), FName("CamS6")},
+          {FName("CamS6"), FName("CamS7")},
+          {FName("CamS7"), FName("CamS8")},
+      };
+      FFlowPipelineRegistry::Get().RegisterPipeline(P3);
+      
+      // Pipeline 4: Combat System
+      FFlowPipeline P4;
+      P4.PipelineID = "CombatSystem";
+      P4.DisplayName = FText::FromString("Combat System");
+      P4.Nodes = {
+          {FName("AttackInput"),    FText::FromString("Attack Input"),    FVector2D(0.05, 0.30)},
+          {FName("StaminaCheck"),   FText::FromString("Stamina Check"),   FVector2D(0.25, 0.30)},
+          {FName("ComboSystem"),    FText::FromString("Combo System"),    FVector2D(0.45, 0.30)},
+          {FName("DamageCalc"),     FText::FromString("Damage Calc"),     FVector2D(0.65, 0.30)},
+          {FName("StateUpdate"),    FText::FromString("State Update"),    FVector2D(0.65, 0.65)},
+          {FName("AnimMontage"),    FText::FromString("Anim Montage"),    FVector2D(0.45, 0.65)},
+          {FName("ViewportOutput"), FText::FromString("Viewport Output"), FVector2D(0.25, 0.65)},
+      };
+      P4.Edges = {
+          {FName("AttackInput"),  FName("StaminaCheck")},
+          {FName("StaminaCheck"), FName("ComboSystem")},
+          {FName("ComboSystem"),  FName("DamageCalc")},
+          {FName("DamageCalc"),   FName("StateUpdate")},
+          {FName("StateUpdate"),  FName("AnimMontage")},
+          {FName("AnimMontage"),  FName("ViewportOutput")},
+      };
+      FFlowPipelineRegistry::Get().RegisterPipeline(P4);
+  }
+  
+  // Call in GameInstance::Init() or Module::StartupModule():
+  RegisterSoulPipelines();
+
+10.5 Step 5: Run
+──────────────────────────────────────
+
+  1. Compile project
+  2. Open editor -> Edit -> Plugins -> search "Flow Visualizer" -> Enable -> Restart
+  3. Menu bar: Window -> Flow Visualizer -> Independent black window pops up
+  4. Select pipeline to observe from top dropdown
+  5. PIE Play game -> window shows real-time data flow animation
+  6. Operate character, observe node highlights and data changes
+
+
+================================================================================
+11. .uplugin 描述文件
+================================================================================
+
+  {
+      "FileVersion": 3,
+      "Version": 1,
+      "VersionName": "0.1.0",
+      "FriendlyName": "Flow Visualizer",
+      "Description": "Runtime C++ data flow visualization tool. Terminal-style
+                      independent window showing real-time execution flow with
+                      animated arrows and highlighted nodes. Works with any
+                      UE4.27 project.",
+      "Category": "Developer Tools",
+      "CreatedBy": "TGWming",
+      "CreatedByURL": "",
+      "DocsURL": "",
+      "MarketplaceURL": "",
+      "SupportURL": "",
+      "CanContainContent": false,
+      "IsBetaVersion": true,
+      "Installed": true,
+      "EnabledByDefault": false,
+      "Modules": [
+          {
+              "Name": "FlowVisualizerRuntime",
+              "Type": "Runtime",
+              "LoadingPhase": "Default"
+          },
+          {
+              "Name": "FlowVisualizerEditor",
+              "Type": "Editor",
+              "LoadingPhase": "Default"
+          }
+      ]
+  }
+
+
+================================================================================
+12. 开发阶段规划（9 Phase）
+================================================================================
+
+Phase 1: Plugin Skeleton
+──────────────────────────────────────
+  Goal: Plugin compiles and loads, visible in Editor
+  Deliverables:
+    - FlowVisualizer.uplugin
+    - FlowVisualizerRuntime.Build.cs + Module entry (.h/.cpp)
+    - FlowVisualizerEditor.Build.cs + Module entry (.h/.cpp)
+  Validation: Compiles, visible in Plugins list as "Flow Visualizer"
+  Estimate: 1 day
+
+Phase 2: FFlowTracer + FLOW_SIGNAL Macro
+──────────────────────────────────────
+  Goal: Game code can send signals
+  Deliverables:
+    - FlowTracer.h/.cpp (singleton + EventRingBuffer + Delegate)
+    - FlowTracerMacros.h (FLOW_SIGNAL / FLOW_SIGNAL_SIMPLE macros)
+    - FlowPipelineTypes.h (FFlowEvent / FFlowNode / FFlowEdge / FFlowPipeline)
+  Validation: #include + FLOW_SIGNAL compiles in any game code
+  Estimate: 1 day
+
+Phase 3: Independent Window Framework
+──────────────────────────────────────
+  Goal: Pop up independent black window from Editor menu
+  Deliverables:
+    - FlowVisualizerEditorModule.cpp menu registration
+    - SWindow creation logic
+    - SFlowVisualizerPanel shell (black bg + "Flow Visualizer" title text)
+  Validation: Click Window -> Flow Visualizer, independent black window appears
+  Estimate: 1 day
+
+Phase 4: Pipeline Data Structures + Registry + Dropdown
+──────────────────────────────────────
+  Goal: Register pipelines and switch between them in panel
+  Deliverables:
+    - FlowPipelineRegistry.h/.cpp
+    - Panel top bar Pipeline dropdown (SComboBox)
+    - One built-in example pipeline (hardcoded, for testing)
+  Validation: Dropdown shows registered pipeline names, switching updates display
+  Estimate: 1 day
+
+Phase 5: Static Terminal Rendering
+──────────────────────────────────────
+  Goal: Black window shows static flow diagram (text nodes + arrow lines)
+  Deliverables:
+    - SFlowVisualizerPanel::OnPaint() implementation
+    - DrawNode(): Draw node name text at specified coordinates (dark gray)
+    - DrawEdge(): Draw line segments + arrow heads between nodes
+    - DrawStatusBar(): Bottom bar frame info
+    - DrawTopBar(): Top bar pipeline selection + buttons
+  Validation: Opening window shows current pipeline's complete static flow diagram
+  Estimate: 2 days
+
+Phase 6: Event-Driven Highlighting + Data Labels
+──────────────────────────────────────
+  Goal: Nodes light up/fade during gameplay, display data values
+  Deliverables:
+    - Delegate connection (OnFlowEvent -> OnFlowEventReceived)
+    - Node highlight fade logic (LastActiveTime + Alpha calculation)
+    - Data text display (DataPayload -> bright green text below node)
+    - Sampling throttle logic (same NodeID 100ms minimum between triggers)
+  Validation: PIE run game, nodes light up/dim with execution, data updates live
+  Estimate: 2 days
+
+Phase 7: Flowing Dot Animation
+──────────────────────────────────────
+  Goal: Moving highlight dots on connection lines showing data flow direction
+  Deliverables:
+    - Edge Active auto-inference logic
+    - DrawFlowDot(): White dot moving along edge via Lerp
+    - Edge line color changes with Active state
+  Validation: Data flowing from one node to next shows visible moving dot on line
+  Estimate: 1 day
+
+Phase 8: Soul Project Integration
+──────────────────────────────────────
+  Goal: Soul project (3C game) actually functional
+  Deliverables:
+    - soul.Build.cs add FlowVisualizerRuntime dependency
+    - MyCharacter.cpp ~8-10 FLOW_SIGNAL instrumentation points
+    - TargetDetectionComponent.cpp 1-2 instrumentation points
+    - UIManagerComponent.cpp 1 instrumentation point
+    - SoulsCameraPipeline.cpp Stats-based batch signals
+    - SoulFlowSetup.cpp register 4 pipelines
+  Validation: PIE run Soul game, Flow Visualizer window shows all pipelines working
+  Estimate: 1-2 days
+
+Phase 9: Polish
+──────────────────────────────────────
+  Goal: Production-quality experience
+  Deliverables:
+    - Pause/Resume button functionality
+    - Clear signal history button
+    - Status bar stats (Frame/FPS/Active Signals/Last Signal Time)
+    - Window position/size memory (SaveConfig/LoadConfig)
+    - Node mouse hover shows full data history (optional)
+    - Connection animation smoothness tuning
+    - README.md usage documentation
+  Estimate: 1-2 days
+
+
+Total estimate: 11-14 days (IDE Agent execution), MVP (Phase 1-7) ~9 days
+
+
+================================================================================
+13. 风险与约束
+================================================================================
+
+  Risk                              Impact            Mitigation
+  ──────────────────────────────────────────────────────────────────────
+  UE4.27 Slate FSlateDrawElement    May need to       IDE Agent can access UE source,
+  self-draw API documentation       reference engine  engine has many FSlateDrawElement
+  is sparse                         source code       usage examples internally
+  
+  SWindow independent window        Window may be     Provide BringToFront function,
+  behavior differences across       obscured          optional IsTopmostWindow
+  UE4.27 versions
+  
+  Pipeline topology requires        Need to update    Phase 2 advanced: UClass
+  manual definition                 pipelines when    reflection auto-discovery
+                                    adding systems
+  
+  PIE vs Standalone mode            Editor window     FLOW_SIGNAL macro still writes
+  differences                       doesn't exist     to Buffer in Standalone (for
+                                    in Standalone     future file export feature)
+  
+  High-frequency signals            Panel refresh     Sampling throttle: same NodeID
+  (Tick fires every frame)          pressure          only accepted once per 100ms
+  
+  UE4.27 menu registration API     Registration      Fallback: use FExtender +
+  differs slightly from UE5        may need           FMenuBarBuilder traditional
+                                    adjustment        approach (already in design)
+  
+  TCircularBuffer may not exist    May need custom    Use TArray + manual Head/Tail
+  in UE4.27                         implementation    index management as alternative
+
+
+================================================================================
+14. 确认清单
+================================================================================
+
+  [  ]  1. Visual style: Terminal black bg + highlighted colored text +
+           Slate self-drawn flowing arrows/dots
+  [  ]  2. Universal plugin: Place in any UE4.27 Plugins/, enable and restart
+  [  ]  3. Independent popup window: SWindow standalone, not Editor embedded Tab
+  [  ]  4. Data collection: Manual FLOW_SIGNAL macro + project-side pipeline reg
+  [  ]  5. First pipelines: CharacterMovement / LockOnSystem / CameraPipeline /
+           CombatSystem
+  [  ]  6. Pipeline switching: Top dropdown menu, read-only non-editable
+  [  ]  7. Shipping build: Macros auto-stripped, zero performance overhead
+  [  ]  8. Code scope: IDE Agent can read all SoulCode-main Public+Private sources
+  [  ]  9. Camera Pipeline special handling: Leverage existing FPipelineStats,
+           minimal additional instrumentation
+  [  ] 10. Develop in 9 Phases
+
+================================================================================
+  End of Document
+  
+  Next steps:
+    - User confirms this document
+      -> Generate atomized task list (each Phase split into Agent-executable steps)
+    - Atomized tasks confirmed
+      -> IDE Copilot Agent executes in sequence
+================================================================================

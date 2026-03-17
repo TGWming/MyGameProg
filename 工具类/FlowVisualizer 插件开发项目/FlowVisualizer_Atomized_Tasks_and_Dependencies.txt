@@ -1,0 +1,1294 @@
+================================================================================
+  FlowVisualizer — 原子化任务列表与依赖图
+  v1.0
+  
+  日期: 2026-03-17
+  配套文档: FlowVisualizer_Design_Specification.txt
+  
+  说明:
+    - 每个 Task 是一个 IDE Agent 可独立执行的最小单元
+    - 每个 Task 有明确的输入文件、输出文件、验证标准
+    - Task ID 格式: P{Phase}.{Sequence}, 例如 P1.1
+    - 依赖关系在每个 Task 中标注，并在文档末尾汇总为依赖图
+================================================================================
+
+
+目录
+────────────────────────────────────────────────────────────────────────────────
+  PART A: 原子化任务列表 (共 32 个 Task)
+    Phase 1: 插件骨架                    (P1.1 ~ P1.4)
+    Phase 2: 数据采集核心                (P2.1 ~ P2.4)
+    Phase 3: 独立窗口框架                (P3.1 ~ P3.3)
+    Phase 4: 管线数据 + 注册中心         (P4.1 ~ P4.3)
+    Phase 5: 静态终端渲染                (P5.1 ~ P5.4)
+    Phase 6: 事件驱动高亮 + 数据标签     (P6.1 ~ P6.4)
+    Phase 7: 流动光点动画                (P7.1 ~ P7.2)
+    Phase 8: Soul 项目接入               (P8.1 ~ P8.4)
+    Phase 9: 打磨                        (P9.1 ~ P9.4)
+  
+  PART B: 任务依赖图
+    B.1 文字依赖图
+    B.2 ASCII 可视化依赖图
+    B.3 关键路径分析
+    B.4 并行执行建议
+────────────────────────────────────────────────────────────────────────────────
+
+
+================================================================================
+PART A: 原子化任务列表
+================================================================================
+
+
+────────────────────────────────────────────────────────────────────────────────
+Phase 1: 插件骨架
+────────────────────────────────────────────────────────────────────────────────
+
+Task P1.1 — 创建 .uplugin 描述文件
+──────────────────────────────────────
+  依赖: 无（起始任务）
+  
+  输入: 无
+  
+  输出文件:
+    FlowVisualizer/FlowVisualizer.uplugin
+  
+  详细要求:
+    - FileVersion: 3
+    - FriendlyName: "Flow Visualizer"
+    - Category: "Developer Tools"
+    - CreatedBy: "TGWming"
+    - CanContainContent: false
+    - IsBetaVersion: true
+    - EnabledByDefault: false
+    - Installed: true
+    - 两个 Module 定义:
+        FlowVisualizerRuntime (Type: Runtime, LoadingPhase: Default)
+        FlowVisualizerEditor  (Type: Editor,  LoadingPhase: Default)
+  
+  验证标准:
+    - JSON 格式合法
+    - 两个 Module Name 与后续 Build.cs 一致
+
+
+Task P1.2 — 创建 Runtime 模块骨架
+──────────────────────────────────────
+  依赖: P1.1
+  
+  输入: FlowVisualizer.uplugin (确认模块名)
+  
+  输出文件:
+    FlowVisualizer/Source/FlowVisualizerRuntime/FlowVisualizerRuntime.Build.cs
+    FlowVisualizer/Source/FlowVisualizerRuntime/Public/FlowVisualizerRuntimeModule.h
+    FlowVisualizer/Source/FlowVisualizerRuntime/Private/FlowVisualizerRuntimeModule.cpp
+  
+  详细要求:
+    Build.cs:
+      - ModuleRules 类名: FlowVisualizerRuntime
+      - PCHUsage: UseExplicitOrSharedPCHs
+      - PublicDependencyModuleNames: "Core", "CoreUObject", "Engine"
+      - 不依赖其他任何模块
+    
+    Module .h/.cpp:
+      - 实现 IModuleInterface
+      - StartupModule(): 打印日志 "FlowVisualizerRuntime module loaded"
+      - ShutdownModule(): 打印日志 "FlowVisualizerRuntime module unloaded"
+      - IMPLEMENT_MODULE 宏注册
+  
+  验证标准:
+    - 文件编码 UTF-8
+    - #pragma once 在每个 .h 文件
+    - 编译通过（无其他文件依赖）
+
+
+Task P1.3 — 创建 Editor 模块骨架
+──────────────────────────────────────
+  依赖: P1.1
+  
+  输入: FlowVisualizer.uplugin (确认模块名)
+  
+  输出文件:
+    FlowVisualizer/Source/FlowVisualizerEditor/FlowVisualizerEditor.Build.cs
+    FlowVisualizer/Source/FlowVisualizerEditor/Public/FlowVisualizerEditorModule.h
+    FlowVisualizer/Source/FlowVisualizerEditor/Private/FlowVisualizerEditorModule.cpp
+  
+  详细要求:
+    Build.cs:
+      - ModuleRules 类名: FlowVisualizerEditor
+      - PCHUsage: UseExplicitOrSharedPCHs
+      - PublicDependencyModuleNames: "Core", "CoreUObject", "Engine",
+                                     "FlowVisualizerRuntime"
+      - PrivateDependencyModuleNames: "Slate", "SlateCore", "UnrealEd",
+                                       "EditorStyle", "LevelEditor", "InputCore"
+    
+    Module .h/.cpp:
+      - 实现 IModuleInterface
+      - StartupModule(): 打印日志 "FlowVisualizerEditor module loaded"
+      - ShutdownModule(): 打印日志 "FlowVisualizerEditor module unloaded"
+      - IMPLEMENT_MODULE 宏注册
+  
+  验证标准:
+    - Build.cs 依赖 FlowVisualizerRuntime
+    - 编译通过
+
+
+Task P1.4 — 创建 Resources 目录和 Icon
+──────────────────────────────────────
+  依赖: P1.1
+  
+  输入: 无
+  
+  输出文件:
+    FlowVisualizer/Resources/Icon128.png
+  
+  详细要求:
+    - 128x128 PNG 图标
+    - 可以是简单的占位图标（纯色 + "FV" 字样）
+    - 或者使用 UE4 默认插件图标格式
+  
+  验证标准:
+    - 文件存在且为合法 PNG
+
+
+────────────────────────────────────────────────────────────────────────────────
+Phase 2: 数据采集核心
+──────────────────────────���─────────────────────────────────────────────────────
+
+Task P2.1 — 实现 FFlowEvent 结构体
+──────────────────────────────────────
+  依赖: P1.2
+  
+  输入: 无
+  
+  输出文件:
+    FlowVisualizer/Source/FlowVisualizerRuntime/Public/FlowPipelineTypes.h
+  
+  详细要求:
+    定义以下结构体:
+    
+    struct FFlowEvent
+      double Timestamp;          // FPlatformTime::Seconds()
+      uint64 FrameNumber;        // GFrameNumber
+      FName NodeID;              // e.g., "Movement"
+      FString DataPayload;       // Free-form data string
+    
+    struct FFlowNode
+      FName NodeID;
+      FText DisplayName;
+      FVector2D RelativePosition;  // (0~1) range
+    
+    struct FFlowEdge
+      FName SourceNodeID;
+      FName TargetNodeID;
+    
+    struct FFlowPipeline
+      FName PipelineID;
+      FText DisplayName;
+      TArray<FFlowNode> Nodes;
+      TArray<FFlowEdge> Edges;
+    
+    所有结构体添加 FLOWVISUALIZERRUNTIME_API 导出宏
+    所有结构体添加默认构造函数
+  
+  验证标准:
+    - 编译通过
+    - 外部模块可以 #include 并使用这些类型
+
+
+Task P2.2 — 实现 FFlowTracer 单例
+──────────────────────────────────────
+  依赖: P2.1
+  
+  输入: FlowPipelineTypes.h (FFlowEvent)
+  
+  输出文件:
+    FlowVisualizer/Source/FlowVisualizerRuntime/Public/FlowTracer.h
+    FlowVisualizer/Source/FlowVisualizerRuntime/Private/FlowTracer.cpp
+  
+  详细要求:
+    class FFlowTracer:
+      static FFlowTracer& Get();          // Singleton (Meyer's singleton)
+      
+      void Signal(FName NodeID, const FString& Data = TEXT(""));
+        - 构造 FFlowEvent (Timestamp, FrameNumber, NodeID, Data)
+        - 加锁写入 EventBuffer
+        - 广播 OnFlowEvent Delegate
+      
+      TArray<FFlowEvent> GetRecentEvents(int32 Count) const;
+        - 从 EventBuffer 中取最近 Count 条
+        - 加锁读取
+      
+      void ClearBuffer();
+        - 清空 EventBuffer
+        - 加锁
+      
+      DECLARE_MULTICAST_DELEGATE_OneParam(FOnFlowEvent, const FFlowEvent&);
+      FOnFlowEvent OnFlowEvent;
+    
+    Private:
+      TArray<FFlowEvent> EventBuffer;     // 用 TArray 模拟环形缓冲
+      int32 BufferHead = 0;               // 写入位置
+      int32 BufferCapacity = 1024;        // 容量
+      FCriticalSection BufferLock;         // 防御式线程安全
+    
+    注意:
+      - UE4.27 中 TCircularBuffer 可能签名不同，使用 TArray + Head/Tail 更安全
+      - Signal() 中 OnFlowEvent.Broadcast() 在锁外调用（避免死锁）
+  
+  验证标准:
+    - Get() 返回同一实例
+    - Signal() 不崩溃
+    - GetRecentEvents() 返回正确数量
+    - ClearBuffer() 后 GetRecentEvents() 返回空
+
+
+Task P2.3 — 实现 FLOW_SIGNAL 宏
+──────────────────────────────────────
+  依赖: P2.2
+  
+  输入: FlowTracer.h
+  
+  输出文件:
+    FlowVisualizer/Source/FlowVisualizerRuntime/Public/FlowTracerMacros.h
+  
+  详细要求:
+    #pragma once
+    #include "FlowTracer.h"
+    
+    #if !UE_BUILD_SHIPPING
+    
+    #define FLOW_SIGNAL(NodeID, Data) \
+        FFlowTracer::Get().Signal(FName(TEXT(NodeID)), Data)
+    
+    #define FLOW_SIGNAL_SIMPLE(NodeID) \
+        FFlowTracer::Get().Signal(FName(TEXT(NodeID)))
+    
+    #define FLOW_SIGNAL_FMT(NodeID, Fmt, ...) \
+        FFlowTracer::Get().Signal(FName(TEXT(NodeID)), \
+            FString::Printf(TEXT(Fmt), ##__VA_ARGS__))
+    
+    #else
+    
+    #define FLOW_SIGNAL(NodeID, Data)
+    #define FLOW_SIGNAL_SIMPLE(NodeID)
+    #define FLOW_SIGNAL_FMT(NodeID, Fmt, ...)
+    
+    #endif
+  
+  验证标准:
+    - 在任意 .cpp 文件中 #include "FlowTracerMacros.h" 后
+      调用 FLOW_SIGNAL("Test", TEXT("hello")) 编译通过
+    - Shipping 构建时宏展开为空
+
+
+Task P2.4 — 实现 FFlowPipelineRegistry 注册中心
+──────────────────────────────────────
+  依赖: P2.1
+  
+  输入: FlowPipelineTypes.h (FFlowPipeline)
+  
+  输出文件:
+    FlowVisualizer/Source/FlowVisualizerRuntime/Public/FlowPipelineRegistry.h  
+    (注意: Registry 放在 Runtime 模块中，以便游戏代码注册管线)
+    
+    FlowVisualizer/Source/FlowVisualizerRuntime/Private/FlowPipelineRegistry.cpp
+  
+  详细要求:
+    class FFlowPipelineRegistry:
+      static FFlowPipelineRegistry& Get();   // Singleton
+      
+      void RegisterPipeline(const FFlowPipeline& Pipeline);
+        - 存入 Map，Key 为 PipelineID
+        - 广播 OnRegistryChanged
+      
+      void UnregisterPipeline(FName PipelineID);
+      
+      const FFlowPipeline* FindPipeline(FName PipelineID) const;
+      
+      TArray<FName> GetAllPipelineIDs() const;
+      
+      DECLARE_MULTICAST_DELEGATE(FOnRegistryChanged);
+      FOnRegistryChanged OnRegistryChanged;
+    
+    Private:
+      TMap<FName, FFlowPipeline> RegisteredPipelines;
+  
+  验证标准:
+    - RegisterPipeline 后 FindPipeline 返回正确数据
+    - GetAllPipelineIDs 返回所有已注册 ID
+    - OnRegistryChanged 正确广播
+
+
+────────────────────────────────────────────────────────────────────────────────
+Phase 3: 独立窗口框架
+────────────────────────────────────────────────────────────────────────────────
+
+Task P3.1 — Editor 模块注册菜单入口
+──────────────────────────────────────
+  依赖: P1.3
+  
+  输入: FlowVisualizerEditorModule.h/.cpp
+  
+  输出文件:
+    FlowVisualizer/Source/FlowVisualizerEditor/Private/FlowVisualizerEditorModule.cpp
+    (修改已有文件)
+  
+  详细要求:
+    在 StartupModule() 中:
+      - 创建 FUICommandList (绑定 OpenWindow 动作)
+      - 创建 FExtender
+      - AddMenuExtension 到 "WindowLayout" (EExtensionHook::After)
+      - 获取 FLevelEditorModule 的 MenuExtensibilityManager
+      - AddExtender
+    
+    在 ShutdownModule() 中:
+      - 移除 Extender
+      - 关闭已打开的窗口
+    
+    菜单项:
+      - 标题: "Flow Visualizer"
+      - 提示: "Open runtime data flow visualization window"
+      - 点击执行: OpenVisualizerWindow()
+  
+  验证标准:
+    - 编辑器启动后 Window 菜单下出现 "Flow Visualizer" 条目
+    - 点击不崩溃（此时 OpenVisualizerWindow 可以只打印日志）
+
+
+Task P3.2 — 创建 SFlowVisualizerPanel 空壳
+──────────────────────────────────────
+  依赖: P1.3
+  
+  输入: 无
+  
+  输出文件:
+    FlowVisualizer/Source/FlowVisualizerEditor/Public/SFlowVisualizerPanel.h
+    FlowVisualizer/Source/FlowVisualizerEditor/Private/SFlowVisualizerPanel.cpp
+  
+  详细要求:
+    class SFlowVisualizerPanel : public SCompoundWidget
+    
+    Construct():
+      - ChildSlot 包含一个 SBox
+      - SBox 背景色 FLinearColor(0.05f, 0.05f, 0.08f, 1.0f) 纯黑微蓝
+      - SBox 内部放一个 SOverlay（供后续绘制层叠加）
+    
+    Tick():
+      - 空实现（后续填充）
+    
+    OnPaint():
+      - 仅绘制黑色背景 + 一行白色文字 "Flow Visualizer - Ready"
+      - 使用 FSlateDrawElement::MakeText
+      - 字体: FCoreStyle::GetDefaultFontStyle("Mono", 14)
+    
+    该阶段目标: 有一个能显示的黑色面板 Widget
+  
+  验证标准:
+    - Widget 可以被 SWindow 承载
+    - 显示黑色背景 + 白色文字
+
+
+Task P3.3 — 实现 SWindow 独立窗口弹出
+──────────────────────────────────────
+  依赖: P3.1, P3.2
+  
+  输入: FlowVisualizerEditorModule.cpp, SFlowVisualizerPanel.h
+  
+  输出文件:
+    FlowVisualizer/Source/FlowVisualizerEditor/Public/FlowVisualizerEditorModule.h
+    FlowVisualizer/Source/FlowVisualizerEditor/Private/FlowVisualizerEditorModule.cpp
+    (修改已有文件)
+  
+  详细要求:
+    FlowVisualizerEditorModule.h 新增:
+      TSharedPtr<SWindow> VisualizerWindow;
+      void OpenVisualizerWindow();
+      void OnWindowClosed(const TSharedRef<SWindow>&);
+    
+    OpenVisualizerWindow():
+      - 如果 VisualizerWindow 已存在 -> BringToFront + return
+      - SNew(SWindow)
+          .Title("Flow Visualizer")
+          .ClientSize(1200, 700)
+          .SupportsMinimize(true)
+          .SupportsMaximize(true)
+          .IsTopmostWindow(false)
+          .SizingRule(ESizingRule::UserSized)
+          .AutoCenter(EAutoCenter::PreferredWorkArea)
+          [ SNew(SFlowVisualizerPanel) ]
+      - 设置 OnWindowClosed 回调
+      - FSlateApplication::Get().AddWindow(...)
+    
+    OnWindowClosed():
+      - VisualizerWindow.Reset()
+  
+  验证标准:
+    - 点击 Window -> Flow Visualizer: 弹出独立黑色窗口
+    - 窗口可拖动、可调大小
+    - 关闭后再次点击菜单可重新打开
+    - 已打开时再次点击菜单: 窗口前置，不创建新窗口
+
+
+────────────────────────────────────────────────────────────────────────────────
+Phase 4: 管线数据 + 注册中心 + 下拉切换
+────────────────────────────────────────────────────────────────────────────────
+
+Task P4.1 — 内置示例管线
+──────────────────────────────────────
+  依赖: P2.4
+  
+  输入: FlowPipelineRegistry, FlowPipelineTypes
+  
+  输出文件:
+    FlowVisualizer/Source/FlowVisualizerEditor/Private/FlowVisualizerEditorModule.cpp
+    (修改: 在 StartupModule 中注册一个内置 Demo 管线)
+  
+  详细要求:
+    在 StartupModule() 末尾注册一个 "Demo" 管线:
+    
+    FFlowPipeline Demo;
+    Demo.PipelineID = "Demo";
+    Demo.DisplayName = FText::FromString("Demo Pipeline");
+    Demo.Nodes = {
+        {FName("Input"),   FText::FromString("Input"),   FVector2D(0.10, 0.40)},
+        {FName("Process"), FText::FromString("Process"), FVector2D(0.40, 0.40)},
+        {FName("Output"),  FText::FromString("Output"),  FVector2D(0.70, 0.40)},
+    };
+    Demo.Edges = {
+        {FName("Input"), FName("Process")},
+        {FName("Process"), FName("Output")},
+    };
+    FFlowPipelineRegistry::Get().RegisterPipeline(Demo);
+  
+  验证标准:
+    - 编辑器启动后 FFlowPipelineRegistry::Get().GetAllPipelineIDs() 包含 "Demo"
+
+
+Task P4.2 — Panel 顶栏 Pipeline 下拉菜单
+──────────────────────────────────────
+  依赖: P3.2, P4.1
+  
+  输入: SFlowVisualizerPanel, FlowPipelineRegistry
+  
+  输出文件:
+    FlowVisualizer/Source/FlowVisualizerEditor/Private/SFlowVisualizerPanel.cpp
+    (修改 Construct 和添加下拉逻辑)
+  
+  详细要求:
+    Construct() 中顶部区域:
+      - SHorizontalBox
+        + STextBlock "Pipeline:" (白色, 标题字体)
+        + SComboBox<TSharedPtr<FName>>
+            - 数据源: 从 Registry 获取所有 PipelineID
+            - OnSelectionChanged: 更新 CurrentPipelineID
+            - 当 Registry 变化时刷新列表 (监听 OnRegistryChanged)
+        + SButton "Pause" (图标或文字)
+            - 点击切换 bIsPaused
+        + SButton "Clear"
+            - 点击调用 FFlowTracer::Get().ClearBuffer()
+    
+    顶栏背景色: #1A1A25
+    文字颜色: 白色
+  
+  验证标准:
+    - 窗口顶部显示下拉菜单
+    - 下拉菜单列出 "Demo Pipeline"
+    - 选择后 CurrentPipelineID 更新
+
+
+Task P4.3 — Panel 底栏状态条
+──────────────────────────────────────
+  依赖: P3.2
+  
+  输入: SFlowVisualizerPanel
+  
+  输出文件:
+    FlowVisualizer/Source/FlowVisualizerEditor/Private/SFlowVisualizerPanel.cpp
+    (修改 OnPaint 添加底栏绘制)
+  
+  详细要求:
+    在 OnPaint 底部绘制状态栏:
+      - 背景色: #1A1A25
+      - 高度: 30 像素
+      - 内容: "Frame: {GFrameNumber} | FPS: {1/DeltaTime} | Pipeline: {name}"
+      - 字体: Mono 10pt, 颜色 #999999
+      - 后续 Phase 会添加 Active Signals 等更多信息
+  
+  验证标准:
+    - 窗口底部显示状态栏
+    - 帧号和 FPS 实时更新
+
+
+────────────────────────────────────────────────────────────────────────────────
+Phase 5: 静态终端渲染
+────────────────────────────────────────────────────────────────────────────────
+
+Task P5.1 — 实现 DrawNode 绘制节点文字
+──────────────────────────────────────
+  依赖: P4.2 (需要 CurrentPipelineID 和管线数据)
+  
+  输入: 当前选中的 FFlowPipeline
+  
+  输出文件:
+    FlowVisualizer/Source/FlowVisualizerEditor/Private/SFlowVisualizerPanel.cpp
+    (修改 OnPaint)
+  
+  详细要求:
+    遍历当前 Pipeline 的所有 Nodes:
+      - 将 RelativePosition (0~1) 转换为窗口像素坐标
+        PixelX = RelativePosition.X * (CanvasWidth - Margin*2) + Margin
+        PixelY = RelativePosition.Y * (CanvasHeight - TopBar - BottomBar) + TopBar
+      
+      - 绘制节点名文字:
+        用 FSlateDrawElement::MakeText
+        字体: Roboto Bold 14pt
+        颜色: 暗灰 #666666 (默认非活跃)
+        格式: "[{DisplayName}]"
+      
+      - 节点名两侧加方括号 [] 以模拟终端风格
+      
+      - (占位) 节点下方预留数据文字行的空间
+  
+  验证标准:
+    - 选择 Demo Pipeline 后窗口中显示 [Input] [Process] [Output] 三个文字
+    - 位置与 RelativePosition 一致
+
+
+Task P5.2 — 实现 DrawEdge 绘制连线箭头
+──────────────────────────────────────
+  依赖: P5.1 (需要节点位置计算逻辑)
+  
+  输入: 当前 Pipeline 的 Edges + 节点像素坐标
+  
+  输出文件:
+    FlowVisualizer/Source/FlowVisualizerEditor/Private/SFlowVisualizerPanel.cpp
+    (修改 OnPaint)
+  
+  详细要求:
+    遍历当前 Pipeline 的所有 Edges:
+      - 获取 SourceNode 和 TargetNode 的像素坐标
+      - Source 点: SourceNode 文字右端中心
+      - Target 点: TargetNode 文字左端中心
+      
+      - 绘制连线:
+        FSlateDrawElement::MakeLines
+        颜色: #888888 (中灰)
+        线宽: 2.0f
+      
+      - 绘制箭头头部:
+        在 Target 端绘制三角形（或用两条短线段模拟 > 箭头）
+        三角形尺寸: 8x6 像素
+        颜色: 同连线
+      
+      - 对于垂直连线（节点上下排列）:
+        绘制 L 形或直线折线
+  
+  验证标准:
+    - Demo Pipeline 中 Input -> Process -> Output 有可见的灰色箭头线
+    - 箭头方向正确
+
+
+Task P5.3 — 实现 FlowVisualizerStyle 颜色常量
+──────────────────────────────────────
+  依赖: P1.3
+  
+  输入: 需求文档中的配色方案
+  
+  输出文件:
+    FlowVisualizer/Source/FlowVisualizerEditor/Private/FlowVisualizerStyle.h
+    FlowVisualizer/Source/FlowVisualizerEditor/Private/FlowVisualizerStyle.cpp
+  
+  详细要求:
+    namespace FlowVisStyle
+    {
+        // Background
+        const FLinearColor Background      = FLinearColor(0.05f, 0.05f, 0.08f, 1.0f);  // #0D0D14
+        const FLinearColor TitleBarBg      = FLinearColor(0.10f, 0.10f, 0.15f, 1.0f);  // #1A1A25
+        
+        // Nodes
+        const FLinearColor NodeActive      = FLinearColor(0.20f, 0.80f, 1.00f, 1.0f);  // #33CCFF
+        const FLinearColor NodeInactive    = FLinearColor(0.40f, 0.40f, 0.40f, 1.0f);  // #666666
+        const FLinearColor DataValue       = FLinearColor(0.29f, 1.00f, 0.51f, 1.0f);  // #4AFF82
+        
+        // Edges
+        const FLinearColor EdgeDefault     = FLinearColor(0.53f, 0.53f, 0.53f, 1.0f);  // #888888
+        const FLinearColor EdgeActive      = FLinearColor(0.20f, 0.80f, 1.00f, 1.0f);  // #33CCFF
+        const FLinearColor FlowDot         = FLinearColor(1.00f, 1.00f, 1.00f, 1.0f);  // #FFFFFF
+        
+        // UI
+        const FLinearColor Border          = FLinearColor(0.20f, 0.20f, 0.25f, 1.0f);  // #333340
+        const FLinearColor StatusText      = FLinearColor(0.60f, 0.60f, 0.60f, 1.0f);  // #999999
+        const FLinearColor Warning         = FLinearColor(1.00f, 0.40f, 0.27f, 1.0f);  // #FF6644
+        
+        // Fonts (functions returning FSlateFontInfo)
+        FSlateFontInfo NodeTitleFont();     // Roboto Bold 14
+        FSlateFontInfo DataValueFont();     // Roboto Mono 11
+        FSlateFontInfo StatusBarFont();     // Roboto Mono 10
+        FSlateFontInfo PipelineTitleFont(); // Roboto Bold 12
+        
+        // Animation constants
+        const float HighlightFadeDuration = 1.5f;
+        const float FlowDotSpeed          = 200.0f;
+        const float SignalThrottleMs       = 100.0f;
+    }
+  
+  验证标准:
+    - 编译通过
+    - SFlowVisualizerPanel 可以引用这些常量
+
+
+Task P5.4 — 整合静态渲染 + Style 应用
+──────────────────────────────────────
+  依赖: P5.1, P5.2, P5.3
+  
+  输入: DrawNode, DrawEdge, FlowVisualizerStyle
+  
+  输出文件:
+    FlowVisualizer/Source/FlowVisualizerEditor/Private/SFlowVisualizerPanel.cpp
+    (修改: 用 Style 常量替换硬编码颜色)
+  
+  详细要求:
+    - 所有 OnPaint 中的颜色引用改为 FlowVisStyle:: 常量
+    - 所有字体引用改为 FlowVisStyle:: 字体函数
+    - 确保绘制顺序:
+        1. 背景
+        2. 顶栏
+        3. 连线 + 箭头 (在节点下方)
+        4. 节点文字 (在连线上方)
+        5. 底栏
+    - 窗口调整大小时节点位置自适应 (基于 RelativePosition)
+  
+  验证标准:
+    - 窗口中 Demo Pipeline 显示完整的静态流程图
+    - 节点为暗灰色方括号文字
+    - 连线为灰色箭头
+    - 顶栏/底栏有正确的背景色
+    - 调整窗口大小后布局自适应
+
+
+────────────────────────────────────────────────────────────────────────────────
+Phase 6: 事件驱动高亮 + 数据标签
+────────────────────────────────────────────────────────��───────────────────────
+
+Task P6.1 — 连接 FFlowTracer Delegate
+──────────────────────────────────────
+  依赖: P2.2, P3.2
+  
+  输入: FFlowTracer (Delegate), SFlowVisualizerPanel
+  
+  输出文件:
+    FlowVisualizer/Source/FlowVisualizerEditor/Private/SFlowVisualizerPanel.cpp
+    (修改 Construct 和析构)
+  
+  详细要求:
+    在 Construct() 中:
+      FlowEventHandle = FFlowTracer::Get().OnFlowEvent.AddRaw(
+          this, &SFlowVisualizerPanel::OnFlowEventReceived);
+    
+    在析构/Destroy 中:
+      FFlowTracer::Get().OnFlowEvent.Remove(FlowEventHandle);
+    
+    OnFlowEventReceived(const FFlowEvent& Event):
+      - 如果 bIsPaused -> return
+      - 采样节流: 检查 NodeLastActiveTime[Event.NodeID]
+        如果距离上次 < 100ms -> 仅更新 DataPayload, 不重置 ActiveTime
+        否则 -> 更新 LastActiveTime 和 DataPayload
+      - 存储 NodeLastActiveTime[Event.NodeID] = Event.Timestamp
+      - 存储 NodeLastData[Event.NodeID] = Event.DataPayload
+  
+  验证标准:
+    - FLOW_SIGNAL 调用后 OnFlowEventReceived 被触发
+    - NodeLastActiveTime 正确更新
+    - 节流逻辑生效（100ms 内重复信号只更新数据）
+
+
+Task P6.2 — 节点高亮渐灭绘制
+──────────────────────────────────────
+  依赖: P5.1, P6.1
+  
+  输入: NodeLastActiveTime map
+  
+  输出文件:
+    FlowVisualizer/Source/FlowVisualizerEditor/Private/SFlowVisualizerPanel.cpp
+    (修改 DrawNode)
+  
+  详细要求:
+    修改 DrawNode 逻辑:
+      CurrentTime = FPlatformTime::Seconds()
+      Elapsed = CurrentTime - NodeLastActiveTime[NodeID]
+      
+      if Elapsed < HighlightFadeDuration:
+          Alpha = 1.0 - (Elapsed / HighlightFadeDuration)
+          TextColor = Lerp(NodeInactive, NodeActive, Alpha)
+      else:
+          TextColor = NodeInactive
+      
+      绘制 "[{DisplayName}]" 用计算出的 TextColor
+  
+  验证标准:
+    - Signal 触发后节点文字变亮青色
+    - 1.5 秒内逐渐变暗
+    - 不活跃节点保持暗灰
+
+
+Task P6.3 — 数据标签绘制
+──────────────────────────────────────
+  依赖: P5.1, P6.1
+  
+  输入: NodeLastData map
+  
+  输出文件:
+    FlowVisualizer/Source/FlowVisualizerEditor/Private/SFlowVisualizerPanel.cpp
+    (修改 DrawNode 添加数据行)
+  
+  详细要求:
+    在节点名文字下方绘制数据行:
+      - 仅在 Elapsed < HighlightFadeDuration 时显示
+      - 文字: NodeLastData[NodeID] (截取前 50 字符，防止过长)
+      - 字体: DataValueFont (Roboto Mono 11)
+      - 颜色: DataValue #4AFF82, Alpha 随 Elapsed 衰减
+      - 位置: 节点名下方 2 像素
+    
+    如果 DataPayload 包含多个字段（用空格分隔），每行显示一个字段:
+      例如 "Vel=(420,0,0) Spd=600 State=Running"
+      显示为:
+        Vel=(420,0,0)
+        Spd=600
+        State=Running
+      最多显示 4 行
+  
+  验证标准:
+    - Signal 携带数据后节点下方显示绿色数据文字
+    - 数据文字随节点高亮一起渐灭
+    - 多字段分行显示
+
+
+Task P6.4 — Tick 驱动 Invalidate 刷新
+──────────────────────────────────────
+  依赖: P6.2, P6.3
+  
+  输入: SFlowVisualizerPanel
+  
+  输出文件:
+    FlowVisualizer/Source/FlowVisualizerEditor/Private/SFlowVisualizerPanel.cpp
+    (修改 Tick)
+  
+  详细要求:
+    Tick() 实现:
+      - 检查是否有任何节点的 Elapsed < HighlightFadeDuration
+        如果有 -> 需要持续刷新动画
+      - 检查是否有活跃的 Edge 动画
+      - 如果以上任一为 true:
+          Invalidate(EInvalidateWidgetReason::Paint)
+          // 触发下一帧 OnPaint
+      - 如果没有活跃动画:
+          不调用 Invalidate（节省 CPU）
+      
+      - 更新底栏统计数据:
+          ActiveSignals = count(nodes where Elapsed < FadeDuration)
+          LastSignalTime = min(Elapsed for all active nodes)
+  
+  验证标准:
+    - 有信号时面板持续刷新（动画流畅）
+    - 无信号时面板停止刷新（不浪费 CPU）
+    - 底栏 Active Signals 数字正确
+
+
+────────────────────────────────────────────────────────────────────────────────
+Phase 7: 流动光点动画
+────────────────────────────────────────────────────────────────────────────────
+
+Task P7.1 — Edge Active 自动推导
+──────────────────────────────────────
+  依赖: P6.1
+  
+  输入: OnFlowEventReceived, 当前 Pipeline 的 Edges
+  
+  输出文件:
+    FlowVisualizer/Source/FlowVisualizerEditor/Private/SFlowVisualizerPanel.cpp
+    (修改 OnFlowEventReceived)
+  
+  详细要求:
+    在 OnFlowEventReceived 中，收到 NodeB 的信号后:
+      - 遍历当前 Pipeline 所有 Edges
+      - 找到 Edge.TargetNodeID == NodeB 的边
+      - 检查 Edge.SourceNodeID 的 LastActiveTime
+          如果 (CurrentTime - SourceLastActive) < 200ms:
+              标记 EdgeLastActiveTime[{Source,Target}] = CurrentTime
+              // 说明数据确实从 Source 流向 Target
+      
+    数据结构:
+      TMap<TPair<FName,FName>, double> EdgeLastActiveTime;
+      
+      使用 TPair<FName,FName> 作为 Key:
+        Key = TPair<FName,FName>(SourceNodeID, TargetNodeID)
+  
+  验证标准:
+    - 快速连续 Signal("Input", ...) 然后 Signal("Process", ...)
+      -> Edge (Input->Process) 的 LastActiveTime 被设置
+    - 只 Signal("Output", ...) 不 Signal("Process", ...)
+      -> Edge (Process->Output) 不被激活
+
+
+Task P7.2 — DrawFlowDot 流动光点绘制
+──────────────────────────────────────
+  依赖: P5.2, P7.1
+  
+  输入: EdgeLastActiveTime, 节点像素坐标
+  
+  输出文件:
+    FlowVisualizer/Source/FlowVisualizerEditor/Private/SFlowVisualizerPanel.cpp
+    (修改 DrawEdge 或新增 DrawFlowDot)
+  
+  详细要求:
+    修改 DrawEdge 或在其后调用 DrawFlowDot:
+    
+    For each Edge:
+      Elapsed = CurrentTime - EdgeLastActiveTime[Edge]
+      
+      if Elapsed < HighlightFadeDuration:
+          // 1. 连线颜色变亮
+          EdgeAlpha = 1.0 - (Elapsed / HighlightFadeDuration)
+          LineColor = Lerp(EdgeDefault, EdgeActive, EdgeAlpha)
+          重绘连线用 LineColor
+          
+          // 2. 计算光点位置
+          SourcePos = SourceNode pixel position
+          TargetPos = TargetNode pixel position
+          EdgeLength = Distance(SourcePos, TargetPos)
+          
+          if EdgeLength > 0:
+              Progress = FMath::Fmod(Elapsed * FlowDotSpeed / EdgeLength, 1.0f)
+              DotPos = FMath::Lerp(SourcePos, TargetPos, Progress)
+              DotAlpha = EdgeAlpha
+              
+              // 3. 绘制光点
+              FSlateDrawElement::MakeBox(
+                  OutDrawElements,
+                  LayerId + 2,
+                  Geometry.ToPaintGeometry(DotPos - FVector2D(3,3), FVector2D(6,6)),
+                  WhiteBrush,
+                  ESlateDrawEffect::None,
+                  FLinearColor(1,1,1, DotAlpha)
+              )
+      else:
+          // 连线保持默认灰色，无光点
+  
+  验证标准:
+    - Edge 激活后可见白色光点沿连线移动
+    - 光点从 Source 端移向 Target 端
+    - 光点和高亮连线 1.5 秒后渐灭
+    - 多条 Edge 可以同时有独立的光点动画
+
+
+────────────────────────────────────────────────────────────────────────────────
+Phase 8: Soul 项目接入
+────────────────────────────────────────────────────────────────────────────────
+
+Task P8.1 — 修改 soul.Build.cs 添加依赖
+──────────────────────────────────────
+  依赖: P2.3 (宏可用)
+  
+  输入: soul.Build.cs (现有内容)
+  
+  输出文件:
+    Game3C/具体代码体现/SoulCode-main/soul/soul.Build.cs
+    (修改)
+  
+  详细要求:
+    在 PublicDependencyModuleNames 中添加 "FlowVisualizerRuntime"
+    
+    修改后:
+    PublicDependencyModuleNames.AddRange(new string[] { 
+        "Core", "CoreUObject", "Engine", "InputCore", "UMG",
+        "FlowVisualizerRuntime"
+    });
+  
+  验证标准:
+    - 编译通过
+    - 游戏代码中可以 #include "FlowTracerMacros.h"
+
+
+Task P8.2 — MyCharacter.cpp 埋点
+──────────────────────────────────────
+  依赖: P8.1
+  
+  输入: MyCharacter.cpp (现有内容), FlowTracerMacros.h
+  
+  输出文件:
+    Game3C/具体代码体现/SoulCode-main/soul/Private/MyCharacter.cpp
+    (修改: 添加 include 和 FLOW_SIGNAL 调用)
+  
+  详细要求:
+    文件顶部添加:
+      #include "FlowTracerMacros.h"
+    
+    埋点位置 (每处一行代码，不修改原有逻辑):
+    
+    1. Tick() 内移动逻辑段:
+       FLOW_SIGNAL_FMT("MovementProcess", "Vel=%s Spd=%.0f State=%s",
+           *GetVelocity().ToString(),
+           GetCharacterMovement()->MaxWalkSpeed,
+           *UEnum::GetValueAsString(CurrentState));
+    
+    2. SetupPlayerInputComponent() 入口:
+       FLOW_SIGNAL_SIMPLE("PlayerInput");
+    
+    3. ToggleLockOn():
+       FLOW_SIGNAL_FMT("LockOnInput", "bLocked=%s",
+           bIsLockedOn ? TEXT("true") : TEXT("false"));
+    
+    4. StartLockOn(AActor* Target):
+       FLOW_SIGNAL_FMT("StartLockOn", "Target=%s",
+           Target ? *Target->GetName() : TEXT("None"));
+    
+    5. CancelLockOn():
+       FLOW_SIGNAL_SIMPLE("CancelLockOn");
+    
+    6. 体力消耗逻辑位置:
+       FLOW_SIGNAL_FMT("StaminaSystem", "Cur=%.0f/%.0f",
+           CurrentStamina, MaxStamina);
+    
+    7. PerformAttack (如果存在):
+       FLOW_SIGNAL_FMT("Combat", "Type=%s",
+           bHeavy ? TEXT("Heavy") : TEXT("Light"));
+    
+    8. PerformDodge (如果存在):
+       FLOW_SIGNAL_SIMPLE("DodgeExec");
+    
+    9. 状态切换位置:
+       FLOW_SIGNAL_FMT("AnimStateMachine", "State=%s",
+           *UEnum::GetValueAsString(CurrentState));
+  
+  验证标准:
+    - 编译通过
+    - PIE 运行时 FFlowTracer 收到信号
+    - 不影响原有游戏逻辑
+
+
+Task P8.3 — 组件类埋点
+──────────────────────────────────────
+  依赖: P8.1
+  
+  输入: TargetDetectionComponent.cpp, UIManagerComponent.cpp
+  
+  输出文件:
+    soul/Private/TargetDetectionComponent.cpp (修改)
+    soul/Private/UIManagerComponent.cpp (修改)
+  
+  详细要求:
+    TargetDetectionComponent.cpp:
+      顶部添加: #include "FlowTracerMacros.h"
+      FindLockOnCandidates() 入口:
+        FLOW_SIGNAL_FMT("TargetDetection", "Candidates=%d",
+            LockOnCandidates.Num());
+    
+    UIManagerComponent.cpp:
+      顶部添加: #include "FlowTracerMacros.h"
+      ShowLockOnWidget(AActor* Target) 入口:
+        FLOW_SIGNAL_FMT("UIManager", "Target=%s",
+            Target ? *Target->GetName() : TEXT("None"));
+  
+  验证标准:
+    - 编译通过
+    - 锁定时 TargetDetection 和 UIManager 信号正确发出
+
+
+Task P8.4 — 注册 Soul 项目管线
+──────────────────────────────────────
+  依赖: P2.4, P8.2, P8.3
+  
+  输入: FlowPipelineRegistry, 需求文档 Section 8 管线定义
+  
+  输出文件:
+    Game3C/具体代码体现/SoulCode-main/soul/Private/SoulFlowSetup.h
+    Game3C/具体代码体现/SoulCode-main/soul/Private/SoulFlowSetup.cpp
+  
+  详细要求:
+    创建 RegisterSoulPipelines() 函数
+    注册 4 条管线 (完整定义参见需求文档 Section 8):
+      1. CharacterMovement (5 nodes, 4 edges)
+      2. LockOnSystem     (6 nodes, 5 edges)
+      3. CameraPipeline   (8 nodes, 7 edges)
+      4. CombatSystem     (7 nodes, 6 edges)
+    
+    在项目 GameModule 或 GameInstance::Init() 中调用 RegisterSoulPipelines()
+    
+    注意: 如果项目没有自定义 GameInstance, 可以在
+    AMycharacter::BeginPlay() 中调用（加 static bool 防重复）
+  
+  验证标准:
+    - 编辑器启动后 4 条管线出现在下拉菜单中
+    - 选择每条管线都能看到正确的节点和连线布局
+
+
+────────────────────────────────────────────────────────────────────────────────
+Phase 9: 打磨
+────────────────────────────────────────────────────────────────────────────────
+
+Task P9.1 — Pause/Clear 功能完善
+──────────────────────────────────────
+  依赖: P6.4
+  
+  输出文件:
+    SFlowVisualizerPanel.cpp (修改)
+  
+  详细要求:
+    Pause 按钮:
+      - bIsPaused = true 时: 不处理新事件, 保持当前显示冻结
+      - 按钮文字切换: "Pause" <-> "Resume"
+      - 暂停时底栏显示 "PAUSED" (Warning 颜色)
+    
+    Clear 按钮:
+      - 清空 NodeLastActiveTime, NodeLastData, EdgeLastActiveTime
+      - 调用 FFlowTracer::Get().ClearBuffer()
+      - 所有节点回到暗灰色
+
+Task P9.2 — 底栏完整统计
+──────────────────────────────────────
+  依赖: P6.4
+  
+  输出文件:
+    SFlowVisualizerPanel.cpp (修改底栏)
+  
+  详细要求:
+    完整底栏信息:
+      "Frame: {N} | FPS: {N} | Active: {N}/{Total} | Last: {N}ms ago | Buffer: {N}/{Cap}"
+    
+    计算方式:
+      Active = count(nodes with Elapsed < FadeDuration)
+      Total  = current pipeline node count
+      Last   = min elapsed across all active nodes, in ms
+      Buffer = FFlowTracer buffer current size / capacity
+
+Task P9.3 — 窗口位置/大小记忆
+──────────────────────────────────────
+  依赖: P3.3
+  
+  输出文件:
+    FlowVisualizerEditorModule.cpp (修改)
+  
+  详细要求:
+    使用 GConfig->SetFloat/GetFloat 保存/加载:
+      - 窗口 X, Y 位置
+      - 窗口 Width, Height
+      - 上次选择的 PipelineID
+    
+    Config section: "FlowVisualizer"
+    Config file: GEditorPerProjectIni
+    
+    OnWindowClosed 时保存
+    OpenVisualizerWindow 时加载
+
+Task P9.4 — README 使用文档
+────────────��─────────────────────────
+  依赖: 全部 Phase 完成
+  
+  输出文件:
+    FlowVisualizer/README.md
+  
+  详细要求:
+    包含:
+      - 插件简介
+      - 安装方法 (复制 Plugins/ -> 勾选启用 -> 重启)
+      - 快速上手 (3 步: Build.cs 加依赖, include 宏, 加 FLOW_SIGNAL)
+      - 管线注册示例代码
+      - 配色方案说明
+      - FAQ
+
+
+================================================================================
+PART B: 任务依赖图
+================================================================================
+
+
+B.1 文字依赖表
+──────────────────────────────────────
+
+  Task    | 依赖 Task           | 可并行组
+  --------|---------------------|----------
+  P1.1    | (无)                | A
+  P1.2    | P1.1                | B
+  P1.3    | P1.1                | B
+  P1.4    | P1.1                | B
+  --------|---------------------|----------
+  P2.1    | P1.2                | C
+  P2.2    | P2.1                | D
+  P2.3    | P2.2                | E
+  P2.4    | P2.1                | D
+  --------|---------------------|----------
+  P3.1    | P1.3                | C
+  P3.2    | P1.3                | C
+  P3.3    | P3.1, P3.2          | D
+  --------|---------------------|----------
+  P4.1    | P2.4                | E
+  P4.2    | P3.2, P4.1          | F
+  P4.3    | P3.2                | E
+  --------|---------------------|----------
+  P5.1    | P4.2                | G
+  P5.2    | P5.1                | H
+  P5.3    | P1.3                | C
+  P5.4    | P5.1, P5.2, P5.3   | I
+  --------|---------------------|----------
+  P6.1    | P2.2, P3.2          | F
+  P6.2    | P5.1, P6.1          | G
+  P6.3    | P5.1, P6.1          | G
+  P6.4    | P6.2, P6.3          | H
+  --------|---------------------|----------
+  P7.1    | P6.1                | G
+  P7.2    | P5.2, P7.1          | H
+  --------|---------------------|----------
+  P8.1    | P2.3                | F
+  P8.2    | P8.1                | G
+  P8.3    | P8.1                | G
+  P8.4    | P2.4, P8.2, P8.3   | H
+  --------|---------------------|----------
+  P9.1    | P6.4                | I
+  P9.2    | P6.4                | I
+  P9.3    | P3.3                | F
+  P9.4    | ALL                 | J
+
+
+B.2 ASCII 可视化依赖图
+──────────────────────────────────────
+
+  说明:
+    -> = 依赖关系 (箭头指向被依赖的任务)
+    [方括号] = 任务
+    {花括号} = 可并行的任务组
+    === = 关键路径
+
+
+         [P1.1] .uplugin
+          / | \
+         /  |  \
+        v   v   v
+  {[P1.2] [P1.3] [P1.4]}          ← 可并行: Runtime骨架, Editor骨架, Icon
+     |       |
+     v       +--------+--------+
+  [P2.1]          |        |
+  Types       [P3.1]   [P3.2]   [P5.3]      ← 可并行: 数据类型, 菜单, Panel壳, Style
+   / \         Menu    Panel     Style
+  v   v         \      /
+[P2.2] [P2.4]   [P3.3]          ← 可并行: Tracer, Registry, Window
+Tracer  Reg      Window
+  |       |
+  v       v
+[P2.3]  [P4.1]                  ← 可并行: 宏, Demo管线
+Macro   Demo
+  |       |
+  |    [P4.2]+[P4.3]            ← 可并行: 下拉菜单, 底栏
+  |    Dropdown StatusBar
+  |       |
+  |    [P5.1]                   ← DrawNode
+  |       |
+  |    [P5.2]                   ← DrawEdge
+  |       |
+  |    [P5.4] (整合)            ← 静态渲染完成 ★ MVP 检查点 1
+  |
+  |    [P6.1] (Delegate连接)
+  |       |
+  |    {[P6.2] [P6.3] [P7.1]}  ← 可并行: 高亮, 数据标签, Edge推导
+  |      |  \      /
+  |      v   v    v
+  |    [P6.4] [P7.2]            ← 可并行: Tick刷新, 流动光点
+  |      |       |
+  |      +---+---+
+  |          |
+  |          ★ MVP 检查点 2 (核心动画完成)
+  |
+  v
+[P8.1] Build.cs 依赖
+  |
+{[P8.2] [P8.3]}                 ← 可并行: MyCharacter埋点, 组件埋点
+    \      /
+     v    v
+   [P8.4]                       ← 注册管线
+      |
+      ★ MVP 检查点 3 (Soul 项目可用)
+      |
+{[P9.1] [P9.2] [P9.3]}          ← 可并行: Pause/Clear, 统计, 窗口记忆
+        \   |   /
+         v  v  v
+        [P9.4]                   ← README
+           |
+           ★ 完成
+
+
+B.3 关键路径分析
+──────────────────────────────────────
+
+关键路径 (最长依赖链, 决定最短完成时间):
+
+  P1.1 -> P1.2 -> P2.1 -> P2.2 -> P2.3 -> P8.1 -> P8.2 -> P8.4 -> P9.4
+  
+  同时另一条长路径:
+  P1.1 -> P1.3 -> P3.2 -> P4.2 -> P5.1 -> P5.2 -> P5.4 -> P6.1 -> P6.2 -> P6.4 -> P9.1
+
+  两条关键路径中较长的是第二条 (涉及渲染):
+  共 12 个串行 Task
+
+  如果每个 Task 平均 0.5 天 (Agent 执行):
+    关键路径 = 12 x 0.5 = 6 天
+    加上并行 Task 缓冲: 总计 ~9-11 天
+
+
+B.4 并行执行建议
+─────────────────────���────────────────
+
+以下任务组内的 Task 互不依赖，可以由 Agent 同批次执行:
+
+  Round 1: { P1.1 }                               1 task
+  Round 2: { P1.2, P1.3, P1.4 }                   3 tasks parallel
+  Round 3: { P2.1, P3.1, P3.2, P5.3 }             4 tasks parallel
+  Round 4: { P2.2, P2.4, P3.3 }                   3 tasks parallel
+  Round 5: { P2.3, P4.1, P4.3 }                   3 tasks parallel
+  Round 6: { P4.2, P6.1, P8.1, P9.3 }             4 tasks parallel
+  Round 7: { P5.1 }                               1 task
+  Round 8: { P5.2, P6.2, P6.3, P7.1, P8.2, P8.3 } 6 tasks parallel
+  Round 9: { P5.4, P6.4, P7.2, P8.4 }             4 tasks parallel
+  Round 10: { P9.1, P9.2 }                        2 tasks parallel
+  Round 11: { P9.4 }                              1 task
+  
+  Total: 11 Rounds (最优并行调度)
+  
+  如果完全���行: 32 Tasks
+  最优并行: 11 Rounds
+  加速比: 32/11 = 2.9x
+
+
+B.5 MVP 检查点
+──────────────────────────────────────
+
+  ★ 检查点 1 — "Static Diagram" (Phase 5 完成后)
+    验证: 打开窗口，选择管线，看到静态流程图
+    所需 Task: P1.1~P1.4, P2.1, P2.4, P3.1~P3.3, P4.1~P4.3, P5.1~P5.4
+    预估: Round 1~9 中的前半部分 ≈ 4-5 天
+  
+  ★ 检查点 2 — "Animated Flow" (Phase 7 完成后)
+    验证: PIE 运行游戏，节点高亮+光点流动+数据显示
+    额外所需: P2.2, P2.3, P6.1~P6.4, P7.1, P7.2
+    预估: 检查点 1 后 +2-3 天
+  
+  ★ 检查点 3 — "Soul Integration" (Phase 8 完成后)
+    验证: Soul 项目 4 条管线全部可观察
+    额外所需: P8.1~P8.4
+    预估: 检查点 2 后 +1-2 天
+  
+  ★ 检查点 4 — "Production Ready" (Phase 9 完成后)
+    验证: Pause/Clear/统计/README 全部就绪
+    额外所需: P9.1~P9.4
+    预估: 检查点 3 后 +1 天
+
+
+================================================================================
+  End of Document
+  
+  执行顺序建议:
+    1. 按 Round 1~11 顺序执行
+    2. 每个 Round 内的 Task 可同时分配给 Agent
+    3. 到达每个 MVP 检查点时暂停，验证阶段成果
+    4. 验证通过后继续下一阶段
+    
+  下一步:
+    用户确认后 -> IDE Copilot Agent 从 Round 1 开始执行
+================================================================================
