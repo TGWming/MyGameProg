@@ -1,0 +1,190 @@
+================================================================================
+任务：实现 SWindow 独立窗口弹出逻辑
+================================================================================
+
+【项目背景】
+FlowVisualizer 是一个 UE 4.27 编辑器插件，用于在编辑器独立弹出窗口中
+以终端风格可视化观察运行时数据流。
+插件采用双模块结构：FlowVisualizerRuntime + FlowVisualizerEditor。
+
+【当前进度】
+Phase 3 P3.3（共 32 个原子化任务中的第 11 个）
+这是 Phase 3（独立窗口框架）的最后一个任务。
+
+前置完成：
+- Phase 1 全部完成 ✅
+- Phase 2 全部完成 ✅
+- P3.1 Editor 模块菜单入口已注册 ✅
+  （Window 菜单下已有 "Flow Visualizer" 条目，
+   点击调用 OpenVisualizerWindow()，当前为日志占位）
+- P3.2 SFlowVisualizerPanel 空壳已创建 ✅
+  （黑色背景 + 白色 "Flow Visualizer - Ready" 文字）
+
+【安全约束（所有任务必须遵守）】
+1. 仅创建或修改 Plugins/FlowVisualizer/ 目录下的文件
+2. 禁止修改项目 .uproject、项目 Build.cs 或项目任何已有源文件
+3. 禁止引入第三方库；仅使用 UE 4.27 原生 API
+4. 所有运行时代码必须包裹在 Shipping 空操作保护中
+5. 不产生任何 UI 到游戏视口；仅限编辑器独立窗口
+6. 每个 Task 结束后必须能编译通过且不影响现有项目
+
+【原子化任务独立性宪法提醒】
+本 Prompt 仅涉及任务 P3.3 的内容。
+不要执行任何超出 P3.3 范围的工作。
+不要提前创建后续任务（P4.x 等）的文件或代码。
+如果发现需要其他任务的产出物，请仅留占位注释，不要实现。
+
+【任务目标】
+修改 FlowVisualizerEditorModule，将 P3.1 中的 OpenVisualizerWindow()
+从日志占位替换为实际的 SWindow 弹出逻辑，内嵌 SFlowVisualizerPanel。
+实现窗口防重复打开（BringToFront）和关闭回调清理。
+
+【具体要求】
+
+1. 需要修改的文件：
+
+   文件 A：Plugins/FlowVisualizer/Source/FlowVisualizerEditor/Public/FlowVisualizerEditorModule.h
+   文件 B：Plugins/FlowVisualizer/Source/FlowVisualizerEditor/Private/FlowVisualizerEditorModule.cpp
+
+2. FlowVisualizerEditorModule.h 中应新增以下成员声明：
+   - TSharedPtr<SWindow> VisualizerWindow
+     （持有当前打开的窗口引用，用于防重复和关闭清理）
+   - void OnWindowClosed(const TSharedRef<SWindow>&)
+     （窗口关闭时的回调函数）
+
+3. OpenVisualizerWindow() 应替换为完整实现：
+
+   步骤 1 — 防重复检查：
+   - 如果 VisualizerWindow.IsValid() 为 true：
+     调用 VisualizerWindow->BringToFront()
+     直接 return（不创建新窗口）
+
+   步骤 2 — 创建 SWindow：
+   - 使用 SNew(SWindow) 构造，属性如下：
+     .Title(FText::FromString("Flow Visualizer"))
+     .ClientSize(FVector2D(1200, 700))
+     .SupportsMinimize(true)
+     .SupportsMaximize(true)
+     .IsTopmostWindow(false)
+     .SizingRule(ESizingRule::UserSized)
+     .AutoCenter(EAutoCenter::PreferredWorkArea)
+   - 窗口内容：[ SNew(SFlowVisualizerPanel) ]
+
+   步骤 3 — 设置关闭回调：
+   - 调用 VisualizerWindow->SetOnWindowClosed(
+       FOnWindowClosed::CreateRaw(this, &...::OnWindowClosed))
+
+   步骤 4 — 添加到 Slate Application：
+   - FSlateApplication::Get().AddWindow(VisualizerWindow.ToSharedRef())
+
+4. OnWindowClosed() 应实现：
+   - VisualizerWindow.Reset()
+   （释放窗口引用，允许下次点击菜单重新创建）
+
+5. ShutdownModule() 中应补充：
+   - 如果 VisualizerWindow.IsValid()：
+     关闭窗口 VisualizerWindow->RequestDestroyWindow()
+     VisualizerWindow.Reset()
+   （确保插件卸载时不留悬挂窗口）
+
+6. 关键技术注意事项：
+   - 需要 #include "SFlowVisualizerPanel.h"
+   - 需要 #include "Widgets/SWindow.h"
+   - FSlateApplication 需要 #include "Framework/Application/SlateApplication.h"
+   - SWindow 是独立的操作系统窗口，不是 Tab/DockTab
+   - BringToFront() 可能需要先检查窗口是否 Minimized，
+     如果是则先 Restore
+
+【此任务不做的事情】
+- 不修改 SFlowVisualizerPanel 的内容（P3.2 已完成）
+- 不实现管线下拉菜单或顶栏/底栏（那是 P4.2、P4.3）
+- 不实现窗口位置/大小记忆功能（那是 P9.3）
+- 不注册 Demo 管线（那是 P4.1）
+
+【验证标准】
+- 点击 Window -> Flow Visualizer：弹出独立黑色窗口
+- 窗口标题为 "Flow Visualizer"
+- 窗口初始大小约 1200 x 700
+- 窗口内显示黑色背景 + 白色 "Flow Visualizer - Ready" 文字
+- 窗口可拖动、可调整大小、可最小化/最大化
+- 关闭窗口后再次点���菜单：重新创建新窗口
+- 窗口已打开时再次点击菜单：窗口前置，不创建新窗口
+- 编译通过
+- 未创建本任务范围外的任何文件
+
+【Phase 3 完成后的验证清单】
+完成此任务后，Phase 3（独立窗口框架）全部完成，请验证：
+1. Window 菜单下有 "Flow Visualizer" 条目 ✅
+2. 点击弹出独立 SWindow ✅
+3. 窗口内嵌 SFlowVisualizerPanel（黑色背景 + 白色文字）✅
+4. 防重复打开（BringToFront）✅
+5. 关闭后可重新打开 ✅
+6. 整体编译通过 ✅
+
+================================================================================
+                    上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：P3.3 实现 SWindow 独立窗口弹出
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断]
+
+【已完成内容】
+- [列出已完成的部分]
+
+【未完成内容】
+- [列出剩余部分]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话 PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+FlowVisualizer UE 4.27 编辑器插件，终端风格数据流可视化。
+Phase 3 P3.3 续接任务。
+
+【前置完成】
+- Phase 1 + Phase 2 全部完成 ✅
+- P3.1 菜单入口已注册 ✅
+- P3.2 SFlowVisualizerPanel 空壳已创建 ✅
+- P3.3 部分完成：
+  - [列出已完成的部分] ✅
+
+【续接任务】
+继续完成 SWindow 独立窗口弹出逻辑。
+修改文件：FlowVisualizerEditorModule.h/.cpp
+核心方法：OpenVisualizerWindow(), OnWindowClosed()
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================

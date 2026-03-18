@@ -1,0 +1,157 @@
+================================================================================
+任务：实现 FFlowEvent / FFlowNode / FFlowEdge / FFlowPipeline 结构体
+================================================================================
+
+【项目背景】
+FlowVisualizer 是一个 UE 4.27 编辑器插件，用于在编辑器独立弹出窗口中
+以终端风格可视化观察运行时数据流。
+插件采用双模块结构：FlowVisualizerRuntime + FlowVisualizerEditor。
+
+【当前进度】
+Phase 2 P2.1（共 32 个原子化任务中的第 5 个）
+
+前置完成：
+- P1.1 FlowVisualizer.uplugin 已创建 ✅
+- P1.2 FlowVisualizerRuntime 模块骨架已创建 ✅
+  （Build.cs + FlowVisualizerRuntimeModule.h/.cpp）
+- P1.3 FlowVisualizerEditor 模块骨架已创建 ✅
+- P1.4 Resources/Icon128.png 已创建 ✅
+
+【安全约束（所有任务必须遵守）】
+1. 仅创建或修改 Plugins/FlowVisualizer/ 目录下的文件
+2. 禁止修改项目 .uproject、项目 Build.cs 或项目任何已有源文件
+3. 禁止引入第三方库；仅使用 UE 4.27 原生 API
+4. 所有运行时代码必须包裹在 Shipping 空操作保护中
+5. 不产生任何 UI 到游戏视口；仅限编辑器独立窗口
+6. 每个 Task 结束后必须能编译通过且不影响现有项目
+
+【原子化任务独立性宪法提醒】
+本 Prompt 仅涉及任务 P2.1 的内容。
+不要执行任何超出 P2.1 范围的工作。
+不要提前创建后续任务（P2.2、P2.3、P2.4 等）的文件或代码。
+如果发现需要其他任务的产出物，请仅留占位注释，不要实现。
+
+【任务目标】
+在 FlowVisualizerRuntime 模块的 Public 目录下创建 FlowPipelineTypes.h，
+定义插件所有核心数据结构体。这些结构体是整个插件数据流的基础类型。
+
+【具体要求】
+
+1. 目标文件：
+   Plugins/FlowVisualizer/Source/FlowVisualizerRuntime/Public/FlowPipelineTypes.h
+
+2. 需要定义 4 个结构体：
+
+   结构体 A — FFlowEvent（运行时事件）：
+   - double Timestamp           // 事件时间戳，使用 FPlatformTime::Seconds()
+   - uint64 FrameNumber         // 事件发生帧号，使用 GFrameNumber
+   - FName NodeID               // 触发该事件的节点 ID，如 "Movement"
+   - FString DataPayload        // 自由格式数据字符串
+
+   结构体 B — FFlowNode（管线节点）：
+   - FName NodeID               // 节点唯一标识
+   - FText DisplayName          // 节点显示名称
+   - FVector2D RelativePosition // 节点在画布上的相对位置，范围 (0~1)
+
+   结构体 C — FFlowEdge（管线连线）：
+   - FName SourceNodeID         // 连线起点节点 ID
+   - FName TargetNodeID         // 连线终点节点 ID
+
+   结构体 D — FFlowPipeline（管线定义）：
+   - FName PipelineID           // 管线唯一标识
+   - FText DisplayName          // 管线显示名称
+   - TArray<FFlowNode> Nodes    // 管线包含的所有节点
+   - TArray<FFlowEdge> Edges    // 管线包含的所有连线
+
+3. 所有结构体应满足：
+   - 添加 FLOWVISUALIZERRUNTIME_API 导出宏（确保外部模块可使用）
+   - 提供默认构造函数
+   - #pragma once 在文件头部
+   - 包含必要的 UE4 头文件（CoreMinimal.h 等）
+
+4. 关于 API 导出宏：
+   - 如果 FlowVisualizerRuntime.Build.cs 中尚未自动生成
+     FLOWVISUALIZERRUNTIME_API 宏，需要确认 Build.cs 中是否需要
+     添加对应的设置（UE4.27 模块构建系统通常自动生成）
+   - 如果自动生成不可用，在头文件中用条件编译处理
+
+【此任务不做的事情】
+- 不创建 FFlowTracer 单例（那是 P2.2）
+- 不创建 FLOW_SIGNAL 宏（那是 P2.3）
+- 不创建 FFlowPipelineRegistry 注册中心（那是 P2.4）
+- 不修改任何已有文件
+
+【验证标准】
+- FlowPipelineTypes.h 文件存在于正确路径
+- 包含 #pragma once
+- 4 个结构体均已定义且带 FLOWVISUALIZERRUNTIME_API 导出宏
+- 每个结构体有默认构造函数
+- 编译通过
+- 外部模块（如 FlowVisualizerEditor）可以 #include "FlowPipelineTypes.h"
+  并使用这些类型
+- 未创建本任务范围外的任何文件
+
+================================================================================
+                    上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：P2.1 实现 FFlowEvent 结构体
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断]
+
+【已完成内容】
+- [列出已完成的部分]
+
+【未完成内容】
+- [列出剩余部分]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话 PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+FlowVisualizer UE 4.27 编辑器插件，终端风格数据流可视化。
+Phase 2 P2.1 续接任务。
+
+【前置完成】
+- Phase 1 全部完成 ✅
+- P2.1 部分完成：
+  - [列出已完成的部分] ✅
+
+【续接任务】
+继续完成 FlowPipelineTypes.h 中的结构体定义。
+需要定义：FFlowEvent, FFlowNode, FFlowEdge, FFlowPipeline
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================

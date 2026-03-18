@@ -1,0 +1,148 @@
+================================================================================
+任务：创建 FlowVisualizerEditor 模块骨架
+================================================================================
+
+【项目背景】
+FlowVisualizer 是一个 UE 4.27 编辑器插件，用于在编辑器独立弹出窗口中
+以终端风格可视化观察运行时数据流。
+插件采用双模块结构：FlowVisualizerRuntime + FlowVisualizerEditor。
+
+【当前进度】
+Phase 1 P1.3（共 32 个原子化任务中的第 3 个）
+
+前置完成：
+- P1.1 FlowVisualizer.uplugin 已创建 ✅
+  （已声明 FlowVisualizerEditor 模块，Type: Editor, LoadingPhase: Default）
+- P1.2 FlowVisualizerRuntime 模块骨架已创建 ✅
+
+【安全约束（所有任务必须遵守）】
+1. 仅创建或修改 Plugins/FlowVisualizer/ 目录下的文件
+2. 禁止修改项目 .uproject、项目 Build.cs 或项目任何已有源文件
+3. 禁止引入第三方库；仅使用 UE 4.27 原生 API
+4. 所有运行时代码必须包裹在 Shipping 空操作保护中
+5. 不产生任何 UI 到游戏视口；仅限编辑器独立窗口
+6. 每个 Task 结束后必须能编译通过且不影响现有项目
+
+【原子化任务独立性宪法提醒】
+本 Prompt 仅涉及任务 P1.3 的内容。
+不要执行任何超出 P1.3 范围的工作。
+不要提前创建后续任务（P1.4、P2.1 等）的文件或代码。
+如果发现需要其他任务的产出物，请仅留占位注释，不要实现。
+
+【任务目标】
+创建 FlowVisualizerEditor 模块的最小可编译骨架，包含
+Build.cs 构建配置文件和模���入口类（.h + .cpp）。
+
+【具体要求】
+
+1. 需要创建 3 个文件：
+
+   文件 A：Plugins/FlowVisualizer/Source/FlowVisualizerEditor/FlowVisualizerEditor.Build.cs
+   文件 B：Plugins/FlowVisualizer/Source/FlowVisualizerEditor/Public/FlowVisualizerEditorModule.h
+   文件 C：Plugins/FlowVisualizer/Source/FlowVisualizerEditor/Private/FlowVisualizerEditorModule.cpp
+
+2. Build.cs 应满足：
+   - ModuleRules 类名：FlowVisualizerEditor
+   - PCHUsage：UseExplicitOrSharedPCHs
+   - PublicDependencyModuleNames：
+     "Core", "CoreUObject", "Engine", "FlowVisualizerRuntime"
+   - PrivateDependencyModuleNames：
+     "Slate", "SlateCore", "UnrealEd", "EditorStyle", "LevelEditor", "InputCore"
+   - 注意：依赖 FlowVisualizerRuntime 是因为 Editor 模块需要读取
+     Runtime 模块提供的数据类型和单例
+
+3. Module .h 应满足：
+   - #pragma once
+   - 包含 "Modules/ModuleManager.h"
+   - 声明类继承 IModuleInterface
+   - 声明 StartupModule() 和 ShutdownModule() 的 override
+
+4. Module .cpp 应满足：
+   - 实现 StartupModule()：打印日志 "FlowVisualizerEditor module loaded"
+     使用 UE_LOG(LogTemp, Log, ...)
+   - 实现 ShutdownModule()：打印日志 "FlowVisualizerEditor module unloaded"
+   - 文件末尾使用 IMPLEMENT_MODULE 宏注册模块
+     IMPLEMENT_MODULE(FFlowVisualizerEditorModule, FlowVisualizerEditor)
+
+【此任务不做的事情】
+- 不在 StartupModule() 中注册菜单项（那是 P3.1）
+- 不创建 SFlowVisualizerPanel 或 SWindow 相关代码（那是 P3.2、P3.3）
+- 不创建 FlowVisualizerStyle 样式文件（那是 P5.3）
+- 不创建 Resources 目录或图标（那是 P1.4）
+
+【验证标准】
+- 文件编码 UTF-8
+- 每个 .h 文件包含 #pragma once
+- Build.cs 中 ModuleRules 类名与 .uplugin 中声明的模块名一致
+- Build.cs 的 PublicDependencyModuleNames 包含 "FlowVisualizerRuntime"
+- Build.cs 的 PrivateDependencyModuleNames 包含 "Slate", "SlateCore",
+  "UnrealEd", "EditorStyle", "LevelEditor", "InputCore"
+- 编译通过
+- 编辑器启动后 Output Log 中出现 "FlowVisualizerEditor module loaded"
+- 未创建本任务范围外的任何文件
+
+================================================================================
+                    上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：P1.3 创建 FlowVisualizerEditor 模块骨架
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断]
+
+【已完成内容】
+- [列出已完成的部分]
+
+【未完成内容】
+- [列出剩余部分]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话 PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+FlowVisualizer UE 4.27 编辑器插件，终端风格数据流可视化。
+Phase 1 P1.3 续接任务。
+
+【前置完成】
+- P1.1 .uplugin 已创建 ✅
+- P1.2 Runtime 模块骨架已创建 ✅
+- P1.3 部分完成：
+  - [列出已完成的部分] ✅
+
+【续接任务】
+继续完成 FlowVisualizerEditor 模块骨架的创建。
+需要创建的文件：Build.cs + Module .h + Module .cpp
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================

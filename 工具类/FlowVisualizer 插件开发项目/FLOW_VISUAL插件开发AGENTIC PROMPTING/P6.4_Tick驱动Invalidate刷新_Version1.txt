@@ -1,0 +1,218 @@
+================================================================================
+任务：实现 Tick 中的智能 Invalidate 刷新驱动
+================================================================================
+
+【项目背景】
+FlowVisualizer 是一个 UE 4.27 编辑器插件，用于在编辑器独立弹出窗口中
+以终端风格可视化观察运行时数据流。
+插件采用双模块结构：FlowVisualizerRuntime + FlowVisualizerEditor。
+
+【当前进度】
+Phase 6 P6.4（共 32 个原子化任务中的第 22 个）
+这是 Phase 6（事件驱动高亮 + 数据标签）的最后一个任务。
+
+前置完成：
+- Phase 1 ~ Phase 5 全部完成 ✅
+- P6.1 FFlowTracer Delegate 已连接 ✅
+  ��NodeLastActiveTime / NodeLastData 映射表被事件更新）
+- P6.2 节点高亮渐灭绘制已实现 ✅
+  （OnPaint 中根据 Elapsed 计算动态颜色）
+- P6.3 数据标签绘制已实现 ✅
+  （OnPaint 中节点下方绘制 DataPayload）
+
+注意：P6.2/P6.3 的动画效果目前无法实时观察到，
+因为 OnPaint 只在 Widget 被标记为 dirty 时才触发重绘。
+本任务（P6.4）通过 Tick 驱动 Invalidate 解决此问题。
+
+【安全约束（所有任务必须遵守）】
+1. 仅创建或修改 Plugins/FlowVisualizer/ 目录下的文件
+2. 禁止修改项目 .uproject、项目 Build.cs 或项目任何已有源文件
+3. 禁止引入第三方库；仅使用 UE 4.27 原生 API
+4. 所有运行时代码必须包裹在 Shipping 空操作保护中
+5. 不产生任何 UI 到游戏视口；仅限编辑器独立窗口
+6. 每个 Task 结束后必须能编译通过且不影响现有项目
+
+【原子化任务独立性宪法提醒】
+本 Prompt 仅涉及任务 P6.4 的内容。
+不要执行任何超出 P6.4 范围的工作。
+不要提前创建后续任务（P7.x 等）的文件或代码。
+如果发现需要其他���务的产出物，请仅留占位注释，不要实现。
+
+【任务目标】
+填充 SFlowVisualizerPanel 的 Tick() 实现，在每帧检查是否有
+活跃的动画（节点高亮渐灭或 Edge 动画），如果有则调用
+Invalidate 触发下一帧 OnPaint 重绘。
+无活跃动画时不调用 Invalidate，节省 CPU。
+同时更新底栏的 ActiveSignals 统计数据。
+
+【具体要求】
+
+1. 需要修改的文件：
+
+   文件 A：Plugins/FlowVisualizer/Source/FlowVisualizerEditor/Public/SFlowVisualizerPanel.h
+   文件 B：Plugins/FlowVisualizer/Source/FlowVisualizerEditor/Private/SFlowVisualizerPanel.cpp
+
+2. SFlowVisualizerPanel.h 中应新增：
+   - int32 ActiveSignalCount = 0
+     （当前活跃节点数量，底栏显示用）
+   - double LastSignalElapsed = 0.0
+     （最近一次信号距今时间，底栏显示用，单位毫秒）
+
+3. Tick() 实现逻辑（替换 P3.2 中的空实现）：
+
+   步骤 1 — 调用父类 Tick：
+   - SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime)
+
+   步骤 2 — FPS 缓存更新（保留 P4.3 已实现的逻辑）：
+   - 如果 InDeltaTime > 0：
+     CachedFPS = FMath::Lerp(CachedFPS, 1.0f / InDeltaTime, 0.1f)
+
+   步骤 3 — 检查活跃节点动画：
+   - double CurrentTime = FPlatformTime::Seconds()
+   - bool bHasActiveAnimation = false
+   - int32 TempActiveCount = 0
+   - double TempMinElapsed = TNumericLimits<double>::Max()
+
+   - 遍历 NodeLastActiveTime：
+     for (const auto& Pair : NodeLastActiveTime)
+       double Elapsed = CurrentTime - Pair.Value
+       如果 Elapsed < FlowVisStyle::HighlightFadeDuration：
+         bHasActiveAnimation = true
+         TempActiveCount++
+         TempMinElapsed = FMath::Min(TempMinElapsed, Elapsed)
+
+   步骤 4 — 检查活跃 Edge 动画（为 P7.x 预留）：
+   - 留注释占位：
+     // TODO P7.1/P7.2: 检查 EdgeLastActiveTime 中的活跃 Edge
+     // 如果有活跃 Edge，bHasActiveAnimation = true
+
+   步骤 5 — 更新统计数据：
+   - ActiveSignalCount = TempActiveCount
+   - 如果 TempActiveCount > 0：
+     LastSignalElapsed = TempMinElapsed * 1000.0（转毫秒）
+   否则：
+     LastSignalElapsed = 0.0
+
+   步骤 6 — 智能 Invalidate：
+   - 如果 bHasActiveAnimation：
+     Invalidate(EInvalidateWidget::Paint)
+     // 注意：UE4.27 中可能是 EInvalidateWidget::Paint
+     // 或 EInvalidateWidgetReason::Paint，需确认 API
+     // ��果两者都不可用，可使用 Invalidate(EInvalidateWidget::LayoutAndVolatility)
+   - 如果 !bHasActiveAnimation：
+     不调用 Invalidate（节省 CPU，面板静止）
+
+4. 底栏状态文字扩展（可选，也可留到 P9.2）：
+   - 如果在本任务中方便，可在 OnPaint 底栏文字中追加 ActiveSignalCount
+   - 格式调整为："Frame: {N} | FPS: {N} | Active: {N} | Pipeline: {name}"
+   - 如果不方便，留注释说明 P9.2 会扩展，保持现有格式
+
+5. 关键技术注意事项：
+   - UE4.27 中 SWidget::Invalidate 的参数可能是
+     EInvalidateWidget 或 EInvalidateWidgetReason 枚举，
+     具体取决于引擎小版本。如果编译不过，尝试：
+     a. Invalidate(EInvalidateWidget::Paint)
+     b. Invalidate(EInvalidateWidgetReason::Paint)
+     c. 或直接不传参数 Invalidate()（部分版本支持）
+   - Tick 每帧调用，遍历 NodeLastActiveTime 的开销很低
+     （通常只有几个到几十个节点）
+   - 无活跃动画时不 Invalidate 是关键优化，
+     避免编辑器空闲时无意义的重绘开销
+
+【此任务不做的事情】
+- 不实现 Edge 动画检查（P7.x 预留占位）
+- 不实现完整底栏统计（那是 P9.2）
+- 不实现 Pause/Resume 完整逻辑（那是 P9.1）
+- 不修改节点高亮或数据标签的绘制逻辑
+- 不创建新文件
+
+【验证标准】
+- 编译通过
+- 有信号时面板持续刷新：
+  节点高亮渐灭动画流畅可见（从亮青到暗灰平滑过渡）
+  数据标签随高亮同步出现和消失
+- 无信号时面板停止刷新：
+  所有节点回到暗灰静止状态后，Tick 不再触发 Invalidate
+  （可通过 Output Log 打印或断点验证）
+- ActiveSignalCount 正确反映当前正在渐灭的节点数量
+- CachedFPS 继续正常更新
+- 未创建本任务范围外的任何文件
+
+【Phase 6 完成后的验证清单】
+完成此任务后，Phase 6（事件驱动高亮 + 数据标签）全部完成，请验证：
+1. FFlowTracer Delegate 已连接，事件正确接收 ✅
+2. 采样节流生效（100ms 窗口）✅
+3. 节点高亮渐灭动画流畅（1.5 秒从亮青到暗灰）✅
+4. 数据标签在高亮期间显示绿色数据文字 ✅
+5. 多字段分行显示，最多 4 行 ✅
+6. Tick 智能驱动 Invalidate（有动画时刷新，无动画时静止）✅
+7. 整体编译通过 ✅
+
+================================================================================
+                    上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：P6.4 Tick 驱动 Invalidate 刷新
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断]
+
+【已完成内容】
+- [列出已完成的部分]
+
+【未完成内容】
+- [列出剩余部分]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话 PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+FlowVisualizer UE 4.27 编辑器插件，终端风格数据流可视化。
+Phase 6 P6.4 续接任务。
+
+【前置完成】
+- Phase 1 ~ Phase 5 全部完成 ✅
+- P6.1 Delegate 连接已完成 ✅
+- P6.2 高亮渐灭已完成 ✅
+- P6.3 数据标签已完成 ✅
+- P6.4 部分完成：
+  - [列出已完成的部分] ✅
+
+【续接任务】
+继续完成 Tick 智能 Invalidate 刷新。
+修改文件：SFlowVisualizerPanel.h/.cpp
+核心内容：遍历 NodeLastActiveTime 检查活跃动画 + 条件 Invalidate
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================

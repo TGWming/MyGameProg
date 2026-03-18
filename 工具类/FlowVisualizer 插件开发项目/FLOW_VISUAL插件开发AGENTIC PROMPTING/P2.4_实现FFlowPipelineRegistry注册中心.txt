@@ -1,0 +1,180 @@
+================================================================================
+任务：实现 FFlowPipelineRegistry 管线注册中心
+================================================================================
+
+【项目背景】
+FlowVisualizer 是一个 UE 4.27 编辑器插件，用于在编辑器独立弹出窗口中
+以终端风格可视化观察运行时数据流。
+插件采用双模块结构：FlowVisualizerRuntime + FlowVisualizerEditor。
+
+【当前进度】
+Phase 2 P2.4（共 32 个原子化任务中的第 8 个）
+这是 Phase 2（数据采集核心）的最后一个任务。
+
+前置完成：
+- Phase 1 全部完成 ✅
+- P2.1 FlowPipelineTypes.h 已创建 ✅
+  （FFlowEvent, FFlowNode, FFlowEdge, FFlowPipeline 结构体已定义）
+- P2.2 FFlowTracer 单例已实现 ✅
+- P2.3 FLOW_SIGNAL 宏已实现 ✅
+
+注意：P2.4 的直接依赖仅为 P2.1（需要 FFlowPipeline 类型），
+与 P2.2/P2.3 无直接依赖关系。
+
+【安全约束（所有任务必须遵守）】
+1. 仅创建或修改 Plugins/FlowVisualizer/ 目录下的文件
+2. 禁止修改项目 .uproject、项目 Build.cs 或项目任何已有源文件
+3. 禁止引入第三方库；仅使用 UE 4.27 原生 API
+4. 所有运行时代码必须包裹在 Shipping 空操作保护中
+5. 不产生任何 UI 到游戏视口；仅限编辑器独立窗口
+6. 每个 Task 结束后必须能编译通过且不影响现有项目
+
+【原子化任务独立性宪法提醒】
+本 Prompt 仅涉及任务 P2.4 的内容。
+不要执行任何超出 P2.4 范围的工作。
+不要提前创建后续任务（P3.x、P4.x 等）的文件或代码。
+如果发现需要其他任务的产出物，请仅留占位注释，不要实现。
+
+【任务目标】
+在 FlowVisualizerRuntime 模块中实现 FFlowPipelineRegistry 单例类，
+作为管线定义的全局注册中心。
+游戏代码和编辑器模块均通过此注册中心注册/查询管线拓扑定义。
+注意：Registry 放在 Runtime 模块中，以便游戏代码也能注册管线。
+
+【具体要求】
+
+1. 需要创建 2 个文件：
+
+   文件 A：Plugins/FlowVisualizer/Source/FlowVisualizerRuntime/Public/FlowPipelineRegistry.h
+   文件 B：Plugins/FlowVisualizer/Source/FlowVisualizerRuntime/Private/FlowPipelineRegistry.cpp
+
+2. FFlowPipelineRegistry 类的公开接口应包含：
+
+   static FFlowPipelineRegistry& Get();
+   - Meyer's Singleton 模式（与 FFlowTracer 一致）
+
+   void RegisterPipeline(const FFlowPipeline& Pipeline);
+   - 以 Pipeline.PipelineID 为 Key 存入内部 TMap
+   - 如果相同 ID 已存在则覆盖
+   - 存入后广播 OnRegistryChanged Delegate
+
+   void UnregisterPipeline(FName PipelineID);
+   - 从 TMap 中移除指定 ID 的管线
+   - 移除后广播 OnRegistryChanged Delegate
+
+   const FFlowPipeline* FindPipeline(FName PipelineID) const;
+   - 从 TMap 中查找并返回指针
+   - 未找到返回 nullptr
+
+   TArray<FName> GetAllPipelineIDs() const;
+   - 返回所有已注册管线的 PipelineID 列表
+
+   Delegate 声明：
+   DECLARE_MULTICAST_DELEGATE(FOnRegistryChanged);
+   FOnRegistryChanged OnRegistryChanged;
+
+3. FFlowPipelineRegistry 类的私有成员应包含：
+
+   TMap<FName, FFlowPipeline> RegisteredPipelines;
+   - 以 PipelineID 为 Key 的管线存储
+
+4. 关键技术注意事项：
+   - 类需要添加 FLOWVISUALIZERRUNTIME_API 导出宏
+   - 需要 #include "FlowPipelineTypes.h" 获取 FFlowPipeline 类��
+   - OnRegistryChanged 供编辑器面板监听，当管线注册/注销时
+     刷新下拉菜单列表（后续 P4.2 会连接此 Delegate）
+   - Registry 不需要线程锁（管线注册通常在 GameThread 进行）
+
+【此任务不做的事情】
+- 不注册任何具体管线数据（Demo 管线注册是 P4.1）
+- 不创建任何编辑器 UI（下拉菜单是 P4.2）
+- 不修改 FFlowTracer 或 FLOW_SIGNAL 宏
+- 不修改任何已有文件
+
+【验证标准】
+- FlowPipelineRegistry.h 和 FlowPipelineRegistry.cpp 存在于正确路径
+- FFlowPipelineRegistry::Get() 多次调用返回同一实例
+- RegisterPipeline() 后 FindPipeline() 返回正确数据
+- UnregisterPipeline() 后 FindPipeline() 返回 nullptr
+- GetAllPipelineIDs() 返回所有已注册 ID
+- OnRegistryChanged 在 Register/Unregister 时正确广播
+- 编译通过
+- 未创建本任务范围外的任何文件
+
+【Phase 2 完成后的验证清单】
+完成此任务后，Phase 2（数据采集核心）全部完成，请验证：
+1. FlowPipelineTypes.h — 4 个结构体定义完整 ✅
+2. FlowTracer.h/.cpp — FFlowTracer 单例可用 ✅
+3. FlowTracerMacros.h — 3 个宏可用，Shipping 下为空 ✅
+4. FlowPipelineRegistry.h/.cpp — 注册中心可用 ✅
+5. 整体编译通过 ✅
+
+================================================================================
+                    上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：P2.4 实现 FFlowPipelineRegistry 注册中心
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断]
+
+【已完成内容】
+- [列出已完成的部分]
+
+【未完成内容】
+- [列出剩余部分]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话 PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+FlowVisualizer UE 4.27 编辑器插件，终端风格数据流可视化。
+Phase 2 P2.4 续接任务。
+
+【前置完成】
+- Phase 1 全部完成 ✅
+- P2.1 FlowPipelineTypes.h 已完成 ✅
+- P2.2 FFlowTracer 已完成 ✅
+- P2.3 FLOW_SIGNAL 宏已完成 ✅
+- P2.4 部分完成：
+  - [列出已完成的部分] ✅
+
+【续接任务】
+继续完成 FFlowPipelineRegistry 注册中心的实现。
+需要完成：FlowPipelineRegistry.h + FlowPipelineRegistry.cpp
+核心接口：Get(), RegisterPipeline(), UnregisterPipeline(),
+          FindPipeline(), GetAllPipelineIDs(), OnRegistryChanged
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================

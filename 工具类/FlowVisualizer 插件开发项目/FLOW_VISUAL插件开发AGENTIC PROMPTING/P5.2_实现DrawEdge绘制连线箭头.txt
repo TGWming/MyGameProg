@@ -1,0 +1,188 @@
+================================================================================
+任务：在 OnPaint 中实现 DrawEdge 绘制连线和箭头
+================================================================================
+
+【项目背景】
+FlowVisualizer 是一个 UE 4.27 编辑器插件，用于在编辑器独立弹出窗口中
+以终端风格可视化观察运行时数据流。
+插件采用双模块结构：FlowVisualizerRuntime + FlowVisualizerEditor。
+
+【当前进度】
+Phase 5 P5.2（共 32 个原子化任务中的第 16 个）
+
+前置完成：
+- Phase 1 ~ Phase 4 全部完成 ✅
+- P5.1 DrawNode 节点文字绘制已实现 ✅
+  （NodeRelativeToPixel() 坐标转换函数可用，
+   OnPaint 中已遍���管线节点并绘制 "[Name]" 文字）
+
+【安全约束（所有任务必须遵守）】
+1. 仅创建或修改 Plugins/FlowVisualizer/ 目录下的文件
+2. 禁止修改项目 .uproject、项目 Build.cs 或项目任何已有源文件
+3. 禁止引入第三方库；仅使用 UE 4.27 原生 API
+4. 所有运行时代码必须包裹在 Shipping 空操作保护中
+5. 不产生任何 UI 到游戏视口；仅限编辑器独立窗口
+6. 每个 Task 结束后必须能编译通过且不影响现有项目
+
+【原子化任务独立性宪法提醒】
+本 Prompt 仅涉及任务 P5.2 的内容。
+不要执行任何超出 P5.2 范围的工作。
+不要提前创建后续任务（P5.3、P5.4 等）的文件或代码。
+如果发现需要其他任务的产出物，请仅留占位注释，不要实现。
+
+【任务目标】
+修改 SFlowVisualizerPanel 的 OnPaint()，在节点文字绘制之前
+绘制管线中所有连线（Edge），包括线段和箭头头部。
+连线绘制在节点下方（较低 LayerId）���确保节点文字在连线上方。
+
+【具体要求】
+
+1. 需要修改的文件：
+
+   Plugins/FlowVisualizer/Source/FlowVisualizerEditor/Private/SFlowVisualizerPanel.cpp
+
+2. OnPaint() 中应在节点绘制之前添加连线绘制逻辑：
+
+   绘制顺序确认（从底到顶）：
+   a. 背景矩形
+   b. 连线 + 箭头（本任务）   ← LayerId
+   c. 节点文字（P5.1）        ← LayerId + 1
+   d. 底栏（P4.3）            ← LayerId + 2
+
+3. 遍历当前管线的所有 Edges，对每条 Edge：
+
+   步骤 1 — 获取起止节点的像素坐标：
+   - 在管线 Nodes 数组中查找 SourceNodeID 和 TargetNodeID 对应的节点
+   - 调用 NodeRelativeToPixel() 获取各自像素坐标
+   - 如果任一节点未找到，跳过该 Edge
+
+   步骤 2 — 计算连线端点偏移：
+   - Source 点：SourceNode 像素坐标右侧偏移
+     SourcePoint = SourcePixel + FVector2D(TextWidth * 0.5f + 10.0f, 8.0f)
+     （文字右端中心附近，8.0f 为近似文字半高）
+   - Target 点：TargetNode 像素坐标左侧偏移
+     TargetPoint = TargetPixel + FVector2D(-10.0f, 8.0f)
+     （文字左端中心附近）
+   - TextWidth 估算：节点名字符数 * 8.0f（粗略估算，
+     或使用固定偏移 50.0f 简化处理）
+
+   步骤 3 — 绘制连线：
+   - 使用 FSlateDrawElement::MakeLines
+   - 构造 TArray<FVector2D> 包含 SourcePoint 和 TargetPoint
+   - 颜色：FLinearColor(0.53f, 0.53f, 0.53f, 1.0f) 即 #888888（中灰）
+     （后续 P5.4 会替换为 FlowVisStyle 常量）
+   - 线宽（Thickness）：2.0f
+   - bAntialias：true
+
+   步骤 4 — 绘制箭头��部：
+   - 在 TargetPoint 端绘制箭头
+   - 方法：用两条短线段模拟 ">" 形箭头
+   - 计算连线方向向量：Dir = (TargetPoint - SourcePoint).GetSafeNormal()
+   - 箭头两翼：
+     ArrowSize = 8.0f
+     Perpendicular = FVector2D(-Dir.Y, Dir.X)（垂直于连线方向）
+     Wing1 = TargetPoint - Dir * ArrowSize + Perpendicular * ArrowSize * 0.5f
+     Wing2 = TargetPoint - Dir * ArrowSize - Perpendicular * ArrowSize * 0.5f
+   - 绘制两条线段：
+     MakeLines: Wing1 -> TargetPoint
+     MakeLines: Wing2 -> TargetPoint
+   - 颜色和线宽与连线一致
+
+   步骤 5 — 处理垂直/非水平连线：
+   - 上述算法对任意角度的连线均适用（基于方向向量计算）
+   - 如果节点上下排列（X 坐标接近），连线为近垂直线，
+     箭头自动朝下，无需特殊处理
+
+4. 关键技术注意事项：
+   - FSlateDrawElement::MakeLines 签名（UE4.27）：
+     MakeLines(OutDrawElements, LayerId, PaintGeometry,
+              Points, DrawEffects, Color, bAntialias, Thickness)
+   - Points 参数为 TArray<FVector2D>
+   - PaintGeometry 使用 AllottedGeometry.ToPaintGeometry()
+   - 线段坐标是相对于 Widget 左上角的本地坐标
+   - 箭头绘制也使用 MakeLines（分别两条线段）
+
+【此任务不做的事情】
+- 不创建 FlowVisualizerStyle 颜色常量（那是 P5.3）
+- 不替换硬编码颜色为 Style 常量（那是 P5.4）
+- 不实现连线高亮/变色效果（那是 P7.2）
+- 不实现流动光点（那是 P7.2）
+- 不修改节点绘制逻辑
+
+【验证标准】
+- Demo Pipeline 中 Input -> Process -> Output 有可见的灰色线段连接
+- 线段颜色为 #888888，线宽约 2px
+- 每条连线的 Target 端有 ">" 形箭头
+- 箭头方向正确（指向 Target 节点）
+- 连线绘制在节点文字下方（节点文字不被连线遮挡）
+- 调整窗口大小后连线跟随节点位置自适应
+- CurrentPipelineID 为 NAME_None 时无连线绘制（不崩溃）
+- 编译通过
+- 未创建本任务范围外的任何文件
+
+================================================================================
+                    上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任���：P5.2 实现 DrawEdge 绘制连线箭头
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断]
+
+【已完成内容】
+- [列出已完成的部分]
+
+【未完成内容】
+- [列出剩余部分]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话 PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+FlowVisualizer UE 4.27 编辑器插件，终端风格数据流可视化。
+Phase 5 P5.2 续接任务。
+
+【前置完成】
+- Phase 1 ~ Phase 4 全部完成 ✅
+- P5.1 DrawNode 节点文字绘制已完成 ✅
+- P5.2 部分完成：
+  - [列出已完成的部分] ✅
+
+【续接任务】
+继续完成 DrawEdge 连线箭头绘制。
+修改文件：SFlowVisualizerPanel.cpp
+核心内容：OnPaint 中遍历 Edges，MakeLines 绘制线段 + 箭头
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================

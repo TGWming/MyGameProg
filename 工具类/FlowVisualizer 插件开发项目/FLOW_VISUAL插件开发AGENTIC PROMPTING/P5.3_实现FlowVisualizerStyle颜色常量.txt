@@ -1,0 +1,183 @@
+================================================================================
+任务：创建 FlowVisualizerStyle 颜色/字体/动画常量定义
+================================================================================
+
+【项目背景】
+FlowVisualizer 是一个 UE 4.27 编辑器插件，用于在编辑器独立弹出窗口中
+以终端风格可视化观察运行时数据流。
+插件采用双模块结构：FlowVisualizerRuntime + FlowVisualizerEditor。
+
+【当前进度】
+Phase 5 P5.3（共 32 个原子化任务中的第 17 个）
+
+前置完成：
+- Phase 1 全部完成 ✅
+  - P1.3 FlowVisualizerEditor 模块骨架已创建 ✅
+
+注意：P5.3 的直接依赖仅为 P1.3（Editor 模块骨架），
+与 P5.1/P5.2 无直接依赖关系，可并行。
+但在实际执行流程中安排在此处，方便 P5.4 整合时使用。
+
+【安全约束（所有任务必须遵守）】
+1. 仅创建或修改 Plugins/FlowVisualizer/ 目录下的文件
+2. 禁止修改项目 .uproject、项目 Build.cs 或项目任何已有源文件
+3. 禁止引入第三方库；仅使用 UE 4.27 原生 API
+4. 所有运行时代码必须包裹在 Shipping 空操作保护中
+5. 不产生任何 UI 到游戏视口；仅限编辑器独立窗口
+6. 每个 Task 结束后必须能编译通过且不影响现有项目
+
+【原子化任务独立性宪法提醒】
+本 Prompt 仅涉及任务 P5.3 的内容。
+不要执行任何超出 P5.3 范围的工作。
+不要提前创建后续任务（P5.4、P6.x 等）的文件或代码。
+如果发现需要其他任务的产出物，请仅留占位注释，不要实现。
+
+【任务目标】
+在 FlowVisualizerEditor 模块中创建 FlowVisualizerStyle 文件，
+将设计规格中的全部配色方案、字体规格和动画常量集中定义为
+命名空间常量和工具函数，供全插件引用，消除硬编码。
+
+【具体要求】
+
+1. ��要创建 2 个文件：
+
+   文件 A：Plugins/FlowVisualizer/Source/FlowVisualizerEditor/Private/FlowVisualizerStyle.h
+   文件 B：Plugins/FlowVisualizer/Source/FlowVisualizerEditor/Private/FlowVisualizerStyle.cpp
+
+2. 在 namespace FlowVisStyle 中定义以下颜色常量（均为 FLinearColor）：
+
+   背景类：
+   - Background      = FLinearColor(0.05f, 0.05f, 0.08f, 1.0f)   // #0D0D14
+   - TitleBarBg      = FLinearColor(0.10f, 0.10f, 0.15f, 1.0f)   // #1A1A25
+
+   节点类：
+   - NodeActive      = FLinearColor(0.20f, 0.80f, 1.00f, 1.0f)   // #33CCFF
+   - NodeInactive    = FLinearColor(0.40f, 0.40f, 0.40f, 1.0f)   // #666666
+   - DataValue       = FLinearColor(0.29f, 1.00f, 0.51f, 1.0f)   // #4AFF82
+
+   连线类：
+   - EdgeDefault     = FLinearColor(0.53f, 0.53f, 0.53f, 1.0f)   // #888888
+   - EdgeActive      = FLinearColor(0.20f, 0.80f, 1.00f, 1.0f)   // #33CCFF
+   - FlowDot         = FLinearColor(1.00f, 1.00f, 1.00f, 1.0f)   // #FFFFFF
+
+   UI 类：
+   - Border          = FLinearColor(0.20f, 0.20f, 0.25f, 1.0f)   // #333340
+   - StatusText      = FLinearColor(0.60f, 0.60f, 0.60f, 1.0f)   // #999999
+   - Warning         = FLinearColor(1.00f, 0.40f, 0.27f, 1.0f)   // #FF6644
+
+3. 定义 4 个字体获取函数（声明在 .h，实现在 .cpp）：
+
+   FSlateFontInfo NodeTitleFont();
+   - 返回 Roboto Bold 14pt
+   - 实现：FCoreStyle::GetDefaultFontStyle("Bold", 14)
+
+   FSlateFontInfo DataValueFont();
+   - 返回 Roboto Mono 11pt
+   - 实现：FCoreStyle::GetDefaultFontStyle("Mono", 11)
+
+   FSlateFontInfo StatusBarFont();
+   - 返回 Roboto Mono 10pt
+   - 实现：FCoreStyle::GetDefaultFontStyle("Mono", 10)
+
+   FSlateFontInfo PipelineTitleFont();
+   - 返回 Roboto Bold 12pt
+   - 实现：FCoreStyle::GetDefaultFontStyle("Bold", 12)
+
+4. 定义动画/行为常量（均为 const float）：
+
+   - HighlightFadeDuration = 1.5f
+     （节点高亮渐灭持续时间，秒）
+   - FlowDotSpeed = 200.0f
+     （流动光点移动速度，像素/秒）
+   - SignalThrottleMs = 100.0f
+     （同节点信号采样节流窗口，毫秒）
+
+5. 关键技术注意事项：
+   - .h 中颜色和动画常量使用 extern const 声明，.cpp 中定义
+     或者在 .h 中直接 inline / 命名空间内定义（C++14 兼容方式）
+   - UE4.27 编译器支持 C++14，namespace 内 const 默认 internal linkage，
+     直接在 .h 中定义即可，无需 extern
+   - 字体函数需要在 .cpp 中实现，因为 FCoreStyle 调用不适合 inline
+   - #include "Styling/CoreStyle.h" 获取 FCoreStyle
+   - #include "Fonts/SlateFontInfo.h" 获取 FSlateFontInfo
+
+【此任务不做的事情】
+- 不修改 SFlowVisualizerPanel 中的任何硬编码颜色（那是 P5.4）
+- 不实现任何绘制逻辑
+- 不修改任何已有文件
+
+【验证标准】
+- FlowVisualizerStyle.h 和 FlowVisualizerStyle.cpp 存在于正确路径
+- namespace FlowVisStyle 包含全部 11 个颜色常量
+- 4 个字体函数可调用并返回有效 FSlateFontInfo
+- 3 个动画常量已定义
+- SFlowVisualizerPanel.cpp 中可以 #include "FlowVisualizerStyle.h"
+  并引用 FlowVisStyle::Background 等常量
+- 编译通过
+- 未创建本任务范围外的任何文件
+
+================================================================================
+                    上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：P5.3 实现 FlowVisualizerStyle 颜色常量
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断]
+
+【已完成内容】
+- [列出已完成的部分]
+
+【未完成内容】
+- [列出剩余部分]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话 PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+FlowVisualizer UE 4.27 编辑器插件，终端风格数据流可视化。
+Phase 5 P5.3 续接任务。
+
+【前置完成】
+- Phase 1 ~ Phase 4 全部完成 ✅
+- P5.3 部分完成：
+  - [列出已完成的部分] ✅
+
+【续接任务】
+继续完成 FlowVisualizerStyle 常量定义。
+需要创建：FlowVisualizerStyle.h + FlowVisualizerStyle.cpp
+包含 11 个颜色常量 + 4 个字体函数 + 3 个动画常量
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================

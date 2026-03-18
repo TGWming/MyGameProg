@@ -1,0 +1,200 @@
+================================================================================
+任务：在 SFlowVisualizerPanel 顶栏实现 Pipeline 下拉菜单
+================================================================================
+
+【项目背景】
+FlowVisualizer 是一个 UE 4.27 编辑器插件，用于在编辑器独立弹出窗口中
+以终端风格可视化观察运行时数据流。
+插件采用双模块结构：FlowVisualizerRuntime + FlowVisualizerEditor。
+
+【当前进度】
+Phase 4 P4.2（共 32 个原子化任务中的第 13 个）
+
+前置完成：
+- Phase 1 全部完成 ✅
+- Phase 2 全部完成 ✅
+- Phase 3 全部完成 ✅
+- P3.2 SFlowVisualizerPanel 空壳已创建 ✅
+  （Construct / Tick / OnPaint 基础结构就绪）
+- P4.1 Demo 管线已注册到 FFlowPipelineRegistry ✅
+  （编辑器启动后 Registry 中包含 "Demo" 管线）
+
+【安全约束（所有任务必须遵守）】
+1. 仅创建或修改 Plugins/FlowVisualizer/ 目录下的文件
+2. 禁止修改项目 .uproject、项目 Build.cs 或项目任何已有源文件
+3. 禁止引入第三方库；仅使用 UE 4.27 原生 API
+4. 所有运行时代码必须包裹在 Shipping 空操作保护中
+5. 不产生任何 UI 到游戏视口；仅限编辑器独立窗口
+6. 每个 Task 结束后必须能编译通过且不影响现有项目
+
+【原子化任务独立性宪法提醒】
+本 Prompt 仅涉及任务 P4.2 的内容。
+不要执行任何超出 P4.2 范围的工作。
+不要提前创建后续任务（P4.3、P5.x 等）的文件或代码。
+如果发现需要其他任务的产出物，请仅留占位注释，不要实现。
+
+【任务目标】
+修改 SFlowVisualizerPanel 的 Construct()，在面板顶部添加一个工具栏区域，
+包含 Pipeline 下拉选择菜单、Pause 按钮和 Clear 按钮。
+下拉菜单的数据源来自 FFlowPipelineRegistry，选择后更新 CurrentPipelineID。
+
+【具体要求】
+
+1. 需要修改的文件：
+
+   文件 A：Plugins/FlowVisualizer/Source/FlowVisualizerEditor/Public/SFlowVisualizerPanel.h
+   文件 B：Plugins/FlowVisualizer/Source/FlowVisualizerEditor/Private/SFlowVisualizerPanel.cpp
+
+2. SFlowVisualizerPanel.h 中应新增以下成员声明：
+
+   数据成员：
+   - FName CurrentPipelineID
+     （当前选中的管线 ID）
+   - TArray<TSharedPtr<FName>> PipelineIDList
+     （下拉菜单的数据源，TSharedPtr 包装供 SComboBox 使用）
+   - TSharedPtr<FName> SelectedPipelineItem
+     （当前选中项）
+   - bool bIsPaused = false
+     （暂停标志，后续 P6.1 / P9.1 使用）
+   - FDelegateHandle RegistryChangedHandle
+     （监听 Registry 变化的 Delegate 句柄）
+
+   函数成员：
+   - void RefreshPipelineList()
+     （从 Registry 获取最新列表，刷新下拉菜单数据源）
+   - void OnPipelineSelected(TSharedPtr<FName> NewSelection, ESelectInfo::Type)
+     （下拉菜单选择回调）
+   - TSharedRef<SWidget> GeneratePipelineComboItem(TSharedPtr<FName> Item)
+     （下拉菜单每一项的 Widget 生成）
+   - FText GetSelectedPipelineText() const
+     （获取当前选中项的显示文字）
+
+3. Construct() 应修改为：
+
+   整体布局改为 SVerticalBox，从上到下：
+   
+   槽位 1 — 顶栏工具条（AutoHeight）：
+   - 背景色：FLinearColor(0.10f, 0.10f, 0.15f, 1.0f)  即 #1A1A25
+   - 内部为 SHorizontalBox，包含：
+     a. STextBlock "Pipeline:" 白色文字
+     b. SComboBox<TSharedPtr<FName>>
+        - OptionsSource: &PipelineIDList
+        - OnSelectionChanged: 绑定 OnPipelineSelected
+        - OnGenerateWidget: 绑定 GeneratePipelineComboItem
+        - Content: 显示 GetSelectedPipelineText()
+     c. 间距 Spacer
+     d. SButton "Pause"
+        - 点击切换 bIsPaused（本任务仅切换标志 + 打印日志占位）
+     e. SButton "Clear"
+        - 点击调用 FFlowTracer::Get().ClearBuffer()
+        （需要 #include "FlowTracer.h"）
+   - 顶栏高度建议约 30~40 像素
+
+   槽位 2 — 主画布区域（FillHeight(1.0f)）：
+   - 保留原有的 SOverlay（OnPaint 绘制区域）
+
+4. Construct() 末尾应注册 Registry 监听：
+   - RegistryChangedHandle = FFlowPipelineRegistry::Get()
+       .OnRegistryChanged.AddRaw(this, &...::RefreshPipelineList)
+   - 立即调用一次 RefreshPipelineList() 初始化列表
+
+5. 析构/销毁时应取消监听：
+   - FFlowPipelineRegistry::Get().OnRegistryChanged.Remove(RegistryChangedHandle)
+
+6. RefreshPipelineList() 实现：
+   - 从 FFlowPipelineRegistry::Get().GetAllPipelineIDs() 获取列表
+   - 清空 PipelineIDList，重新填充为 TSharedPtr<FName> 包装
+   - 如果 CurrentPipelineID 不在新列表中且列表非空，
+     自动选中第一项
+   - 如果列表为空，CurrentPipelineID 置为 NAME_None
+
+7. 关键技术注意事项：
+   - SComboBox 需要 #include "Widgets/Input/SComboBox.h"
+   - SButton 需要 #include "Widgets/Input/SButton.h"
+   - STextBlock 需要 #include "Widgets/Text/STextBlock.h"
+   - FFlowPipelineRegistry 需要 #include "FlowPipelineRegistry.h"
+   - FFlowTracer 需要 #include "FlowTracer.h"（Clear 按钮使用）
+   - 顶栏背景可用 SBorder 包裹并设置 BorderBackgroundColor
+
+【此任务不做的事情】
+- 不实现底栏状态条（那是 P4.3）
+- 不实现节点/连线绘制（那是 P5.x）
+- 不实现 Pause/Resume 的完整逻辑（那是 P9.1，本任务仅切换 bool 标志）
+- 不连接 FFlowTracer 的事件 Delegate（那是 P6.1）
+
+【验证标准】
+- 窗口顶部显示工具栏，背景色为深蓝黑 #1A1A25
+- 下拉菜单列出 "Demo"（来自 P4.1 注册的 Demo 管线）
+- 选择管线后 CurrentPipelineID 更新为对应 FName
+- Pause 按钮可点击，bIsPaused 切换
+- Clear 按钮可点击，调用 FFlowTracer::Get().ClearBuffer() 不崩溃
+- 当新管线注册到 Registry 时，下拉菜单自动刷新
+- 编译通过
+- 未创建本任务范围外的任何文件
+
+================================================================================
+                    上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：P4.2 Panel 顶栏 Pipeline 下拉菜单
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断]
+
+【已完成内容】
+- [列出已完成的部分]
+
+【未完成内容】
+- [列出剩余部分]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话 PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+FlowVisualizer UE 4.27 编辑器插件，终端风格数据流可视化。
+Phase 4 P4.2 续接任务。
+
+【前置完成】
+- Phase 1 ~ Phase 3 全部完成 ✅
+- P4.1 Demo 管线已注册 ✅
+- P4.2 部分完成：
+  - [列出已完成的部分] ✅
+
+【续接任务】
+继续完成 SFlowVisualizerPanel 顶栏下拉菜单。
+修改文件：SFlowVisualizerPanel.h/.cpp
+核心内容：SComboBox 下拉 + Pause/Clear 按钮 + Registry 监听
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================

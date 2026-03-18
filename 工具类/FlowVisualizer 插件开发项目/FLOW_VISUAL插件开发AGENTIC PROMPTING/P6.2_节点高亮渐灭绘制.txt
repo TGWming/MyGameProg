@@ -1,0 +1,167 @@
+================================================================================
+任务：修改 DrawNode 逻辑实现节点高亮渐灭效果
+================================================================================
+
+【项目背景】
+FlowVisualizer 是一个 UE 4.27 编辑器插件，用于在编辑器独立弹出窗口中
+以终端风格可视化观察运行时数据流。
+插件采用双模块结构：FlowVisualizerRuntime + FlowVisualizerEditor。
+
+【当前进度】
+Phase 6 P6.2（共 32 个原子化任务中的第 20 个）
+
+前置完成：
+- Phase 1 ~ Phase 5 全部完成 ✅
+- P5.1 DrawNode 节点文字绘制已实现 ✅
+  （OnPaint 中遍历节点绘制 "[Name]"，颜色使用 FlowVisStyle::NodeInactive）
+- P5.3 FlowVisualizerStyle 常量已创建 ✅
+  （NodeActive, NodeInactive, HighlightFadeDuration 可用）
+- P6.1 FFlowTracer Delegate 已连接 ✅
+  （NodeLastActiveTime 映射表在事件接收时更新）
+
+【安全约束（所有任务必须遵守）】
+1. 仅创建或修改 Plugins/FlowVisualizer/ 目录下的文件
+2. 禁止修改项目 .uproject、项目 Build.cs 或项目任何已有源文件
+3. 禁止引入第三方库；仅使用 UE 4.27 原生 API
+4. 所有运行时代码必须包裹在 Shipping 空操作保护中
+5. 不产生任何 UI 到游戏视口；仅限编辑器独立窗口
+6. 每个 Task 结束后必须能编译通过且不影响现有项目
+
+【原子化任务独立性宪法提醒】
+本 Prompt 仅涉及任务 P6.2 的内容。
+不要执行任何超出 P6.2 范围的工作。
+不要提前创建后续任务（P6.3、P6.4 等）的文件或代码。
+如果发现需要其他任务的产出物，请仅留占位注释，不要实现。
+
+【任务目标】
+修改 SFlowVisualizerPanel OnPaint() 中的节点绘制逻辑，
+根据 NodeLastActiveTime 计算每个节点距离上次激活的时间差，
+实现从亮青色（#33CCFF）到暗灰色（#666666）的 1.5 秒渐灭过渡。
+信号触发时节点文字瞬间变亮，随后平滑衰减至不活跃状态。
+
+【具体要求】
+
+1. 需要修改的文件：
+
+   Plugins/FlowVisualizer/Source/FlowVisualizerEditor/Private/SFlowVisualizerPanel.cpp
+
+2. 修改 OnPaint() 中节点绘制部分的颜色计算逻辑：
+
+   对每个 FFlowNode，在绘制前计算动态颜色：
+
+   步骤 1 — 获取当前时间：
+   - double CurrentTime = FPlatformTime::Seconds()
+
+   步骤 2 — 查找节点最后激活时间：
+   - const double* LastActivePtr = NodeLastActiveTime.Find(Node.NodeID)
+
+   步骤 3 — 计算颜色：
+   - 如果 LastActivePtr 不为 nullptr：
+     double Elapsed = CurrentTime - *LastActivePtr
+     如果 Elapsed < FlowVisStyle::HighlightFadeDuration（1.5 秒）：
+       float Alpha = 1.0f - (float)(Elapsed / FlowVisStyle::HighlightFadeDuration)
+       TextColor = FMath::Lerp(FlowVisStyle::NodeInactive, FlowVisStyle::NodeActive, Alpha)
+     否则：
+       TextColor = FlowVisStyle::NodeInactive
+   - 如果 LastActivePtr 为 nullptr（节点从未被激活）：
+     TextColor = FlowVisStyle::NodeInactive
+
+   步骤 4 — 使用计算出的 TextColor 绘制节点文字：
+   - 替换原来固定的 FlowVisStyle::NodeInactive
+   - 其余绘制参数不变（字体、位置、格式）
+
+3. 关键技术注意事项：
+   - FMath::Lerp 对 FLinearColor 有直接重载，可以直接使用
+   - Alpha 从 1.0（刚激活，全亮）平滑过渡到 0.0（渐灭完成，全暗）
+   - Lerp 参数顺序：Lerp(A, B, Alpha) 当 Alpha=1 时返回 B（ActiveColor）
+     当 Alpha=0 时返回 A（InactiveColor）
+   - CurrentTime 应在 OnPaint 入口处计算一次，所有节点共用
+     （避免同帧内不同节点时间不一致）
+   - HighlightFadeDuration 已在 P5.3 中定义为 1.5f
+   - 注意：本任务只修改颜色计算，不修改 Tick 刷新逻辑（P6.4 负责）
+     在 P6.4 完成前，动画效果需要手动触发重绘才能观察到
+
+【此任务不做的事情】
+- 不绘制数据标签（那是 P6.3）
+- 不实现 Tick 中的 Invalidate 刷新驱动（那是 P6.4）
+- 不实现 Edge 高亮或流动光点（那是 P7.x）
+- 不修改 OnFlowEventReceived 逻辑（P6.1 已完成）
+- 不创建新文件
+
+【验证标准】
+- 编译通过
+- 节点从未收到信号时：保持暗灰色 FlowVisStyle::NodeInactive
+- Signal 触发后（如果 Tick 已驱动 Invalidate 或手动刷新）：
+  节点文字变为亮青色 FlowVisStyle::NodeActive
+- 1.5 秒内颜色平滑从亮青渐变到暗灰
+- 1.5 秒后节点恢复暗灰色
+- 多个节点各自独立渐灭，互不影响
+- 未创建本任务范围外的任何文件
+
+================================================================================
+                    上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：P6.2 节点高亮渐灭绘制
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断]
+
+【已完成内容】
+- [列出��完成的部分]
+
+【未完成内容】
+- [列出剩余部分]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话 PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+FlowVisualizer UE 4.27 编辑器插件，终端风格数据流可视化。
+Phase 6 P6.2 续接任务。
+
+【前置完成】
+- Phase 1 ~ Phase 5 全部完成 ✅
+- P6.1 Delegate 连接已完成 ✅
+- P6.2 部分完成：
+  - [列出已完成的部分] ✅
+
+【续接任务】
+继续完成节点高亮渐灭效果。
+修改文件：SFlowVisualizerPanel.cpp
+核心内容：OnPaint 中根据 NodeLastActiveTime 计算 Elapsed，
+Lerp(NodeInactive, NodeActive, Alpha) 动态颜色
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================

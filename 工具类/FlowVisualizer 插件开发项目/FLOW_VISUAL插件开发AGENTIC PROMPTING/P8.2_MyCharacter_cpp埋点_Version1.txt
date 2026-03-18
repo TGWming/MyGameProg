@@ -1,0 +1,197 @@
+================================================================================
+任务：在 MyCharacter.cpp 中添加 FLOW_SIGNAL 埋点
+================================================================================
+
+【项目背景】
+FlowVisualizer 是一个 UE 4.27 编辑器插件，用于在编辑器独立弹出窗口中
+以终端风格可��化观察运行时数据流。
+插件采用双模块结构：FlowVisualizerRuntime + FlowVisualizerEditor。
+
+【当前进度】
+Phase 8 P8.2（共 32 个原子化任务中的第 26 个）
+
+前置完成：
+- Phase 1 ~ Phase 7 全部完成 ✅
+- P8.1 soul.Build.cs 已添加 FlowVisualizerRuntime 依赖 ✅
+  （游戏代码可 #include "FlowTracerMacros.h"）
+
+【安全约束（所有任务必须遵守）】
+1. ★ Phase 8 允许修改 Soul 项目游戏源文件
+2. 禁止修改项目 .uproject 文件
+3. 禁止引入第三方库；仅使用 UE 4.27 ��生 API
+4. 所有 FLOW_SIGNAL 宏在 Shipping 构建中自动展开为空（零开销）
+5. 不产生任何 UI 到游戏视口
+6. 每个 Task 结束后必须能编译通过且不影响现有项目
+7. ★ 关键：仅添加 FLOW_SIGNAL 调用行，不修改任何原有游戏逻辑
+
+【原子化任务独立性宪法提醒】
+本 Prompt 仅涉及任务 P8.2 的内容。
+不要执行任何超出 P8.2 范围的工作。
+不要修改 TargetDetectionComponent.cpp 或 UIManagerComponent.cpp（那是 P8.3）。
+不要创建 SoulFlowSetup 文件（那是 P8.4）。
+
+【任务目标】
+在 MyCharacter.cpp 中添加 #include "FlowTracerMacros.h" 和
+多处 FLOW_SIGNAL 埋点调用。每处埋点仅一行代码，
+插入到对应功能逻辑段的入口处，不修改���何原有逻辑。
+
+【具体要求】
+
+1. 需要修改的文件：
+
+   MyCharacter.cpp
+   （位于 Soul 项目的 Private 目录下）
+
+2. 文件顶部添加 include：
+   - #include "FlowTracerMacros.h"
+   - 建议放在其他 #include 之后、类实现之前
+
+3. 需要添加的埋点（共 9 处，每处一行，不改原有逻辑）：
+
+   埋点 1 — Tick() 内移动逻辑段：
+   - 位置：Tick 函数体内，移动相关逻辑处
+   - 代码：
+     FLOW_SIGNAL_FMT("MovementProcess", "Vel=%s Spd=%.0f State=%s",
+         *GetVelocity().ToString(),
+         GetCharacterMovement()->MaxWalkSpeed,
+         *UEnum::GetValueAsString(CurrentState));
+   - 注意：如果 CurrentState 变量名不同��需适配实际代码中的变量名
+     （IDE Agent 应读取现有代码确认）
+
+   埋点 2 — SetupPlayerInputComponent() 入口：
+   - 位置：函数体第一行
+   - 代码：FLOW_SIGNAL_SIMPLE("PlayerInput");
+
+   埋点 3 — ToggleLockOn()：
+   - 位置：函数体入口
+   - 代码：
+     FLOW_SIGNAL_FMT("LockOnInput", "bLocked=%s",
+         bIsLockedOn ? TEXT("true") : TEXT("false"));
+   - 注意：bIsLockedOn 变量名需适配实际代码
+
+   埋点 4 — StartLockOn(AActor* Target)：
+   - 位置：函数体入口
+   - 代码：
+     FLOW_SIGNAL_FMT("StartLockOn", "Target=%s",
+         Target ? *Target->GetName() : TEXT("None"));
+
+   埋点 5 — CancelLockOn()：
+   - 位置：函数体入口
+   - 代码：FLOW_SIGNAL_SIMPLE("CancelLockOn");
+
+   埋点 6 — 体力消耗逻辑位置：
+   - 位置：体力变化的代码段
+   - 代码：
+     FLOW_SIGNAL_FMT("StaminaSystem", "Cur=%.0f/%.0f",
+         CurrentStamina, MaxStamina);
+   - 注意：变量名需适配实际代码
+
+   埋点 7 — PerformAttack（如果存在）：
+   - 位置：攻击执行函数入口
+   - 代码：
+     FLOW_SIGNAL_FMT("Combat", "Type=%s",
+         bHeavy ? TEXT("Heavy") : TEXT("Light"));
+   - 注意：如果函数名或参数名不同，需适配
+   - 如果此函数不存在，跳过此埋点
+
+   埋点 8 — PerformDodge（如果存在）：
+   - 位置：闪避执行函数入口
+   - 代码：FLOW_SIGNAL_SIMPLE("DodgeExec");
+   - 如果此函数不存在，跳过此埋点
+
+   埋点 9 — 状态切换位置：
+   - 位置：角色状态切换逻辑处
+   - 代码：
+     FLOW_SIGNAL_FMT("AnimStateMachine", "State=%s",
+         *UEnum::GetValueAsString(CurrentState));
+   - 注意：变量名需适配实际代码
+
+4. 关键说明：
+   - 以上埋点中的变量名（CurrentState, bIsLockedOn, CurrentStamina 等）
+     是基于设计文档的预估名称
+   - IDE Agent 执行时应先读取 MyCharacter.cpp 现有内容，
+     确认实际变量名和函数名，然后适配
+   - 如果某个函数不存在（如 PerformAttack），跳过对应埋点
+   - 如果某个变量名不同，使用实际变量名替换
+   - 每个 FLOW_SIGNAL 调用占一行（可能因参数长而折行，但逻辑上是一条语句）
+
+【此任务不做的事情】
+- 不修改 TargetDetectionComponent.cpp 或 UIManagerComponent.cpp（那是 P8.3）
+- 不创建 SoulFlowSetup 管线注册文件（那是 P8.4）
+- 不修改任何原有游戏逻辑（仅插入 FLOW_SIGNAL 行）
+- 不修改 Build.cs（P8.1 已完成）
+
+【验证标准】
+- 编译通过
+- MyCharacter.cpp 顶部包含 #include "FlowTracerMacros.h"
+- 各埋点位置有对应的 FLOW_SIGNAL 调用
+- 不影响原有游戏逻辑（PIE 运行游戏功能不变）
+- PIE 运行时 FFlowTracer 收到信号
+  （可在 FlowVisualizer 窗口中观察到节点高亮）
+- 未修改本任务范围外的任何文件
+
+================================================================================
+                    上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：P8.2 MyCharacter.cpp 埋点
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断]
+
+【已完成内容】
+- [列出已完成的部分]
+
+【未完成内容】
+- [列出剩余部分]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话 PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+FlowVisualizer UE 4.27 编辑器插件，终端风格数据流可视化。
+Phase 8 P8.2 续接任务。
+
+【前置完成】
+- Phase 1 ~ Phase 7 全部完成 ✅
+- P8.1 Build.cs 依赖已添加 ✅
+- P8.2 部分完成：
+  - [列出已完成的部分] ✅
+
+【续接任务】
+继续完成 MyCharacter.cpp 中的 FLOW_SIGNAL 埋点。
+共 9 处埋点，需先读取文件确认实际变量名和函数名。
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================

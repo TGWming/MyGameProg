@@ -1,0 +1,220 @@
+================================================================================
+任务：整合静态渲染，将所有硬编码颜色/字体替换为 FlowVisStyle 常量
+================================================================================
+
+【项目背景】
+FlowVisualizer 是一个 UE 4.27 编辑器插件，用于在编辑器独立弹出窗口中
+以终端风格可视化观察运行时数据流。
+插件采用双模块结构：FlowVisualizerRuntime + FlowVisualizerEditor。
+
+【当前进度】
+Phase 5 P5.4（共 32 个原子化任务中的第 18 个）
+这是 Phase 5（静态终端渲染）的最后一个任务。
+★ MVP 检查点 1 — "Static Diagram"：完成后应能打开窗口看到完整的静态流程图。
+
+前置完成：
+- Phase 1 ~ Phase 4 全部完成 ✅
+- P5.1 DrawNode 节点文字绘制已实现 ✅
+  （使用硬编码颜色 #666666 和 FCoreStyle Bold 14）
+- P5.2 DrawEdge 连线箭头绘制已实现 ✅
+  （使用硬编码颜色 #888888 和线宽 2.0f）
+- P5.3 FlowVisualizerStyle 常量已创建 ✅
+  （11 颜色 + 4 字体函数 + 3 动画常量）
+
+【安全约束（所有任务必须遵守）】
+1. 仅创建或修改 Plugins/FlowVisualizer/ 目录下的文件
+2. 禁止修改项目 .uproject、项目 Build.cs 或项目任何已有源文件
+3. 禁止引入第三方库；仅使用 UE 4.27 原生 API
+4. 所有运行时代码必须包裹在 Shipping 空操作保护中
+5. 不产生任何 UI 到游戏视口；仅限编辑器独立窗口
+6. 每个 Task 结束后必须能编译通过且不影响现有项目
+
+【原子化任务独立性宪法提醒】
+本 Prompt 仅涉及任务 P5.4 的内容。
+不要执行任何超出 P5.4 范围的工作。
+不要提前创建后续任务（P6.x 等）的文件或代码。
+如果发现需要其他任务的产出物，请仅留占位注释，不要实现。
+
+【任务目标】
+统一整合 SFlowVisualizerPanel 中所有 OnPaint 绘制逻辑，
+将之前任务中的硬编码颜色和字体全部替换为 FlowVisStyle:: 常量，
+并确认绘制顺序正确、窗口缩放自适应。
+
+【具体要求】
+
+1. 需要修改的文件：
+
+   Plugins/FlowVisualizer/Source/FlowVisualizerEditor/Private/SFlowVisualizerPanel.cpp
+
+2. 添加 include：
+   - #include "FlowVisualizerStyle.h"
+
+3. 替换所有硬编码颜色为 FlowVisStyle 常量：
+
+   背景绘制（P3.2 / 整体）：
+   - FLinearColor(0.05f, 0.05f, 0.08f, 1.0f)
+     → FlowVisStyle::Background
+
+   顶栏背景（P4.2 Construct 中）：
+   - FLinearColor(0.10f, 0.10f, 0.15f, 1.0f)
+     → FlowVisStyle::TitleBarBg
+
+   节点文字颜色（P5.1）：
+   - FLinearColor(0.40f, 0.40f, 0.40f, 1.0f)
+     → FlowVisStyle::NodeInactive
+
+   连线颜色（P5.2）：
+   - FLinearColor(0.53f, 0.53f, 0.53f, 1.0f)
+     → FlowVisStyle::EdgeDefault
+
+   底栏背景（P4.3）：
+   - FLinearColor(0.10f, 0.10f, 0.15f, 1.0f)
+     → FlowVisStyle::TitleBarBg
+
+   底栏文字（P4.3）：
+   - FLinearColor(0.60f, 0.60f, 0.60f, 1.0f)
+     → FlowVisStyle::StatusText
+
+4. 替换所有硬编码字体为 FlowVisStyle 函数：
+
+   节点文字字体（P5.1）：
+   - FCoreStyle::GetDefaultFontStyle("Bold", 14)
+     → FlowVisStyle::NodeTitleFont()
+
+   底栏文字字体（P4.3）：
+   - FCoreStyle::GetDefaultFontStyle("Mono", 10)
+     → FlowVisStyle::StatusBarFont()
+
+   如果顶栏有文字使用字体：
+   - → FlowVisStyle::PipelineTitleFont()
+
+5. 确认并调整 OnPaint 绘制顺序（从底到顶）：
+
+   LayerId 基准值（传入参数）：
+   Layer 0: 背景矩形（FlowVisStyle::Background）
+   Layer 1: 连线 + 箭头（FlowVisStyle::EdgeDefault）
+   Layer 2: 节点文字（FlowVisStyle::NodeInactive）
+   Layer 3: 底栏背景（FlowVisStyle::TitleBarBg）
+   Layer 4: 底栏文字（FlowVisStyle::StatusText）
+
+   确保连线在节点下方，底栏在所有内容上方。
+
+6. 确认窗口缩放自适应：
+   - 调整窗口大小时 NodeRelativeToPixel() 基于实时 Geometry 计算
+   - 连线端点跟随节点位置更新
+   - 底栏始终贴��，顶栏始终贴顶
+   - 如果发现缩放问题，修复坐标计算
+
+7. 关键技术注意事项：
+   - 替换过程是纯文本搜索替换，不改变任何绘制逻辑
+   - Construct() 中 SBorder 的 BorderBackgroundColor 也需要替换
+   - 确保 #include "FlowVisualizerStyle.h" 路径正确
+     （文件在 Private 目录，同模块内可直接引用）
+
+【此任务不做的事情】
+- 不实现节点高亮渐灭效果（那是 P6.2）
+- 不实现数据标签（那是 P6.3）
+- 不实现流动光点（那是 P7.2）
+- 不创建新文件
+- 不修改 FlowVisualizerStyle.h/.cpp
+
+【验证标准】
+- SFlowVisualizerPanel.cpp 中不再有任何硬编码的 FLinearColor(...) 颜色值
+  （除了可能的 FLinearColor::White 等系统常量）
+- SFlowVisualizerPanel.cpp 中不再有任何硬编码的 FCoreStyle::GetDefaultFontStyle 调用
+- 所有颜色引用均通过 FlowVisStyle:: 命名空间
+- 所有字体引用均通过 FlowVisStyle:: 函数
+
+视觉验证（★ MVP 检查点 1）：
+- 打开窗口，选择 Demo Pipeline
+- 窗口背景为深蓝黑 #0D0D14
+- 顶栏背景为 #1A1A25，有下拉菜单和按钮
+- 画布中显示 [Input] [Process] [Output] 暗灰色文字
+- 节点间有灰色箭头连线
+- 底栏背景为 #1A1A25，灰色文字显示 Frame/FPS/Pipeline
+- 调整窗口大小后节点和连线位置自适应
+- 编译通过
+- 未创建本任务范围外的任何文件
+
+【Phase 5 完成后的验证清单】
+完成此任务后，Phase 5（静态终端渲染）全部完成，请验证：
+1. 节点文字 "[Name]" 正确绘制 ✅
+2. 连线 + 箭头正确绘制 ✅
+3. 所有颜色/字体统一使用 FlowVisStyle ✅
+4. 绘制层级顺序正确 ✅
+5. 窗口缩放自适应 ✅
+6. 整体编译通过 ✅
+★ MVP 检查点 1 — "Static Diagram" 达成 ✅
+
+================================================================================
+                    上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完��全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：P5.4 整合静态渲染 + Style 应用
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断]
+
+【已完成内容】
+- [列出已完成的部分]
+
+【未完成内容】
+- [列出剩余部分]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话 PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+FlowVisualizer UE 4.27 编辑器插件，终端风格数据流可视化。
+Phase 5 P5.4 续接任务。
+
+【前置完成】
+- Phase 1 ~ Phase 4 全部完成 ✅
+- P5.1 DrawNode 已完成 ✅
+- P5.2 DrawEdge 已完成 ✅
+- P5.3 FlowVisualizerStyle 已完成 ✅
+- P5.4 部分完成：
+  - [列出已完成的部分] ✅
+
+【续接任务】
+继续完成硬编码颜色/字体到 FlowVisStyle 常量的替换。
+修改文件：SFlowVisualizerPanel.cpp
+目标：消除所有硬编码颜色，统一引用 FlowVisStyle 命名空间
+
+【替换清单】
+- Background, TitleBarBg, NodeInactive, EdgeDefault, StatusText
+- NodeTitleFont(), StatusBarFont(), PipelineTitleFont()
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================

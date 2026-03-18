@@ -1,0 +1,159 @@
+================================================================================
+任务：实现 FLOW_SIGNAL / FLOW_SIGNAL_SIMPLE / FLOW_SIGNAL_FMT 宏
+================================================================================
+
+【项目背景】
+FlowVisualizer 是一个 UE 4.27 编辑器插件，用于在编辑器独立弹出窗口中
+以终端风格可视化观察运行时数据流。
+插件采用双模块结构：FlowVisualizerRuntime + FlowVisualizerEditor。
+
+【当前进度】
+Phase 2 P2.3（共 32 个原子化任务中的第 7 个）
+
+前置完成：
+- Phase 1 全部完成 ✅
+- P2.1 FlowPipelineTypes.h 已创建 ✅
+- P2.2 FFlowTracer 单例已实现 ✅
+  （Get(), Signal(), GetRecentEvents(), ClearBuffer(), OnFlowEvent Delegate）
+
+【安全约束（所有任务必须遵守）】
+1. 仅创建或修改 Plugins/FlowVisualizer/ 目录下的文件
+2. 禁止修改项目 .uproject、项目 Build.cs 或项目任何已有源文件
+3. 禁止引入第三方库；仅使用 UE 4.27 原生 API
+4. 所有运行时代码必须包裹在 Shipping 空操作保护中
+5. 不产生任何 UI 到游戏视口；仅限编辑器独立窗口
+6. 每个 Task 结束后必须能编译通过且不影响现有项目
+
+【原子化任务独立性宪法提醒】
+本 Prompt 仅涉及任务 P2.3 的内容。
+不要执行任何超出 P2.3 范围的工作。
+不要提前创建后续任务（P2.4、P3.x 等）的文件或代码。
+如果发现需要其他任务的产出物，请仅留占位注释，不要实现。
+
+【任务目标】
+在 FlowVisualizerRuntime 模块的 Public 目录下创建 FlowTracerMacros.h，
+提供 3 个便捷宏供游戏代码埋点使用。
+关键特性：在 Shipping 构建中宏展开为空操作（零开销）。
+
+【具体要求】
+
+1. 目标文件：
+   Plugins/FlowVisualizer/Source/FlowVisualizerRuntime/Public/FlowTracerMacros.h
+
+2. 文件结构应满足：
+   - #pragma once
+   - #include "FlowTracer.h"
+   - 使用 #if !UE_BUILD_SHIPPING 条件编译
+
+3. 非 Shipping 构建时，定义 3 个宏：
+
+   FLOW_SIGNAL(NodeID, Data)
+   - 调用 FFlowTracer::Get().Signal(FName(TEXT(NodeID)), Data)
+   - 用途：发送带数据的事件
+   - 示例：FLOW_SIGNAL("Movement", SomeDataString)
+
+   FLOW_SIGNAL_SIMPLE(NodeID)
+   - 调用 FFlowTracer::Get().Signal(FName(TEXT(NodeID)))
+   - 用途：发送不带数据的简单事件
+   - 示例：FLOW_SIGNAL_SIMPLE("PlayerInput")
+
+   FLOW_SIGNAL_FMT(NodeID, Fmt, ...)
+   - 调用 FFlowTracer::Get().Signal(FName(TEXT(NodeID)),
+         FString::Printf(TEXT(Fmt), ##__VA_ARGS__))
+   - 用途：发送格式化数据的事件
+   - 示例：FLOW_SIGNAL_FMT("Combat", "Type=%s Dmg=%d", *TypeStr, Damage)
+
+4. Shipping 构建时（#else 分支）：
+   - 3 个宏全部定义为空操作（无展开内容）
+   - 确保零运行时开销
+
+5. 关键技术注意事项：
+   - 可变参数宏使用 ##__VA_ARGS__ 语法（兼容 MSVC 和 GCC/Clang）
+   - NodeID 参数为字面字符串，宏内部用 TEXT() 包裹转换
+   - Data 参数为 FString 类型，调用侧负责构造
+
+【此任务不做的事情】
+- 不创建 FFlowPipelineRegistry 注册中心（那是 P2.4）
+- 不修改 FFlowTracer 类（P2.2 已完成）
+- 不在任何游戏代码中埋点（那是 P8.x）
+- 不修改任何 Build.cs 文件
+
+【验证标准】
+- FlowTracerMacros.h 文件存在于正确路径
+- 包含 #pragma once
+- 包含 #include "FlowTracer.h"
+- 在任意 .cpp 文件中 #include "FlowTracerMacros.h" 后
+  调用 FLOW_SIGNAL("Test", TEXT("hello")) 编译通过
+- FLOW_SIGNAL_SIMPLE("Test") 编译通过
+- FLOW_SIGNAL_FMT("Test", "Val=%d", 42) 编译通过
+- Shipping 构建时宏展开为空，无编译错误
+- 编译通过
+- 未创建本任务范围外的任何文件
+
+================================================================================
+                    上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：P2.3 实现 FLOW_SIGNAL 宏
+- 完成进度：[百分比] 或 [具体进度描述]
+- ���断位置：[具体说明在哪里中断]
+
+【已完成内容】
+- [列出已完成的部分]
+
+【未完成内容】
+- [列出剩余部分]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话 PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+FlowVisualizer UE 4.27 编辑器插件，终端风格数据流可视化。
+Phase 2 P2.3 续接任务。
+
+【前置完成】
+- Phase 1 全部完成 ✅
+- P2.1 FlowPipelineTypes.h 已完成 ✅
+- P2.2 FFlowTracer 单例已完成 ✅
+- P2.3 部分完成：
+  - [列出已完成的部分] ✅
+
+【续接任���】
+继续完成 FlowTracerMacros.h 的创建。
+需要定义：FLOW_SIGNAL, FLOW_SIGNAL_SIMPLE, FLOW_SIGNAL_FMT
+含 Shipping 空操作保护。
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================

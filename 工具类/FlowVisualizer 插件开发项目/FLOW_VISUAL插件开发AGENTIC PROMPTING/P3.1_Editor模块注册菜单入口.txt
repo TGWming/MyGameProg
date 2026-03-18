@@ -1,0 +1,158 @@
+================================================================================
+任务：在 Editor 模块 StartupModule 中注册 Window 菜单入口
+================================================================================
+
+【项目背景】
+FlowVisualizer 是一个 UE 4.27 编辑器插件，用于在编辑器独立弹出窗口中
+以终端风格可视化观察运行时数据流。
+插件采用双模块结构：FlowVisualizerRuntime + FlowVisualizerEditor。
+
+【当前进度】
+Phase 3 P3.1（共 32 个原子化任务中的第 9 个）
+
+前置完成：
+- Phase 1 全部完成 ✅
+- Phase 2 全部完成 ✅
+- P1.3 FlowVisualizerEditor 模块骨架已创建 ✅
+  （FlowVisualizerEditorModule.h/.cpp 已存在，含空的 StartupModule/ShutdownModule）
+
+【安全约束（所有任务必须遵守）】
+1. 仅创建或修改 Plugins/FlowVisualizer/ 目录下的文件
+2. 禁止修改项目 .uproject、项目 Build.cs 或项目任何已有源文件
+3. 禁止引入第三方库；仅使用 UE 4.27 原生 API
+4. 所有运行时代码必须包裹在 Shipping 空操作保护中
+5. 不产生任何 UI 到游戏视口；仅限编辑器独立窗口
+6. 每个 Task 结束后必须能编译通过且不影响现有项目
+
+【原子化任务独立性宪法提醒】
+本 Prompt 仅涉及任务 P3.1 的内容。
+不要执行任何超出 P3.1 范围的工作。
+不要提前创建后续任务（P3.2、P3.3 等）的文件或代码。
+如果发现需要其他任务的产出物，请仅留占位注释，不要实现。
+
+【任务目标】
+修改 FlowVisualizerEditorModule 的 StartupModule() 和 ShutdownModule()，
+在 UE4 编辑器的 Window 菜单下注册 "Flow Visualizer" 菜单入口。
+使用 UE4.27 的 FExtender + FLevelEditorModule 方式（非 UToolMenus）。
+
+【具体要求】
+
+1. 需要修改的文件：
+
+   文件 A：Plugins/FlowVisualizer/Source/FlowVisualizerEditor/Public/FlowVisualizerEditorModule.h
+   文件 B：Plugins/FlowVisualizer/Source/FlowVisualizerEditor/Private/FlowVisualizerEditorModule.cpp
+
+2. FlowVisualizerEditorModule.h 中应新增以下成员声明：
+   - TSharedPtr<FUICommandList> PluginCommands
+   - TSharedPtr<FExtender> MenuExtender
+   - void OpenVisualizerWindow()
+     （本任务中仅打印日志占位，实际窗口弹出在 P3.3 实现）
+
+3. StartupModule() 中应实现：
+   - 创建 FUICommandList 并映射一个 OpenWindow 动作
+   - 创建 FExtender
+   - 使用 AddMenuExtension 注册到 "WindowLayout" 位置
+     Hook 类型：EExtensionHook::After
+   - 获取 FLevelEditorModule（通过 FModuleManager::LoadModuleChecked）
+   - 调用 FLevelEditorModule 的 GetMenuExtensibilityManager()->AddExtender(...)
+   - 菜单项属性：
+     标题："Flow Visualizer"
+     提示："Open runtime data flow visualization window"
+     点击回调：调用 OpenVisualizerWindow()
+
+4. ShutdownModule() 中应实现���
+   - 如果 MenuExtender 有效，从 LevelEditor 的
+     MenuExtensibilityManager 中移除
+   - 重置 PluginCommands 和 MenuExtender
+
+5. OpenVisualizerWindow() 本任务中的临时实现：
+   - 仅打印日志：UE_LOG(LogTemp, Log, TEXT("FlowVisualizer: OpenVisualizerWindow called"))
+   - 后续 P3.3 会将此替换为实际的 SWindow 弹出逻辑
+
+6. 关键技术注意事项：
+   - UE4.27 使用 FExtender 而非 UToolMenus 注册编辑器菜单
+   - AddMenuExtension 的第一个参数 "WindowLayout" 是 Window 菜单
+     中的 hook 位置名称
+   - FLevelEditorModule 需要 #include "LevelEditor.h"
+   - FUICommandList 需要 #include "Framework/Commands/UICommandList.h"
+   - FExtender 需要 #include "Framework/MultiBox/MultiBoxExtender.h"
+
+【此任务不做的事情】
+- 不创建 SFlowVisualizerPanel Widget（那是 P3.2）
+- 不实现 SWindow 弹出逻辑（那是 P3.3）
+- 不创建任何新文件（仅修改已有的 Module .h/.cpp）
+- 不注册任何 Demo 管线（那是 P4.1）
+
+【验证标准】
+- 编辑器启动后 Window 菜单下出现 "Flow Visualizer" 条目
+- 鼠标悬停显示 tooltip "Open runtime data flow visualization window"
+- 点击菜单项不崩溃，Output Log 中出现
+  "FlowVisualizer: OpenVisualizerWindow called"
+- 编译通过
+- 未创建本任务范围外的任何文件
+
+================================================================================
+                    上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出��余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+================================================================================
+⚠️ 上���文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：P3.1 Editor 模块注册菜单入口
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断]
+
+【已完成内容】
+- [列出已完成的部分]
+
+【未完成内容】
+- [列出剩余部分]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话 PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+FlowVisualizer UE 4.27 编辑器插件，终端风格数据流可视化。
+Phase 3 P3.1 续接任务。
+
+【前置完成】
+- Phase 1 + Phase 2 全部完成 ✅
+- P3.1 部分完成：
+  - [列出已完成的部分] ✅
+
+【续接任务】
+继续完成 Editor 模块菜单入口的注册。
+修改文件：FlowVisualizerEditorModule.h/.cpp
+使用 FExtender + FLevelEditorModule 方式注册 Window 菜单项。
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================

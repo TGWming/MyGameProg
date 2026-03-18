@@ -1,0 +1,192 @@
+================================================================================
+任务：完善 Pause/Resume 和 Clear 按钮的完整功能
+================================================================================
+
+【项目背景���
+FlowVisualizer 是一个 UE 4.27 编辑器插件，用于在编辑器独立弹出窗口中
+以终端风格可视化观察运行时数据流。
+插件采用双模块结构：FlowVisualizerRuntime + FlowVisualizerEditor。
+
+【当前进度】
+Phase 9 P9.1（共 32 个原子化任务中的第 29 个）
+
+前置完成：
+- Phase 1 ~ Phase 8 全部完成 ✅
+- P4.2 顶栏 Pause/Clear 按钮已创建 ✅
+  （Pause 按钮切换 bIsPaused 标志，Clear 按钮调用 ClearBuffer()）
+- P6.1 OnFlowEventReceived 中 bIsPaused 检查已实现 ✅
+- P6.4 Tick 智能 Invalidate 已实现 ✅
+- P7.1 EdgeLastActiveTime 映射表已实现 ✅
+
+【安全约束（所有任务必须遵守）】
+1. 仅创建或修改 Plugins/FlowVisualizer/ 目录下的文件
+2. 禁止修改项目 .uproject、项目 Build.cs 或项目任何已有源文件
+3. 禁止引入第三方库；仅使用 UE 4.27 原生 API
+4. 所有运行时代码必须包裹在 Shipping 空操作保护中
+5. 不产生任何 UI 到游戏视口；仅限编辑器独立窗口
+6. 每个 Task 结束后必须能编译通过且不影响现有项目
+
+【原子化任务独立性宪法提醒】
+本 Prompt 仅涉及任务 P9.1 的内容。
+不要执行任何超出 P9.1 范围的工作。
+不要提前创建后续任务（P9.2、P9.3、P9.4 等）的文件或代码。
+
+【任务目标】
+完善 SFlowVisualizerPanel 中 Pause 和 Clear 按钮的完整交互逻辑。
+Pause 按钮实现文字切换（Pause ↔ Resume）和暂停时底栏提示。
+Clear 按钮实现全部状态映射表的清空和视觉重置。
+
+【具体要求】
+
+1. 需要修改的文件：
+
+   文件 A：Plugins/FlowVisualizer/Source/FlowVisualizerEditor/Public/SFlowVisualizerPanel.h
+   文件 B：Plugins/FlowVisualizer/Source/FlowVisualizerEditor/Private/SFlowVisualizerPanel.cpp
+
+2. Pause 按钮完善：
+
+   当前状态（P4.2 已实现）：
+   - 按钮文字固定为 "Pause"
+   - 点击切换 bIsPaused 标志
+
+   需要改为：
+   - 按钮文字动态显示：
+     bIsPaused == false 时显示 "Pause"
+     bIsPaused == true 时显示 "Resume"
+   - 实现方式：SButton 的 Text 属性绑定为动态获取：
+     使用 SButton Content 中的 STextBlock，其 Text 属性绑定
+     TAttribute<FText> 或 Lambda，根据 bIsPaused 返回对应文字
+
+   暂停时的行为确认（P6.1 已实现）：
+   - bIsPaused = true 时 OnFlowEventReceived 不处理新事件
+   - 当前显示冻结（已有的高亮和数据标签保持当前状态）
+   - Tick 仍然运行（FPS 继续更新），但不接收新事件
+
+   暂停时底栏提示：
+   - 在 OnPaint 底栏绘制中，如果 bIsPaused == true：
+     在状态文字末尾追加 " | PAUSED"
+     "PAUSED" 文字使用 FlowVisStyle::Warning 颜色（#FF6644 橙红）
+   - 实现方式：可以在底栏文字拼接时条件追加，
+     或单独绘制一个 "PAUSED" 文字覆盖在底栏右侧
+
+3. Clear 按钮完善：
+
+   当前状态（P4.2 已实现）：
+   - 点击调用 FFlowTracer::Get().ClearBuffer()
+
+   需要追加清空所有视觉状态：
+   - NodeLastActiveTime.Empty()
+   - NodeLastData.Empty()
+   - EdgeLastActiveTime.Empty()
+   - ActiveSignalCount = 0
+   - LastSignalElapsed = 0.0
+
+   清空后的视觉效果：
+   - 所有节点回到暗灰色 FlowVisStyle::NodeInactive
+   - 所有数据标签消失
+   - 所有连线回到默认灰色 FlowVisStyle::EdgeDefault
+   - 所有流动光点消失
+   - 触发一次 Invalidate 确保立即重绘
+
+   实现建议：
+   - 将 Clear 逻辑提取为独立函数 ClearVisualization()
+   - Clear 按钮回调中先调用 FFlowTracer::Get().ClearBuffer()
+     再调用 ClearVisualization()
+   - ClearVisualization() 末尾调用
+     Invalidate(EInvalidateWidget::Paint)（或对应 UE4.27 API）
+
+4. 关键技术注意事项：
+   - SButton 的动态文字可通过以下方式实现：
+     方式 A：SButton 内嵌 STextBlock，STextBlock 的 Text 使用
+       TAttribute 绑定到 Lambda 或成员函数
+     方式 B：使用 SButton 的 .Text() 属性（如果支持 TAttribute）
+   - "PAUSED" 提示需要使用不同颜色，如果底栏是单次 MakeText 调用，
+     可能需要拆分为两次 MakeText：一次常规状态文字，一次 PAUSED 标记
+   - 或者直接将 "PAUSED" 拼入状态文字字符串，但颜色统一为 Warning
+
+【此任务不做的事情】
+- 不实现完整底栏统计信息（那是 P9.2）
+- 不实现窗口位置/大小记忆（那是 P9.3）
+- 不创建新文件
+
+【验证标准】
+- 编译通过
+- Pause 按钮：
+  初始状态显示 "Pause"
+  点击后显示 "Resume"，新事件不再更新显示
+  再次点击恢复 "Pause"，新事件继续更新
+- 暂停时底栏显示 "PAUSED"（橙红色 #FF6644）
+- 恢复后底栏 "PAUSED" 消失
+- Clear 按钮：
+  点击后所有节点回到暗灰色
+  所有数据标签消失
+  所有连线回到默认灰色，光点消失
+  底栏 Active 计数归零
+- 清空后新信号可正常触发高亮（功能恢复正常）
+- 未创建本任务范围外的任何文件
+
+================================================================================
+                    上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：P9.1 Pause/Clear 功能完善
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断]
+
+【已完成内容】
+- [列出已完成的部分]
+
+【未完成内容】
+- [列出剩余部分]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话 PROMPT
+================================================================================
+
+请��制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+FlowVisualizer UE 4.27 编辑器插件，终端风格数据流可视化。
+Phase 9 P9.1 续接任务。
+
+【前置完成】
+- Phase 1 ~ Phase 8 全部完成 ✅
+- P9.1 部分完成：
+  - [列出已完成的部分] ✅
+
+【续接任务】
+继续完成 Pause/Clear 按钮功能完善。
+修改文件：SFlowVisualizerPanel.h/.cpp
+核心内容：动态按钮文字 + PAUSED 底栏提示 + ClearVisualization 全状态清空
+
+【上下文限制检测】
+本任务仍需遵循上下文���制检测机制。
+
+---结束复制---
+
+================================================================================

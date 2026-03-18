@@ -1,0 +1,496 @@
+
+
+```text name=P9.3_窗口位置大小记忆.txt
+================================================================================
+任务：实现窗口位置和大小的跨会话记忆
+================================================================================
+
+【项目背景】
+FlowVisualizer 是一个 UE 4.27 编辑器插件，用于在编辑器独立弹出窗口中
+以终端风格可视化观察运行时数据流。
+插件采用双模块结构：FlowVisualizerRuntime + FlowVisualizerEditor。
+
+【当前进度】
+Phase 9 P9.3（共 32 个原子化任务中的第 31 个）
+
+前置完成：
+- Phase 1 ~ Phase 8 全部完成 ✅
+- P3.3 SWindow 独立窗口弹出已实现 ✅
+  （OpenVisualizerWindow() 中 SNew(SWindow) 使用固定 ClientSize 1200x700）
+- P9.1 Pause/Clear 完善 ✅
+- P9.2 底栏完整统计 ✅
+
+【安全约束（所有任务必须遵守）】
+1. 仅创建或修改 Plugins/FlowVisualizer/ 目录下的文件
+2. 禁止修改项目 .uproject、项目 Build.cs 或项目任何已有源文件
+3. 禁止引入第三方库；仅使用 UE 4.27 原生 API
+4. 所有运行时代码必须包裹在 Shipping 空操作保护中
+5. 不产生任何 UI 到游戏视口；仅限编辑器独立窗口
+6. 每个 Task 结束后必须能编译通过且不影响现有项目
+
+【原子化任务独立性宪法提醒】
+本 Prompt 仅涉及任务 P9.3 的内容。
+不要执行任何超出 P9.3 范围的工作。
+不要提前创建后续任务（P9.4）的文件或代码。
+
+【任务目标】
+修改 FlowVisualizerEditorModule 的窗口管理逻辑，使用 UE4 的
+GConfig（EditorPerProjectUserSettings）保存和恢复窗口位置和大小。
+用户关闭窗口时保存，下次打开时恢复到上次的位置和大小。
+
+【具体要求】
+
+1. 需要修改的文件：
+
+   文件 A：Plugins/FlowVisualizer/Source/FlowVisualizerEditor/Public/FlowVisualizerEditorModule.h
+   文件 B：Plugins/FlowVisualizer/Source/FlowVisualizerEditor/Private/FlowVisualizerEditorModule.cpp
+
+2. FlowVisualizerEditorModule.h 中应新增：
+
+   窗口状态保存/恢复函数：
+   - void SaveWindowLayout()
+   - void LoadWindowLayout(FVector2D& OutPosition, FVector2D& OutSize)
+
+   GConfig Section/Key 常量：
+   - static const FString ConfigSection = TEXT("FlowVisualizer.WindowLayout")
+   - 或使用 static const TCHAR* 形式
+
+3. SaveWindowLayout() 实现：
+   - 如果 VisualizerWindow.IsValid()：
+     获取窗口当前位置：FVector2D Pos = VisualizerWindow->GetPositionInScreen()
+     获取窗口当前大小：FVector2D Size = VisualizerWindow->GetSizeInScreen()
+     （注意：UE4.27 中获取窗口位置/大小的 API 可能是
+      GetPositionInScreen() / GetClientSizeInScreen()，
+      或 GetRectInScreen()，IDE Agent 需确认实际 API）
+
+   - 使用 GConfig 保存：
+     GConfig->SetFloat(TEXT("FlowVisualizer.WindowLayout"),
+         TEXT("PosX"), Pos.X,
+         GEditorPerProjectIni);
+     GConfig->SetFloat(..., TEXT("PosY"), Pos.Y, GEditorPerProjectIni);
+     GConfig->SetFloat(..., TEXT("SizeX"), Size.X, GEditorPerProjectIni);
+     GConfig->SetFloat(..., TEXT("SizeY"), Size.Y, GEditorPerProjectIni);
+     GConfig->Flush(false, GEditorPerProjectIni);
+
+4. LoadWindowLayout() 实现：
+   - 使用 GConfig 读取：
+     float PosX, PosY, SizeX, SizeY;
+     bool bHasLayout = true;
+     bHasLayout &= GConfig->GetFloat(TEXT("FlowVisualizer.WindowLayout"),
+         TEXT("PosX"), PosX, GEditorPerProjectIni);
+     bHasLayout &= GConfig->GetFloat(..., TEXT("PosY"), PosY, ...);
+     bHasLayout &= GConfig->GetFloat(..., TEXT("SizeX"), SizeX, ...);
+     bHasLayout &= GConfig->GetFloat(..., TEXT("SizeY"), SizeY, ...);
+
+   - 如果 bHasLayout == true：
+     OutPosition = FVector2D(PosX, PosY)
+     OutSize = FVector2D(SizeX, SizeY)
+   - 如果 bHasLayout == false（首次启动，无保存记录）：
+     OutPosition = FVector2D(-1, -1)（标记为无效，使用默认居中）
+     OutSize = FVector2D(1200, 700)（默认大小）
+
+   - 安全校验：
+     OutSize.X = FMath::Clamp(OutSize.X, 400.0f, 3840.0f)
+     OutSize.Y = FMath::Clamp(OutSize.Y, 300.0f, 2160.0f)
+     （防止异常值）
+
+5. OpenVisualizerWindow() 修改：
+   - 在创建 SWindow 之前调用 LoadWindowLayout() 获取位置和大小
+   - SNew(SWindow) 的属性修改为：
+     .ClientSize(LoadedSize)
+     如果 LoadedPosition 有效（不是 -1,-1）：
+       .ScreenPosition(LoadedPosition)
+       .AutoCenter(EAutoCenter::None)
+     否则：
+       .AutoCenter(EAutoCenter::PreferredWorkArea)
+
+6. OnWindowClosed() 修改：
+   - 在 VisualizerWindow.Reset() 之前调用 SaveWindowLayout()
+   - 即先保存再释放窗口引用
+
+7. ShutdownModule() 修改：
+   - 在 RequestDestroyWindow() 之前也调用 SaveWindowLayout()
+
+8. 关键技术注意事项：
+   - GEditorPerProjectIni 是 UE4 编辑器的项目级用户配置文件
+     保存在 Saved/Config/Windows/EditorPerProjectUserSettings.ini
+   - GConfig 需要 #include "Misc/ConfigCacheIni.h"
+   - GetPositionInScreen() 返回的是屏幕坐标，包含多显示器偏移
+   - 如果用户将窗口拖到已断开的显示器位置，下次打开会超出屏幕
+     可选：增加屏幕范围校验（但非必须，UE4 通常会自动修正）
+   - ScreenPosition 属性在 UE4.27 中可能通过
+     .ScreenPosition(FVector2D) 设置，或通过
+     SWindow->MoveWindowTo(FVector2D) 在创建后设置
+
+【此任务不做的事情】
+- 不保存 Pipeline 选择状态（可作为后续优化）
+- 不保存 Pause/Clear 状态
+- 不创建 README（那是 P9.4）
+- 不创建新文件
+
+【验证标准】
+- 编译通过
+- 首次打开窗口：居中显示，大小 1200x700
+- 拖动窗口到屏幕角落，调整大小为 800x500，关闭窗口
+- 再次点击菜单打开窗口：窗口出现在上次关闭的位置，大小 800x500
+- 关闭编辑器，重新启动编辑器，打开窗口：仍然恢复上次位置和大小
+- EditorPerProjectUserSettings.ini 中有 [FlowVisualizer.WindowLayout] 段
+- 窗口大小被 Clamp 在安全范围内（400~3840 x 300~2160）
+- 未创建本任务范围外的任何文件
+
+================================================================================
+                    上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：P9.3 窗口位置大小记忆
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断]
+
+【已完成内容】
+- [列出已完成的部分]
+
+【未完成内容】
+- [列出剩余部分]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话 PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+FlowVisualizer UE 4.27 编辑器插件，终端风格数据流可视化。
+Phase 9 P9.3 续接任务。
+
+【前置完成】
+- Phase 1 ~ Phase 8 全部完成 ✅
+- P9.1 Pause/Clear 已完善 ✅
+- P9.2 底栏统计已完善 ✅
+- P9.3 部分完成：
+  - [列出已完成的部分] ���
+
+【续接任务】
+继续完成窗口位置大小记忆。
+修改文件：FlowVisualizerEditorModule.h/.cpp
+核心内容：GConfig 保存/恢复 + OpenVisualizerWindow 恢复布局 + OnWindowClosed 保存
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================
+```
+
+```text name=P9.4_README和最终验证.txt
+================================================================================
+任务：创建 README.md 并执行最终验证清单
+================================================================================
+
+【项目背景】
+FlowVisualizer 是一个 UE 4.27 编辑器插件，用于在编辑器独立弹出窗口中
+以终端风格可视化观察运行时数据流。
+插件采用双模块结构：FlowVisualizerRuntime + FlowVisualizerEditor。
+
+【当前进度】
+Phase 9 P9.4（共 32 个原子化任务中的第 32 个）
+🎯 这是整个 FlowVisualizer 项目的最后一个任务。
+
+前置完成：
+- Phase 1 ~ Phase 8 全部完成 ✅
+- P9.1 Pause/Clear 完善 ✅
+- P9.2 底栏完整统计 ✅
+- P9.3 窗口位置大小记忆 ✅
+
+【安全约束（所有任务必须遵守）】
+1. 仅创建或修改 Plugins/FlowVisualizer/ 目录下的文件
+2. 禁止修改项目 .uproject、项目 Build.cs 或项目任何已有源文件
+3. 禁止引入第三方库；仅使用 UE 4.27 原生 API
+4. 所有运行时代码必须包裹在 Shipping 空操作保护中
+5. 不产生任何 UI 到游戏视口；仅限编辑器独立窗口
+6. 每个 Task 结束后必须能编译通过且不影响现有项目
+
+【原子化任务独立性宪法提醒】
+本 Prompt 仅涉及任务 P9.4 的内容。
+这是最后一个任务，无后续任务。
+
+【任务目标】
+在插件根目录创建 README.md 文档，记录插件用途、架构、使用方法和
+API 接口。同时执行最终验证清单确保全部功能就位。
+
+【具体要求】
+
+1. 需要创建的文件：
+
+   Plugins/FlowVisualizer/README.md
+
+2. README.md 应包含以下章节：
+
+   # FlowVisualizer
+
+   ## 概述
+   - 一句话描述：UE4.27 编辑器插件，以终端风格可视化观察运行时数据流
+   - 适用场景：开发调试期间观��游戏系统间的数据流转和时序关系
+   - 特点：零 Shipping 开销、独立编辑器窗口、实时动画
+
+   ## 快速开始
+   - 步骤 1：将 FlowVisualizer 文件夹放入项目的 Plugins/ 目录
+   - 步骤 2：在游戏模块的 Build.cs 中添加 "FlowVisualizerRuntime" 依赖
+   - 步骤 3：在游戏代码中 #include "FlowTracerMacros.h"
+   - 步骤 4：在需要监控的代码位置添加 FLOW_SIGNAL 调用
+   - 步骤 5：定义并注册管线拓扑（FFlowPipeline + FFlowPipelineRegistry）
+   - 步骤 6：编辑器菜单 Window → Flow Visualizer 打开窗口
+
+   ## 宏 API
+   - FLOW_SIGNAL(NodeID, Data)
+     发送带数据的事件
+     示例：FLOW_SIGNAL("Movement", SomeDataString)
+   - FLOW_SIGNAL_SIMPLE(NodeID)
+     发送不带数据的简单事件
+     示例：FLOW_SIGNAL_SIMPLE("PlayerInput")
+   - FLOW_SIGNAL_FMT(NodeID, Fmt, ...)
+     发送格式化数据的事件
+     示例：FLOW_SIGNAL_FMT("Combat", "Dmg=%d Type=%s", Damage, *TypeStr)
+   - 说明：所有宏在 Shipping 构建中展开为空操作，零运行时开销
+
+   ## 管线注册
+   - FFlowPipeline 结构说明（PipelineID, Nodes, Edges）
+   - FFlowPipelineRegistry::Get().RegisterPipeline() 用法
+   - 代码示例：注册一个简单的 3 节点管线
+
+   ## 窗口操作
+   - 顶栏：Pipeline 下拉菜单切换管线视图
+   - Pause 按钮：暂停/恢复事件接收
+   - Clear 按钮：清空所有状态和缓冲区
+   - 底栏：Frame / FPS / Active / Last / Buffer 统计信息
+   - 窗口位置和大小自动记忆
+
+   ## 视觉规格
+   - 节点：白色方括号 "[NodeName]" 终端风格
+   - 节点高亮：信号触发时亮青色 #33CCFF → 1.5 秒渐灭 → 暗灰色 #666666
+   - 数据标签：绿色 #4AFF82 Mono 字体，高亮期间显示
+   - 连线：灰色 #888888 + 箭头，激活时亮青色 #33CCFF 渐灭
+   - 流动光点：白色 6x6 方块沿激活连线移动
+   - 背景：深蓝黑 #0D0D14
+
+   ## 架构
+   - FlowVisualizerRuntime 模块：
+     FlowPipelineTypes.h — 核心数据结构体
+     FlowTracer.h — 事件采集单例
+     FlowTracerMacros.h — ���捷宏
+     FlowPipelineRegistry.h — 管线注册中心
+   - FlowVisualizerEditor 模块：
+     FlowVisualizerEditorModule — 菜单注册 + 窗口管理
+     SFlowVisualizerPanel — 主画布 Widget
+     FlowVisualizerStyle — 颜色/字体/动画常量
+
+   ## 内���管线
+   - Demo：3 节点 2 连线，用于测试
+   - Soul 项目管线（4 条）：
+     CharacterMovement, LockOnSystem, CameraPipeline, CombatSystem
+
+   ## 技术说明
+   - UE 版本：4.27
+   - 线程安全：FFlowTracer 使用 FCriticalSection 保护缓冲区
+   - 性能：无活跃动画时 Tick 不触发 Invalidate，零 CPU 空闲开销
+   - Shipping：所有 FLOW_SIGNAL 宏在 Shipping 构建中展开为空
+
+3. 关键说明：
+   - README 使用 Markdown 格式
+   - 代码示例使用 ```cpp 代码块
+   - 文档面向开发者，假设读者了解 UE4 基础概念
+
+【最终验证清单】
+IDE Agent 完成 README 后，请逐项确认以下清单并在输出中报告：
+
+Phase 1 — 插件骨架：
+☐ FlowVisualizer.uplugin 存在且 JSON 合法
+☐ FlowVisualizerRuntime Build.cs + Module .h/.cpp 存在
+☐ FlowVisualizerEditor Build.cs + Module .h/.cpp 存在
+☐ Resources/Icon128.png 存在
+
+Phase 2 — 数据采集核心：
+☐ FlowPipelineTypes.h — 4 个结构体
+☐ FlowTracer.h/.cpp — 单例 + 环形缓冲 + Delegate
+☐ FlowTracerMacros.h — 3 个宏 + Shipping 保护
+☐ FlowPipelineRegistry.h/.cpp — 注册中心
+
+Phase 3 — 独立窗口框架：
+☐ Window 菜单 "Flow Visualizer" 入口
+☐ SFlowVisualizerPanel 空壳（OnPaint 绘制）
+☐ SWindow 弹出 + 防重复 + 关闭回调
+
+Phase 4 — 管线注册 + 下拉切换：
+☐ Demo 管线已注册
+☐ 顶栏下拉菜单 + Pause + Clear 按钮
+☐ 底栏状态条
+
+Phase 5 — 静态终端渲染：
+☐ DrawNode 节点文字 "[Name]"
+☐ DrawEdge 连线 + 箭头
+☐ FlowVisualizerStyle 常量
+☐ 所有硬编码替换为 FlowVisStyle
+
+Phase 6 — 事件驱动高亮 + 数据标签：
+☐ FFlowTracer Delegate 连接 + 节流
+☐ 节点高亮渐灭 1.5 秒
+☐ 数据标签绿色分行显示
+☐ Tick 智能 Invalidate
+
+Phase 7 — 流动光点动画：
+☐ Edge 激活自动推导（200ms 窗口）
+☐ 连线高亮 + 流动光点
+
+Phase 8 — Soul 项目接入：
+☐ soul.Build.cs 依赖
+☐ MyCharacter.cpp 埋点
+☐ 组件类埋点
+☐ 4 条 Soul 管线注册
+
+Phase 9 — 最终收尾：
+☐ Pause/Clear 完善
+☐ 底栏完整统计
+☐ 窗口位置大小记忆
+☐ README.md
+
+整体：
+☐ 编译通过
+☐ 无 Shipping 运行时开销
+☐ 无游戏视口 UI 输出
+
+================================================================================
+                    上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当���对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：P9.4 README 和最终验证
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断]
+
+【已完成内容】
+- [列出已完成的部分]
+
+【未完成内容】
+- [列出剩余部分]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话 PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+FlowVisualizer UE 4.27 编辑器插件，终端风格数据流可视化。
+Phase 9 P9.4 续接任务 — 项目最终任务。
+
+【前置完成】
+- Phase 1 ~ Phase 8 全部完成 ✅
+- P9.1 ~ P9.3 全部完成 ✅
+- P9.4 部分完成：
+  - [列出已完成的部分] ✅
+
+【续接任务】
+继续完成 README.md 创建和最终验证清单。
+创建文件：Plugins/FlowVisualizer/README.md
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================
+```
+
+**P9.3 + P9.4 已生成 ✅**
+
+---
+
+🎉 **全部 32 个原子化任务 Prompt 生成完毕！**
+
+完整清单回顾：
+
+| Phase | 任务 | 文件名 | 状态 |
+|-------|------|--------|------|
+| **P1** | P1.1 创建 .uplugin | `P1.1_创建uplugin描述文件.txt` | ✅ |
+| | P1.2 Runtime 骨架 | `P1.2_创建Runtime模块骨架.txt` | ✅ |
+| | P1.3 Editor 骨架 | `P1.3_创建Editor模块骨架.txt` | ✅ |
+| | P1.4 Resources/Icon | `P1.4_创建Resources目录和Icon.txt` | ✅ |
+| **P2** | P2.1 结构体 | `P2.1_实现FFlowEvent结构体.txt` | ✅ |
+| | P2.2 FFlowTracer | `P2.2_实现FFlowTracer单例.txt` | ✅ |
+| | P2.3 FLOW_SIGNAL 宏 | `P2.3_实现FLOW_SIGNAL宏.txt` | ✅ |
+| | P2.4 Registry | `P2.4_实现FFlowPipelineRegistry注册中心.txt` | ✅ |
+| **P3** | P3.1 菜单注册 | `P3.1_Editor模块注册菜单入口.txt` | ✅ |
+| | P3.2 Panel 空壳 | `P3.2_创建SFlowVisualizerPanel空壳.txt` | ✅ |
+| | P3.3 SWindow 弹出 | `P3.3_实现SWindow独立窗口弹出.txt` | ✅ |
+| **P4** | P4.1 Demo 管线 | `P4.1_内置示例管线.txt` | ✅ |
+| | P4.2 下拉菜单 | `P4.2_Panel顶栏Pipeline下拉菜单.txt` | ✅ |
+| | P4.3 底栏 | `P4.3_Panel底栏状态条.txt` | ✅ |
+| **P5** | P5.1 DrawNode | `P5.1_实现DrawNode绘制节点文字.txt` | ✅ |
+| | P5.2 DrawEdge | `P5.2_实现DrawEdge绘制连线箭头.txt` | ✅ |
+| | P5.3 Style | `P5.3_实现FlowVisualizerStyle颜色常量.txt` | ✅ |
+| | P5.4 整合 | `P5.4_整合静态渲染与Style应用.txt` | ✅ |
+| **P6** | P6.1 Delegate | `P6.1_连接FFlowTracer_Delegate.txt` | ✅ |
+| | P6.2 高亮渐灭 | `P6.2_节点高亮渐灭绘制.txt` | ✅ |
+| | P6.3 数据标签 | `P6.3_数据标签绘制.txt` | ✅ |
+| | P6.4 Tick 刷新 | `P6.4_Tick驱动Invalidate刷新.txt` | ✅ |
+| **P7** | P7.1 Edge 推导 | `P7.1_Edge_Active自动推导.txt` | ✅ |
+| | P7.2 流动光点 | `P7.2_DrawFlowDot流动光点绘制.txt` | ✅ |
+| **P8** | P8.1 Build.cs | `P8.1_修改soul_Build_cs添加依赖.txt` | ✅ |
+| | P8.2 Character 埋点 | `P8.2_MyCharacter_cpp埋点.txt` | ✅ |
+| | P8.3 组件埋点 | `P8.3_组件类埋点.txt` | ✅ |
+| | P8.4 管线注册 | `P8.4_注册Soul项目管线.txt` | �� |
+| **P9** | P9.1 Pause/Clear | `P9.1_Pause_Clear功能完善.txt` | ✅ |
+| | P9.2 底栏统计 | `P9.2_底栏完整统计.txt` | ✅ |
+| | P9.3 窗口记忆 | `P9.3_窗口位置大小记忆.txt` | ✅ |
+| | P9.4 README | `P9.4_README和最终验证.txt` | ✅ |
+
+按顺序依次执行即可完成整个 FlowVisualizer 插件！🚀

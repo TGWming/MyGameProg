@@ -1,0 +1,189 @@
+================================================================================
+任务：在 OnFlowEventReceived 中实现 Edge 激活自动推导
+================================================================================
+
+【项目背景】
+FlowVisualizer 是一个 UE 4.27 编辑器插件，用于在编辑器独立弹出窗口中
+以终端风格可视化观察运行时数据流。
+插件采用双模块结构：FlowVisualizerRuntime + FlowVisualizerEditor。
+
+【当前进度】
+Phase 7 P7.1（共 32 个原子化任务中的第 23 个）
+
+前置完成：
+- Phase 1 ~ Phase 6 全部完成 ✅
+- P6.1 FFlowTracer Delegate 已连接 ✅
+  （OnFlowEventReceived 回调就绪，NodeLastActiveTime 映射表可用）
+- P6.4 Tick 智能 Invalidate 已实现 ✅
+  （留有 Edge 动画检查的 TODO 占位）
+
+【安全约束（所有任务必须遵守）】
+1. 仅创建或修改 Plugins/FlowVisualizer/ 目录下的文件
+2. 禁止修改项目 .uproject、项目 Build.cs 或项目任何已有源文件
+3. 禁止引入第三方库；仅使用 UE 4.27 原生 API
+4. 所有运行时代码必须包裹在 Shipping 空操作保护中
+5. 不产生任何 UI 到游戏视口；��限编辑器独立窗口
+6. 每个 Task 结束后必须能编译通过且不影响现有项目
+
+【原子化任务独立性宪法提醒】
+本 Prompt 仅涉及任务 P7.1 的内容。
+不要执行任何超出 P7.1 范围的工作。
+不要提前创建后续任务（P7.2 等）的文件或代码。
+如果发现需要其他任务的产出物，请仅留占位注释，不要实现。
+
+【任务目标】
+修改 SFlowVisualizerPanel 的 OnFlowEventReceived()，
+在接收到节点事件后，自动推导该节点的入边（Incoming Edge）是否应被激活。
+推导逻辑：当 TargetNode 收到信号时，如果其 SourceNode 在 200ms 内
+也曾收到信号，说明数据确实沿该 Edge 流动，则标记该 Edge 为激活状态。
+同时填充 P6.4 中 Tick 的 Edge 动画检查占位。
+
+【具体要求】
+
+1. 需要修改的文件：
+
+   文��� A：Plugins/FlowVisualizer/Source/FlowVisualizerEditor/Public/SFlowVisualizerPanel.h
+   文件 B：Plugins/FlowVisualizer/Source/FlowVisualizerEditor/Private/SFlowVisualizerPanel.cpp
+
+2. SFlowVisualizerPanel.h 中应新增：
+
+   Edge 激活状态存储：
+   - TMap<TPair<FName, FName>, double> EdgeLastActiveTime
+     Key: TPair<FName, FName>(SourceNodeID, TargetNodeID)
+     Value: 该 Edge 最后一次被推导为激活的时间戳
+
+   Edge 推导窗口常量：
+   - static const double EdgeInferenceWindowSec = 0.2
+     （200ms 推导窗口，即 0.2 秒）
+
+3. OnFlowEventReceived() 中应在现有逻辑（P6.1）之后追加 Edge 推导：
+
+   步骤 1 — 获取当前管线数据：
+   - 通过 FFlowPipelineRegistry::Get().FindPipeline(CurrentPipelineID)
+   - 如果返回 nullptr，跳过 Edge 推导
+
+   步骤 2 — 遍历当前管线所有 Edges：
+   - 对每条 FFlowEdge：
+     如果 Edge.TargetNodeID == Event.NodeID：
+       // 当前事件的节点是该 Edge 的 Target 端
+       // 检查 Source 端是否在 200ms 内也曾激活
+
+       const double* SourceActivePtr = NodeLastActiveTime.Find(Edge.SourceNodeID)
+       如果 SourceActivePtr 不为 nullptr：
+         double SourceElapsed = Event.Timestamp - *SourceActivePtr
+         如果 SourceElapsed >= 0 且 SourceElapsed < EdgeInferenceWindowSec：
+           // Source 在 200ms 内刚激活过 → 数据确实沿此 Edge 流动
+           TPair<FName, FName> EdgeKey(Edge.SourceNodeID, Edge.TargetNodeID)
+           EdgeLastActiveTime.Add(EdgeKey, Event.Timestamp)
+
+4. Tick() 中填充 P6.4 预留的 Edge 动画检查占位：
+
+   替换 TODO 注释为实际逻辑：
+   - 遍历 EdgeLastActiveTime：
+     for (const auto& Pair : EdgeLastActiveTime)
+       double Elapsed = CurrentTime - Pair.Value
+       如果 Elapsed < FlowVisStyle::HighlightFadeDuration：
+         bHasActiveAnimation = true
+         break（已确认有活跃动画，无需继续遍历）
+
+5. Clear 按钮逻辑补充：
+   - P4.2 中 Clear 按钮已调用 FFlowTracer::Get().ClearBuffer()
+   - 本任务应在 Clear 逻辑中追加：
+     EdgeLastActiveTime.Empty()
+   - 或者留注释说明 P9.1 会统一处理 Clear 逻辑
+
+6. 关键技术注意事项：
+   - TPair<FName, FName> 作为 TMap 的 Key 需要 GetTypeHash 支持
+     UE4 的 TPair 默认支持 GetTypeHash（如果两个元素类型都支持）
+     FName 支持 GetTypeHash，所以 TPair<FName, FName> 可直接用作 Key
+   - 如果编译报 GetTypeHash 错误，改用自定义结构体：
+     struct FEdgeKey { FName Source; FName Target; }
+     并实现 operator== 和 friend GetTypeHash
+   - 推导逻辑在 OnFlowEventReceived 中执行，时机正确：
+     先更新 NodeLastActiveTime（P6.1），再推导 Edge（本任务）
+   - SourceElapsed >= 0 的检查防止时间戳异常（理论上不会 <0）
+   - 需要 #include "FlowPipelineRegistry.h"（如尚未包含）
+
+【此任务不做的事情】
+- 不绘制 Edge 高亮或流动光点（那是 P7.2）
+- 不修改 OnPaint 中的连线绘制逻辑
+- 不修改节点高亮或数据标签逻辑
+- 不创建新文件
+
+【验证标准】
+- 编译通过
+- 快速连续调用 Signal("Input", ...) 然后 Signal("Process", ...)
+  （间隔 < 200ms）：
+  EdgeLastActiveTime 中出现 Key=(Input, Process) 的记录
+- 仅调用 Signal("Output", ...) 而不调用 Signal("Process", ...)：
+  Edge (Process->Output) 不被激活（SourceElapsed 超出窗口）
+- Signal("Input") 之后超��� 200ms 再 Signal("Process")：
+  Edge (Input->Process) 不被激活
+- Tick 中 Edge 活跃检查正确触发 Invalidate
+- 未创建本任务范围外的任何文件
+
+================================================================================
+                    上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：P7.1 Edge Active 自动推导
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断]
+
+【已完成内容】
+- [列出已完成的部分]
+
+【未完成内容】
+- [列出剩余部分]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话 PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+FlowVisualizer UE 4.27 编辑器插件，终端风格数据流可视化。
+Phase 7 P7.1 续接任务。
+
+【前置完成】
+- Phase 1 ~ Phase 6 全部完成 ✅
+- P7.1 部分完成：
+  - [列出已完成的部分] ✅
+
+【续接任务】
+继续完成 Edge 激活自动推导。
+修改文件：SFlowVisualizerPanel.h/.cpp
+核心内容：OnFlowEventReceived 中推导入边激活 + Tick 中 Edge 动画检查
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================

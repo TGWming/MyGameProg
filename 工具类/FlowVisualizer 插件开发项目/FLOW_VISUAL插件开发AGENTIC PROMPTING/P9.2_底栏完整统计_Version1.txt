@@ -1,0 +1,196 @@
+================================================================================
+任务：扩展底栏为完整统计信息
+================================================================================
+
+【项目背景】
+FlowVisualizer 是一个 UE 4.27 编辑器插件，用于在编辑器独立弹出窗口中
+以终端风格可视化观察运行时数据流。
+插件采用双模块结构：FlowVisualizerRuntime + FlowVisualizerEditor。
+
+【当前进度】
+Phase 9 P9.2（共 32 个原子化任务中的第 30 个）
+
+前置完成：
+- Phase 1 ~ Phase 8 全部完成 ✅
+- P4.3 底栏基础版已实现 ✅
+  （显示 "Frame: {N} | FPS: {N} | Pipeline: {name}"）
+- P6.4 Tick 中 ActiveSignalCount / LastSignalElapsed 已计算 ✅
+- P9.1 Pause/Clear 已完善，PAUSED 底栏提示已实现 ✅
+
+【安全约束（所有任务必须遵守）】
+1. 仅创建或修改 Plugins/FlowVisualizer/ 目录下的文件
+2. 禁止修改项目 .uproject、项目 Build.cs 或项目任何已有源文件
+3. 禁止引入第三方库；仅��用 UE 4.27 原生 API
+4. 所有运行时代码必须包裹在 Shipping 空操作保护中
+5. 不产生任何 UI 到游戏视口；仅限编辑器独立窗口
+6. 每个 Task 结束后必须能编译通过且不影响现有项目
+
+【原子化任务独立性宪法提醒】
+本 Prompt 仅涉及任务 P9.2 的内容。
+不要执行任何超出 P9.2 范围的工作。
+不要提前创建后续任务（P9.3、P9.4 等）的文件或代码。
+
+【任务目标】
+扩展 SFlowVisualizerPanel OnPaint() 中的底栏状态文字，
+从基础 3 项扩展为完整 5 项统计信息，提供全面的运行时诊断视图。
+
+【具体要求】
+
+1. 需要修改的文件：
+
+   Plugins/FlowVisualizer/Source/FlowVisualizerEditor/Private/SFlowVisualizerPanel.cpp
+
+2. 底栏状态文字格式从：
+   "Frame: {N} | FPS: {N} | Pipeline: {name}"
+
+   扩展为：
+   "Frame: {N} | FPS: {N} | Active: {N}/{Total} | Last: {N}ms ago | Buffer: {N}/{Cap}"
+
+3. 各字段说明和计算方式：
+
+   Frame: {N}
+   - 值：GFrameNumber
+   - 已在 P4.3 中实现，保持不变
+
+   FPS: {N}
+   - 值：FMath::RoundToInt(CachedFPS)
+   - 已在 P4.3 中实现，保持不变
+
+   Active: {N}/{Total}
+   - N：ActiveSignalCount（P6.4 中 Tick 已计算）
+     即当前正在高亮渐灭的节点数量
+   - Total：当前管线的总节点数
+     通过 FFlowPipelineRegistry::Get().FindPipeline(CurrentPipelineID)
+     获取管线后取 Nodes.Num()
+     如果管线未找到则显示 0
+   - 格式示例："Active: 3/5"
+
+   Last: {N}ms ago
+   - N：LastSignalElapsed（P6.4 中 Tick 已计算，单位毫秒）
+     即距离最近一次活跃信号过去了多少毫秒
+   - 取整显示：FMath::RoundToInt(LastSignalElapsed)
+   - 如果 ActiveSignalCount == 0，显示 "Last: --"
+   - 格式示例："Last: 42ms ago"
+
+   Buffer: {N}/{Cap}
+   - N：FFlowTracer 事件缓冲区当前已写入的事件数量
+   - Cap：FFlowTracer 缓冲区容量
+   - 需要在 FFlowTracer 中添加访问接口：
+     如果 P2.2 中未暴露 BufferSize/BufferCapacity 的公开 getter，
+     本任务需要添加
+   - 如果添加 getter 不方便，可使用：
+     FFlowTracer::Get().GetRecentEvents(INT32_MAX).Num()
+     作为近似值（但性能不佳）
+   - 推荐方式：在 FFlowTracer.h 中添加：
+     int32 GetBufferUsed() const;
+     int32 GetBufferCapacity() const;
+     在 FlowTracer.cpp 中实现
+   - 格式示例："Buffer: 128/1024"
+
+4. PAUSED 提示保持（P9.1 已实现）：
+   - bIsPaused == true 时，在完整统计文字之后追加 " | PAUSED"
+   - PAUSED 使用 FlowVisStyle::Warning 颜色
+
+5. 完整格式示例：
+   正常运行：
+   "Frame: 12345 | FPS: 60 | Active: 3/5 | Last: 42ms ago | Buffer: 128/1024"
+
+   无活���信号：
+   "Frame: 12345 | FPS: 60 | Active: 0/5 | Last: -- | Buffer: 0/1024"
+
+   暂停时：
+   "Frame: 12345 | FPS: 60 | Active: 2/5 | Last: 300ms ago | Buffer: 128/1024 | PAUSED"
+
+6. 关键技术注意事项：
+   - 如果状态文字过长超出底栏宽度，UE4 的 MakeText 会截断
+     可适当缩短字段名："F:", "FPS:", "Act:", "Last:", "Buf:"
+     或保持全名，依赖窗口宽度 1200px 通常足够
+   - FFlowTracer getter 添加需要修改 Runtime 模块文件
+     （FlowTracer.h / FlowTracer.cpp），这是 P9.2 的合理范围
+   - GetBufferUsed() 的实现取决于 P2.2 的环形缓冲实现方式，
+     可能需要跟踪已写入总数（取 min 与 Capacity）
+
+【此任务不做的事情】
+- 不实现窗口位置/大小记忆（那是 P9.3）
+- 不创建 README（那是 P9.4）
+- 不修改节点/连线绘制逻辑
+- 不修改 Pause/Clear 按钮逻辑（P9.1 已完成）
+
+【验证标准】
+- 编译通过
+- 底栏显示完整 5 项统计信息
+- Frame 帧号实时更新
+- FPS 数值实时更新且平滑
+- Active 显示正确的活跃节点数 / 总节点数
+- Last 显示正确的最近信号时间差（毫秒）
+- 无活跃信号时 Last 显示 "--"
+- Buffer 显示正确的��冲区使用量 / 容量
+- 暂停时追加 "PAUSED"（橙红色）
+- 未创建本任务范围外的任何文件（FFlowTracer getter 除外）
+
+================================================================================
+                    上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：P9.2 底栏完整统计
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断]
+
+【已完成内容】
+- [列出已完成的部分]
+
+【未完成内容】
+- [列出剩余部分]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话 PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+FlowVisualizer UE 4.27 编辑器插件，终端风格数据流可视化。
+Phase 9 P9.2 续接任务。
+
+【前置完成】
+- Phase 1 ~ Phase 8 全部完成 ✅
+- P9.1 Pause/Clear 已完善 ✅
+- P9.2 部分完成：
+  - [列出已完成的部分] ✅
+
+【续接任务】
+继续完成底栏完整统计信息。
+修改文件：SFlowVisualizerPanel.cpp（+ 可能 FlowTracer.h/.cpp 添加 getter）
+完整格式："Frame | FPS | Active: N/Total | Last: Nms ago | Buffer: N/Cap"
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================

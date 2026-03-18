@@ -1,0 +1,259 @@
+================================================================================
+任务：创建 SoulFlowSetup 并注册 Soul 项目的 4 条管线
+================================================================================
+
+【项目背景】
+FlowVisualizer 是一个 UE 4.27 编辑器插件，用于在编辑器独立弹出窗口中
+以终端风格可视化观察运行时数据流。
+插件采用双模块结构：FlowVisualizerRuntime + FlowVisualizerEditor。
+
+【当前进度】
+Phase 8 P8.4（共 32 个原子化任务中的第 28 个）
+这是 Phase 8（Soul 项目接入）的最后一个任务。
+★ MVP 检查点 3 — "Soul Integration"：完成后 Soul 项目的 4 条管线全部可观察。
+
+前置完成：
+- Phase 1 ~ Phase 7 全部完成 ✅
+- P2.4 FFlowPipelineRegistry 注册中心已实现 ✅
+- P8.1 soul.Build.cs 已添加 FlowVisualizerRuntime 依赖 ✅
+- P8.2 MyCharacter.cpp 埋点已完成 ✅
+  （MovementProcess, PlayerInput, LockOnInput, StartLockOn,
+   CancelLockOn, StaminaSystem, Combat, DodgeExec, AnimStateMachine）
+- P8.3 组件类埋点已完成 ✅
+  （TargetDetection, UIManager）
+
+【安全约束（所有任务必须遵守）】
+1. ★ Phase 8 允许创建/修改 Soul 项目文件
+2. 禁止修改项目 .uproject 文件
+3. 禁止引入第三方库；仅使用 UE 4.27 原生 API
+4. 所有运行时代码必须包裹在 Shipping 空操作保护中
+5. 不产生任何 UI 到游戏视口
+6. 每个 Task 结束后必须能编译通过且不影响现有项目
+
+【原子化任务独立性宪法提醒】
+本 Prompt 仅涉及任务 P8.4 的内容。
+不要执行任何超出 P8.4 范围的工作。
+不要提前创建后续任务（P9.x 等）的文件或代码。
+
+【任务目标】
+在 Soul 项目中���建 SoulFlowSetup.h/.cpp，定义 RegisterSoulPipelines()
+函数，向 FFlowPipelineRegistry 注册 4 条管线拓扑定义。
+并在适当位置调用该函数（BeginPlay 中加 static bool 防重复）。
+
+【具体要求】
+
+1. 需要创建的文件：
+
+   文件 A：Soul 项目 Private 目录下的 SoulFlowSetup.h
+   文件 B：Soul 项目 Private 目录下的 SoulFlowSetup.cpp
+
+2. 需要修改的文件（调用注册函数）：
+
+   MyCharacter.cpp（在 BeginPlay 中添加调用）
+
+3. SoulFlowSetup.h 应包含：
+   - #pragma once
+   - 声明一个自由函数：void RegisterSoulPipelines()
+
+4. SoulFlowSetup.cpp 应包含：
+   - #include "SoulFlowSetup.h"
+   - #include "FlowPipelineTypes.h"
+   - #include "FlowPipelineRegistry.h"
+
+   RegisterSoulPipelines() 实现，注册 4 条管线：
+
+   管线 1 — CharacterMovement（5 节点 4 连线）：
+   - PipelineID: "CharacterMovement"
+   - DisplayName: "Character Movement"
+   - Nodes:
+     PlayerInput       RelativePosition (0.05, 0.50)
+     MovementProcess   RelativePosition (0.30, 0.50)
+     StaminaSystem     RelativePosition (0.55, 0.30)
+     AnimStateMachine  RelativePosition (0.55, 0.70)
+     DodgeExec         RelativePosition (0.80, 0.50)
+   - Edges:
+     PlayerInput      → MovementProcess
+     MovementProcess  → StaminaSystem
+     MovementProcess  → AnimStateMachine
+     AnimStateMachine → DodgeExec
+
+   管线 2 — LockOnSystem（6 节点 5 连线）：
+   - PipelineID: "LockOnSystem"
+   - DisplayName: "Lock-On System"
+   - Nodes:
+     LockOnInput       RelativePosition (0.05, 0.50)
+     TargetDetection   RelativePosition (0.25, 0.50)
+     StartLockOn       RelativePosition (0.50, 0.30)
+     CancelLockOn      RelativePosition (0.50, 0.70)
+     UIManager         RelativePosition (0.75, 0.30)
+     MovementProcess   RelativePosition (0.75, 0.70)
+   - Edges:
+     LockOnInput     → TargetDetection
+     TargetDetection → StartLockOn
+     TargetDetection → CancelLockOn
+     StartLockOn     → UIManager
+     CancelLockOn    → MovementProcess
+
+   管线 3 — CameraPipeline（8 节点 7 连线）：
+   - PipelineID: "CameraPipeline"
+   - DisplayName: "Camera Pipeline"
+   - Nodes:
+     PlayerInput       RelativePosition (0.05, 0.50)
+     LockOnInput       RelativePosition (0.20, 0.30)
+     MovementProcess   RelativePosition (0.20, 0.70)
+     TargetDetection   RelativePosition (0.35, 0.30)
+     StartLockOn       RelativePosition (0.50, 0.20)
+     CancelLockOn      RelativePosition (0.50, 0.40)
+     AnimStateMachine  RelativePosition (0.50, 0.70)
+     UIManager         RelativePosition (0.80, 0.50)
+   - Edges:
+     PlayerInput     → LockOnInput
+     PlayerInput     → MovementProcess
+     LockOnInput     → TargetDetection
+     TargetDetection → StartLockOn
+     TargetDetection → CancelLockOn
+     MovementProcess → AnimStateMachine
+     StartLockOn     → UIManager
+
+   管线 4 — CombatSystem（7 节点 6 连线）：
+   - PipelineID: "CombatSystem"
+   - DisplayName: "Combat System"
+   - Nodes:
+     PlayerInput       RelativePosition (0.05, 0.50)
+     Combat            RelativePosition (0.25, 0.30)
+     DodgeExec         RelativePosition (0.25, 0.70)
+     StaminaSystem     RelativePosition (0.50, 0.50)
+     AnimStateMachine  RelativePosition (0.70, 0.30)
+     MovementProcess   RelativePosition (0.70, 0.70)
+     UIManager         RelativePosition (0.90, 0.50)
+   - Edges:
+     PlayerInput     → Combat
+     PlayerInput     → DodgeExec
+     Combat          → StaminaSystem
+     DodgeExec       → StaminaSystem
+     StaminaSystem   → AnimStateMachine
+     StaminaSystem   → MovementProcess
+
+5. MyCharacter.cpp 中调用注册（修改 BeginPlay）：
+   - 在 BeginPlay() 函数体入口处添加：
+     static bool bPipelinesRegistered = false;
+     if (!bPipelinesRegistered)
+     {
+         RegisterSoulPipelines();
+         bPipelinesRegistered = true;
+     }
+   - 需要 #include "SoulFlowSetup.h"
+   - static bool 确保即使多个角色实例存在，也只注册一次
+
+6. 关键技术注意事项：
+   - FFlowNode 构造：{FName("NodeID"), FText::FromString("DisplayName"), FVector2D(X, Y)}
+   - FFlowEdge 构造：{FName("SourceID"), FName("TargetID")}
+   - 所有 NodeID 必须与 P8.2/P8.3 中 FLOW_SIGNAL 使用的 NodeID 完全匹配
+   - RelativePosition 范围 (0~1)，布局力求节点不重叠、连线清晰
+   - 如果项目有自定义 GameInstance，可在 Init() 中调用替代 BeginPlay
+     但 static bool + BeginPlay 方式更通用
+
+【此任务不做的事情】
+- 不修改 FlowVisualizer 插件的任何文件
+- 不修改 Build.cs（P8.1 已完成）
+- 不添加新的 FLOW_SIGNAL 埋点（P8.2/P8.3 已完成）
+- 不实现 Pause/Clear 完善（那是 P9.1）
+
+【验证标准】
+- 编译通过
+- SoulFlowSetup.h/.cpp 存在于正确路径
+- 编辑器启动并进入 PIE 后（触发 BeginPlay）：
+  FFlowPipelineRegistry::Get().GetAllPipelineIDs() 包含
+  "Demo", "CharacterMovement", "LockOnSystem", "CameraPipeline", "CombatSystem"
+- FlowVisualizer 窗口下拉菜单显示 5 条管线
+- 选择每条管线都能看到正确数量的节点和连线
+- 管线中的 NodeID 与 FLOW_SIGNAL 埋点的 NodeID 匹配
+- PIE 运行游戏时，对应管线的节点高亮和光点动画正常工作
+- ���次进入/退出 PIE 不会重复注册管线（static bool 防护）
+- 未修改本任务范围外的任何文件
+
+【Phase 8 完成后的验证清单】
+完成此任务后，Phase 8（Soul 项目接入）全部完成，请验证：
+1. soul.Build.cs 依赖 FlowVisualizerRuntime ✅
+2. MyCharacter.cpp 9 处埋点就位 ✅
+3. TargetDetectionComponent.cpp + UIManagerComponent.cpp 埋点就位 ✅
+4. 4 条 Soul 管线已注册 ✅
+5. 下拉菜单显示全部 5 条管线（含 Demo）✅
+6. PIE 运行时节点高亮 + 光点流动 + 数据显示 ✅
+7. 整体编译通过 ✅
+★ MVP 检查点 3 — "Soul Integration" 达成 ✅
+
+================================================================================
+                    上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果��检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：P8.4 注册 Soul 项目管线
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断]
+
+【已完成内容】
+- [列出已完成的部分]
+
+【未完成内容】
+- [列出剩余部分]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话 PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+FlowVisualizer UE 4.27 编辑器插件，终端风格数据流可视化。
+Phase 8 P8.4 续接任务。
+
+【前置完成】
+- Phase 1 ~ Phase 7 全部完成 ✅
+- P8.1 Build.cs 依赖已添加 ✅
+- P8.2 MyCharacter 埋点已完成 ✅
+- P8.3 组件类埋点已完成 ✅
+- P8.4 部分完成：
+  - [列出已完成的部分] ✅
+
+【续接任务】
+继续完成 Soul 项目管线注册。
+创建文件：SoulFlowSetup.h/.cpp
+注册 4 条管线 + 在 BeginPlay 中调用（static bool 防重复）
+
+【4 条管线】
+1. CharacterMovement (5 nodes, 4 edges)
+2. LockOnSystem (6 nodes, 5 edges)
+3. CameraPipeline (8 nodes, 7 edges)
+4. CombatSystem (7 nodes, 6 edges)
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================

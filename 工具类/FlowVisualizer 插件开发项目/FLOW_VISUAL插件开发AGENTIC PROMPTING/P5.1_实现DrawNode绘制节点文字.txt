@@ -1,0 +1,184 @@
+================================================================================
+任务：在 OnPaint 中实现 DrawNode 绘制管线节点文字
+================================================================================
+
+【项目背景】
+FlowVisualizer 是一个 UE 4.27 编辑器插件，用于在编辑器独立弹出窗口中
+以终端风格可视化观察运行时数据流。
+插件采用双模块结构：FlowVisualizerRuntime + FlowVisualizerEditor。
+
+【当前进度】
+Phase 5 P5.1（共 32 个原子化任务中的第 15 个）
+
+前置完成：
+- Phase 1 ~ Phase 3 全部完成 ✅
+- Phase 4 全部完成 ✅
+  - P4.2 顶栏下拉菜单已实现，CurrentPipelineID 可用 ✅
+  - P4.3 底栏状态条已实现，StatusBarHeight 常量可用 ✅
+
+【安全约束（所有任务必须遵守）】
+1. 仅创建或修改 Plugins/FlowVisualizer/ 目录下的文件
+2. 禁止修改项目 .uproject、项目 Build.cs 或项目任何已有源文件
+3. 禁止引入第三方库；仅使用 UE 4.27 原生 API
+4. 所有运行时代码必须包裹在 Shipping 空操作保护中
+5. 不产生任何 UI 到游戏视口；仅限编辑器独立窗口
+6. 每个 Task 结束后必须能编译通过且不影响现有项目
+
+【原子化任务独立性宪法提醒】
+本 Prompt 仅涉及任务 P5.1 的内容。
+不要执行任何超出 P5.1 范围的工作。
+不要提前创建后续任务（P5.2、P5.3、P5.4 等）的文件或代码。
+如果发现需要其他任务的产出物，请仅留占位注释，不要实现。
+
+【任务目标】
+修改 SFlowVisualizerPanel 的 OnPaint()，根据当前选中的管线
+（CurrentPipelineID），从 Registry 获取管线数据，
+遍历所有节点并将节点名以终端风格 "[NodeName]" 绘制在画布上。
+节点位置基于 RelativePosition 转换为像素坐标。
+
+【具体要求】
+
+1. 需要修改的文件：
+
+   文件 A：Plugins/FlowVisualizer/Source/FlowVisualizerEditor/Public/SFlowVisualizerPanel.h
+   文件 B：Plugins/FlowVisualizer/Source/FlowVisualizerEditor/Private/SFlowVisualizerPanel.cpp
+
+2. SFlowVisualizerPanel.h 中应新增：
+
+   常量/配置��
+   - static const float CanvasMargin = 40.0f
+     （画布四周边距，防止��点贴边）
+   - static const float TopBarHeight = 36.0f
+     （顶栏高度，与 P4.2 中顶栏实际高度匹配）
+
+   辅助函数：
+   - FVector2D NodeRelativeToPixel(const FVector2D& RelativePos,
+       const FGeometry& Geometry) const
+     （将 RelativePosition (0~1) 转换为画布像素坐标）
+
+3. NodeRelativeToPixel() 实现逻辑：
+   - CanvasWidth = Geometry.GetLocalSize().X
+   - CanvasHeight = Geometry.GetLocalSize().Y
+   - PixelX = RelativePos.X * (CanvasWidth - CanvasMargin * 2) + CanvasMargin
+   - PixelY = RelativePos.Y * (CanvasHeight - TopBarHeight - StatusBarHeight
+     - CanvasMargin) + TopBarHeight + CanvasMargin * 0.5f
+   - 返回 FVector2D(PixelX, PixelY)
+
+4. OnPaint() 中应在背景绘制之后、底栏绘制之前添加节点绘制逻辑：
+
+   步骤 1 — 获取当前管线数据：
+   - 通过 FFlowPipelineRegistry::Get().FindPipeline(CurrentPipelineID)
+   - 如果返回 nullptr，跳过节点绘制
+
+   步骤 2 — 遍历管线的所有 Nodes：
+   - 对每个 FFlowNode：
+     a. 调用 NodeRelativeToPixel() 获取像素坐标
+     b. 组装显示文字：FString::Printf(TEXT("[%s]"), *Node.DisplayName.ToString())
+        方括号 [] 模拟终端风格
+     c. 使用 FSlateDrawElement::MakeText 绘制
+     d. 字体：FCoreStyle::GetDefaultFontStyle("Bold", 14)
+        （Roboto Bold 14pt，后续 P5.3 会替换为 FlowVisStyle 常量）
+     e. 颜色：FLinearColor(0.40f, 0.40f, 0.40f, 1.0f) 即 #666666
+        （默认非活跃暗灰色，后续 P6.2 会根据高亮状态动态计算）
+     f. 位置：像素坐标处
+
+   步骤 3 — 节点下方预留数据文字行空间：
+   - 本任务不绘制数据文字（那是 P6.3）
+   - 但节点位置计算应考虑后续数据行的空间
+     （留注释说明即可，不实现）
+
+5. 关键技术注意事项：
+   - OnPaint 中的 FSlateDrawElement::MakeText 签名（UE4.27）：
+     MakeText(OutDrawElements, LayerId, PaintGeometry, Text, Font, 
+              DrawEffects, Color)
+   - PaintGeometry 可通过 AllottedGeometry.ToPaintGeometry(Position, Size)
+     或 AllottedGeometry.ToPaintGeometry() 后偏移
+   - 文字位置需要创建偏移后的 FPaintGeometry：
+     AllottedGeometry.MakeChild(FVector2D(PixelX, PixelY), FVector2D(200, 30))
+     然后 .ToPaintGeometry()
+   - 需要 #include "FlowPipelineRegistry.h"
+
+【此任务不做的事情】
+- 不绘制连线箭头（那是 P5.2）
+- 不创建 FlowVisualizerStyle 颜色常量（那是 P5.3）
+- 不替换硬编码颜色为 Style 常量（那是 P5.4）
+- 不实现节点高亮渐灭效果（那是 P6.2）
+- 不实现节点下方数据标签（那是 P6.3）
+
+【验证标准】
+- 选择 Demo Pipeline 后窗口画布中显示 [Input] [Process] [Output] 三个文字
+- 三个节点水平排列（Y 坐标相同），间距均匀
+- 节点位置与 RelativePosition 定义一致
+  （Input 在左，Process 在中，Output 在右）
+- 文字为暗灰色 #666666，Bold 14pt 字体
+- 切换到其他管线后节点随之更新（若有其他管线注册的话）
+- CurrentPipelineID 为 NAME_None 时画布无节点文字（不崩溃）
+- 调整窗口大小后节点位置自适应
+- 编译通过
+- 未创建本任务范围外的任何文件
+
+================================================================================
+                    上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：P5.1 实现 DrawNode 绘制节点文字
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断]
+
+【已完成内容】
+- [列出已完成的部分]
+
+【未完成内容】
+- [列出剩余部分]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话 PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+FlowVisualizer UE 4.27 编辑器插件，终端风格数据流可视化。
+Phase 5 P5.1 续接任务。
+
+【前置完成】
+- Phase 1 ~ Phase 4 全部完成 ✅
+- P5.1 部分完成：
+  - [列出已完成的部分] ✅
+
+【续接任务】
+继续完成 DrawNode 节点文字绘制。
+修改文件：SFlowVisualizerPanel.h/.cpp
+核心内容：NodeRelativeToPixel() 坐标转换 + OnPaint 中遍历节点绘制 "[Name]"
+
+【上下文限制���测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================

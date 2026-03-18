@@ -1,0 +1,191 @@
+================================================================================
+任务：在 SFlowVisualizerPanel 中连接 FFlowTracer 事件 Delegate
+================================================================================
+
+【项目背景】
+FlowVisualizer 是一个 UE 4.27 编辑器插件，用于在编辑器独立弹出窗口中
+以终端风格可视化观察运行时数据流。
+插件采用双模块结构：FlowVisualizerRuntime + FlowVisualizerEditor。
+
+【当前进度】
+Phase 6 P6.1（共 32 个原子化任务中的第 19 个）
+
+前置完成：
+- Phase 1 ~ Phase 5 全部完成 ✅
+- P2.2 FFlowTracer 单例已实现 ✅
+  （Signal(), OnFlowEvent Delegate 可用）
+- P3.2 SFlowVisualizerPanel 空壳已创建 ✅
+  （Construct / Tick / OnPaint 基础结构就绪）
+- P4.2 顶栏已实现，bIsPaused 标志可用 ✅
+
+【安全约束（所有任务必须遵守）】
+1. 仅创建或修改 Plugins/FlowVisualizer/ 目录下的文件
+2. 禁止修改项目 .uproject、项目 Build.cs 或项目任何已有源文件
+3. 禁止引入第三方库；仅使用 UE 4.27 原生 API
+4. 所有运行时代码必须包裹在 Shipping 空操作保护中
+5. 不产生任何 UI 到游戏视口；仅限编辑器独立窗口
+6. 每个 Task 结束后必须能编译通过且不影响现有项目
+
+【原子化任务独立性宪法提醒】
+本 Prompt 仅涉及任务 P6.1 的内容。
+不要执行任何超出 P6.1 范围的工作。
+不要提前创建后续任务（P6.2、P6.3、P6.4 等）的文件或代码。
+如果发现需要其他任务的产出物，请仅留占位注释，不要实现。
+
+【任务目标】
+在 SFlowVisualizerPanel 中监听 FFlowTracer 的 OnFlowEvent Delegate，
+接收运行时事件并存储到节点状态映射表中。
+实现采样节流逻辑（100ms 窗口内同节点不重复触发高亮重置）。
+这是事件驱动可视化的数据接收层，后续 P6.2/P6.3 负责渲染。
+
+【具体要求】
+
+1. 需要修改的文件：
+
+   文件 A：Plugins/FlowVisualizer/Source/FlowVisualizerEditor/Public/SFlowVisualizerPanel.h
+   文件 B：Plugins/FlowVisualizer/Source/FlowVisualizerEditor/Private/SFlowVisualizerPanel.cpp
+
+2. SFlowVisualizerPanel.h 中应新增以下成员声明：
+
+   Delegate 句柄：
+   - FDelegateHandle FlowEventHandle
+     （监听 FFlowTracer::OnFlowEvent 的句柄）
+
+   节点状态映射表：
+   - TMap<FName, double> NodeLastActiveTime
+     （Key: NodeID, Value: 最后一次激活的时间戳）
+   - TMap<FName, FString> NodeLastData
+     （Key: NodeID, Value: 最后一次事件携带的 DataPayload）
+
+   回调函数：
+   - void OnFlowEventReceived(const FFlowEvent& Event)
+     （接收事件的回调）
+
+3. Construct() 末尾应注册 Delegate：
+   - FlowEventHandle = FFlowTracer::Get().OnFlowEvent.AddRaw(
+       this, &SFlowVisualizerPanel::OnFlowEventReceived)
+   - 需要 #include "FlowTracer.h"
+   - 需要 #include "FlowPipelineTypes.h"（FFlowEvent 类型）
+
+4. 析构/销毁时应取消 Delegate：
+   - FFlowTracer::Get().OnFlowEvent.Remove(FlowEventHandle)
+   - 注意：SCompoundWidget 没有虚析构函数直接可 override，
+     可在自定义析构函数中处理，或使用
+     FSlateApplication::Get().OnPreShutDown 等方式
+   - 推荐方式：声明 ~SFlowVisualizerPanel() 析构函数，
+     在其中移除 Delegate
+
+5. OnFlowEventReceived() 实现逻辑：
+
+   步骤 1 — 暂停检查：
+   - 如果 bIsPaused == true，直接 return
+
+   步骤 2 — 采样节流检查：
+   - 查找 NodeLastActiveTime 中是否已有 Event.NodeID 的记录
+   - 如果已有记录：
+     double LastTime = NodeLastActiveTime[Event.NodeID]
+     double Elapsed = Event.Timestamp - LastTime
+     如果 Elapsed < FlowVisStyle::SignalThrottleMs / 1000.0
+       （即 100ms 内重复信号）：
+       仅更新数据：NodeLastData[Event.NodeID] = Event.DataPayload
+       不更新时间戳（不重置高亮动画）
+       return
+
+   步骤 3 — 正常更新：
+   - NodeLastActiveTime.Add(Event.NodeID, Event.Timestamp)
+     或 NodeLastActiveTime[Event.NodeID] = Event.Timestamp
+   - NodeLastData.Add(Event.NodeID, Event.DataPayload)
+     或 NodeLastData[Event.NodeID] = Event.DataPayload
+
+6. 关键技术注意事项：
+   - OnFlowEvent Delegate 可能从非 GameThread 广播
+     （取决于 Signal() 的调用线程），但本项目中 Signal() 通常
+     在 GameThread 调用，暂不需要线程安全处理
+   - AddRaw 绑定的是裸指针，析构时必须 Remove，否则悬挂指针崩溃
+   - FlowVisStyle::SignalThrottleMs 已在 P5.3 中定义为 100.0f
+   - NodeLastActiveTime 和 NodeLastData 在后续 P6.2/P6.3 中被
+     OnPaint 读取，用于渲染高亮和数据标签
+
+【此任务不做的事情】
+- 不修改 OnPaint 绘制逻辑（节点高亮渲染是 P6.2）
+- 不绘制数据标签（那是 P6.3）
+- 不实现 Tick 中的 Invalidate 刷新（那是 P6.4）
+- 不实现 Edge 自动推导（那是 P7.1）
+
+【验证标准】
+- 编译通过
+- 运行 PIE 后，游戏代码中 FLOW_SIGNAL 调用触发
+  OnFlowEventReceived 被执行
+- NodeLastActiveTime 中出现对应 NodeID 的时间戳记录
+- NodeLastData 中出现对应 NodeID 的数据记录
+- bIsPaused = true 时，OnFlowEventReceived 不更新任何数据
+- 100ms 内同节点重复信号：仅更新 Data，不更新时间戳
+- 100ms 后同节点信号：更新时间戳和 Data
+- 窗口关闭后 Delegate 正确移除（不崩溃）
+- 未创建本任务范围外的任何文件
+
+================================================================================
+                    上下文限制与自动交接机制
+================================================================================
+
+【重要：上下文限制检测】
+
+在执行任务过程中，请持续监控上下文窗口使用情况。
+
+如果你检测到以下任一情况：
+1. 上下文窗口即将达到限制（约80%容量）
+2. 无法在当前对话中完成全部任务
+3. 需要生成的代码量超出剩余空间
+
+请立即执行以下操作：
+
+【自动交接协议】
+
+停止当前代码生成，输出以下格式的交接信息：
+
+================================================================================
+⚠️ 上下文限制 - 自动交接点
+================================================================================
+
+【交接状态】
+- 当前任务：P6.1 连接 FFlowTracer Delegate
+- 完成进度：[百分比] 或 [具体进度描述]
+- 中断位置：[具体说明在哪里中断]
+
+【已完成内容���
+- [列出已完成的部分]
+
+【未完成内容】
+- [列出剩余部分]
+
+【已生成代码保存提示】
+请将上方已生成的代码保存，然后开启新对话。
+
+================================================================================
+                    继续任务 - 新对话 PROMPT
+================================================================================
+
+请复制以下内容到新对话继续执行：
+
+---开始复制---
+
+【项目背景】
+FlowVisualizer UE 4.27 编辑器插件，终端风格数据流可视化。
+Phase 6 P6.1 续接任务。
+
+【前置完成】
+- Phase 1 ~ Phase 5 全部完成 ✅
+- P6.1 部分完成：
+  - [列出已完成的部分] ✅
+
+【续接任务】
+继续完成 FFlowTracer Delegate 连接。
+修改文件：SFlowVisualizerPanel.h/.cpp
+核心内容：注册/注销 Delegate + OnFlowEventReceived 回调 + 节流逻辑
+
+【上下文限制检测】
+本任务仍需遵循上下文限制检测机制。
+
+---结束复制---
+
+================================================================================
