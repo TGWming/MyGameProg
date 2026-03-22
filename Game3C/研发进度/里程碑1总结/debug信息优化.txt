@@ -1,0 +1,76 @@
+TGWming
+opened 7 minutes ago
+UE4角色调试日志性能优化说明
+本文档详细说明了如何在不改变任何功能逻辑的基础上，安全地注释掉或保留调试日志（UE_LOG），以提升性能并保持调试能力。
+
+一、可以安全注释掉的调试日志（建议注释）
+1. 高频率调试日志（建议优先处理）
+Tick函数相关日志：每帧都会调用，性能影响大。
+例如：
+// 在Tick函数和UpdateLockOnCamera、UpdateSocketProjectionWidget等高频调用的函数内：
+// UE_LOG(LogTemp, VeryVerbose, ...);
+// UE_LOG(LogTemp, Verbose, ...);
+
+
+2. Socket投射、角度计算等每帧执行的详细日志
+例如：
+// UE_LOG(LogTemp, Verbose, ...);
+// UE_LOG(LogTemp, Warning, ...); // 若为高频输出
+
+
+3. 仅用于开发阶段定位UI、Socket、投射等详细信息的日志
+例如：
+// UE_LOG(LogTemp, Warning, ...); // Socket world location, projection等
+二、建议保留的调试日志
+
+
+1. 错误和关键警告日志（建议保留）
+只在严重错误、空指针、找不到资源等情况下输出。
+例如：
+UE_LOG(LogTemp, Error, TEXT("LockOnWidgetClass is NULL!"));
+UE_LOG(LogTemp, Error, TEXT("PlayerInputComponent is null!"));
+UE_LOG(LogTemp, Warning, TEXT("Current lock-on target is no longer lockable - cancelling lock-on"));
+
+
+2. 低频状态变更日志（建议保留）
+只在锁定、解锁、切换目标、功能初始化等关键节点输出。
+例如：
+UE_LOG(LogTemp, Warning, TEXT("Started lock-on with target: %s"), *Target->GetName());
+UE_LOG(LogTemp, Warning, TEXT("Lock-on cancelled"));
+UE_LOG(LogTemp, Warning, TEXT("Player movement interrupted smooth target switch"));
+
+
+3. 初始化和调试设置日志（建议保留）
+例如：
+UE_LOG(LogTemp, Warning, TEXT("Input bindings set up successfully"));
+UE_LOG(LogTemp, Warning, TEXT("Started smooth camera reset from %s to %s"), *SmoothResetStartRotation.ToString(), *SmoothResetTargetRotation.ToString());
+
+
+三、最佳实践建议
+优先注释掉高频（每帧/每输入循环）输出的Verbose/VeryVerbose/Warning级别日志。
+保留Error和关键Warning，及关键节点的状态变更提示。
+如需临时调试，可用宏或运行时开关控制输出：
+#define ENABLE_LOCKON_DEBUG_LOGS 0
+#if ENABLE_LOCKON_DEBUG_LOGS
+    UE_LOG(LogTemp, Verbose, ...);
+#endif
+如已存在bEnableCameraDebugLogs等布尔开关，建议默认关闭，开发阶段临时打开。
+
+
+四、示例代码段
+// 推荐注释掉：
+// UE_LOG(LogTemp, VeryVerbose, ...);
+// UE_LOG(LogTemp, Verbose, ...);
+// 高频函数内的UE_LOG(LogTemp, Warning, ...); // 仅留开发用
+
+// 推荐保留：
+UE_LOG(LogTemp, Error, TEXT("XXX error: ..."));
+UE_LOG(LogTemp, Warning, TEXT("锁定目标已丢失，自动解锁"));
+
+
+五、文档下载说明
+可将本文档内容保存为 LogOptimization.md 放入工程文档目录，便于团队参考。
+若有CI/CD流程，可在"上线前自动注释高频日志"。
+
+
+如需英文版或自动脚本工具，请在本Issue下留言。

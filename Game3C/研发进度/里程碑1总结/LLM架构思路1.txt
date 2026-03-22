@@ -1,0 +1,352 @@
+为你的魂类游戏设计一个可扩展的架构方案是非常明智的。基于你现有的代码，我为你规划一套完整的**模块化架构方案**：
+
+## 🏗️ 整体架构设计
+
+### 核心架构原则
+```
+AMyCharacter (轻量协调者)
+├── MovementComponent (移动)
+├── CombatComponent (战斗) 
+├── LockOnComponent (锁定)
+├── CameraComponent (镜头)
+├── StatusComponent (状态)
+├── EquipmentComponent (装备)
+└── UIComponent (UI)
+```
+
+## 📦 具体模块划分方案
+
+### 1. **移动系统模块** (`UMovementComponent`)
+```cpp
+// 职责：所有移动相关逻辑
+class SOUL_API UCharacterMovementComponent : public UCharacterMovementComponent
+{
+    // 基础移动
+    void HandleGroundMovement();
+    void HandleAirMovement();
+    void HandleDodge(); // 翻滚
+
+    // 特殊移动
+    void HandleSprint(); // 冲刺
+    void HandleJump();   // 跳跃
+    void HandleFall();   // 坠落
+
+    // 状态相关移动
+    void HandleStagger(); // 硬直
+    void HandleKnockback(); // 击退
+
+    // 移动数据
+    FMovementData MovementConfig;
+};
+```
+
+### 2. **战斗系统模块** (`UCombatComponent`)
+```cpp
+// 职责：攻击、防御、受击等战斗逻辑
+UCLASS()
+class UCombatComponent : public UActorComponent
+{
+    // 攻击系统
+    void StartAttack(EAttackType Type);
+    void ComboAttack();
+    void HeavyAttack();
+    void WeaponSkill(); // 战技
+
+    // 防御系统
+    void Block();
+    void Parry(); // 弹反
+
+    // 受击系统
+    void TakeDamage(const FDamageInfo& DamageInfo);
+    void ApplyPoiseDamage(float PoiseDamage); // 韧性系统
+
+    // 装备影响
+    void UpdateWeaponStats();
+    void ApplyBuffEffects();
+
+private:
+    FCombatData CombatConfig;
+    TArray<UAttackCombo*> AttackCombos;
+};
+```
+
+### 3. **锁定系统模块** (`ULockOnComponent`) - **重构你现有的代码**
+```cpp
+// 职责：专门处理锁定逻辑，从Character中分离
+UCLASS()
+class ULockOnComponent : public UActorComponent
+{
+    // 使用你现有的锁定逻辑，但封装成组件
+    void FindLockOnCandidates();
+    void UpdateLockOnCamera();
+    void SwitchTarget();
+
+    // 新增功能
+    void HandleTargetBreak(); // 目标丢失处理
+    void AutoRecovery();      // 自动恢复锁定
+
+private:
+    // 你现有的所有锁定相关变量移到这里
+    AActor* CurrentLockOnTarget;
+    TArray<AActor*> LockOnCandidates;
+    // ...
+};
+```
+
+### 4. **镜头系统模块** (`UCameraComponent`)
+```cpp
+// 职责：所有镜头控制逻辑
+UCLASS()
+class UCharacterCameraComponent : public UActorComponent
+{
+    // 镜头模式
+    void SetFreeCamera();
+    void SetLockOnCamera();
+    void SetCombatCamera();
+    void SetBossCamera(); // BOSS特殊镜头
+
+    // 镜头效果
+    void ApplyCameraShake();
+    void HandleHitEffects(); // 受击镜头效果
+    void HandleDodgeEffects(); // 翻滚镜头效果
+
+    // 平滑过渡
+    void SmoothTransitionTo(FVector Location, FRotator Rotation);
+};
+```
+
+### 5. **状态系统模块** (`UStatusComponent`)
+```cpp
+// 职责：角色数值和状态管理
+UCLASS()
+class UStatusComponent : public UActorComponent
+{
+    // 基础属性
+    UPROPERTY()
+    float Health;
+    float Stamina;
+    float Mana; // 如果需要
+    float Poise; // 韧性
+
+    // 高级属性
+    UPROPERTY()
+    float AttackPower;
+    float Defense;
+    float WeightRatio; // 负重比例
+
+    // 状态效果
+    void ApplyStatusEffect(EStatusEffect Effect);
+    void HandleDeath();
+    void HandleRespawn();
+
+    // 属性计算
+    float CalculateFinalDamage(float BaseDamage);
+    float CalculateStaminaCost(EActionType Action);
+};
+```
+
+### 6. **装备系统模块** (`UEquipmentComponent`)
+```cpp
+// 职责：装备管理和效果应用
+UCLASS()
+class UEquipmentComponent : public UActorComponent
+{
+    // 装备槽位
+    UPROPERTY()
+    AWeapon* RightHandWeapon;
+    AWeapon* LeftHandWeapon;
+    AArmor* HeadArmor;
+    AArmor* BodyArmor;
+    // ...
+
+    // 装备操作
+    void EquipItem(UItem* Item);
+    void UnequipItem(EEquipmentSlot Slot);
+    void SwitchWeapon();
+
+    // 装备效果
+    void UpdateCharacterStats();
+    void ApplySetBonuses(); // 套装效果
+};
+```
+
+### 7. **UI系统模块** (`UUIComponent`)
+```cpp
+// 职责：所有UI管理和更新
+UCLASS()
+class UCharacterUIComponent : public UActorComponent
+{
+    // HUD管理
+    void UpdateHealthBar();
+    void UpdateStaminaBar();
+    void ShowDamageNumbers(float Damage);
+
+    // 状态UI
+    void ShowStatusEffects();
+    void UpdateEquipmentUI();
+
+    // 交互UI
+    void ShowInteractPrompt();
+    void ShowLockOnUI(); // 你现有的锁定UI
+
+    // 菜单系统
+    void ToggleInventory();
+    void ToggleCharacterStatus();
+};
+```
+
+## 🔄 数据驱动配置
+
+### 创建数据资产类
+```cpp
+// 角色基础配置
+UCLASS()
+class UCharacterConfigData : public UDataAsset
+{
+    UPROPERTY(EditAnywhere)
+    FMovementConfig MovementSettings;
+
+    UPROPERTY(EditAnywhere)
+    FCombatConfig CombatSettings;
+
+    UPROPERTY(EditAnywhere)
+    FCameraConfig CameraSettings;
+
+    UPROPERTY(EditAnywhere)
+    FStatusConfig StatusSettings;
+};
+
+// 攻击动作配置
+UCLASS()
+class UAttackData : public UDataAsset
+{
+    UPROPERTY(EditAnywhere)
+    UAnimMontage* Animation;
+
+    UPROPERTY(EditAnywhere)
+    float DamageMultiplier;
+
+    UPROPERTY(EditAnywhere)
+    float StaminaCost;
+
+    UPROPERTY(EditAnywhere)
+    float PoiseDamage;
+};
+```
+
+## 🎯 魂类游戏特色功能规划
+
+### 1. **韧性系统** (Poise System)
+```cpp
+class UPoiseSystem : public UActorComponent
+{
+    void TakePoiseDamage(float Damage);
+    void BreakPoise(); // 触发硬直
+    void RecoverPoise(float DeltaTime);
+
+private:
+    float CurrentPoise;
+    float MaxPoise;
+    bool bIsPoiseBroken;
+};
+```
+
+### 2. **背刺/处决系统**
+```cpp
+class UExecutionSystem : public UActorComponent
+{
+    bool CanExecute(AActor* Target);
+    void StartExecution(AActor* Target);
+    void PlayExecutionAnimation();
+};
+```
+
+### 3. **元素状态系统**
+```cpp
+class UElementalSystem : public UActorComponent
+{
+    void ApplyBleedEffect();   // 出血
+    void ApplyFrostEffect();   // 冻伤
+    void ApplyPoisonEffect();  // 中毒
+    void ApplyScarletRot();    // 猩红腐败
+};
+```
+
+## 🛠️ 实施路线图
+
+### 第一阶段：基础重构
+1. **将锁定系统从Character中剥离** → `ULockOnComponent`
+2. **创建状态组件** → `UStatusComponent`
+3. **建立数据资产配置**
+
+### 第二阶段：战斗系统
+1. **实现战斗组件** → `UCombatComponent`
+2. **创建攻击动作配置**
+3. **实现基本的攻击连招**
+
+### 第三阶段：高级功能
+1. **装备系统集成**
+2. **韧性系统实现**
+3. **元素状态效果**
+
+### 第四阶段：优化完善
+1. **镜头系统细化**
+2. **UI系统完善**
+3. **性能优化**
+
+## 📝 代码重构示例
+
+### 重构后的Character头文件
+```cpp
+UCLASS()
+class SOUL_API AMyCharacter : public ACharacter
+{
+    GENERATED_BODY()
+
+public:
+    // 组件引用
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+    ULockOnComponent* LockOnComponent;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+    UCombatComponent* CombatComponent;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+    UStatusComponent* StatusComponent;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+    UEquipmentComponent* EquipmentComponent;
+
+    // 轻量的协调函数
+    UFUNCTION(BlueprintCallable)
+    void RequestAttack();
+
+    UFUNCTION(BlueprintCallable) 
+    void RequestDodge();
+
+    UFUNCTION(BlueprintCallable)
+    void RequestLockOn();
+
+protected:
+    // 数据资产引用
+    UPROPERTY(EditDefaultsOnly)
+    UCharacterConfigData* CharacterConfig;
+};
+```
+
+## 🎮 魂类游戏设计建议
+
+1. **输入响应优先级**：翻滚 > 攻击 > 移动
+2. **动画通知系统**：在动画关键帧触发伤害检测
+3. **无敌帧管理**：翻滚、受击时的无敌时间
+4. **摄像机碰撞**：防止镜头穿墙
+5. **多锁定支持**：单个目标和群体目标的不同策略
+
+这样的架构设计让你的代码：
+- ✅ **高度模块化** - 各司其职，易于维护
+- ✅ **数据驱动** - 策划可调整，无需重新编译
+- ✅ **易于扩展** - 新增功能只需添加新组件
+- ✅ **便于测试** - 每个组件可以独立测试
+- ✅ **团队协作友好** - 不同程序员负责不同模块
+
+你现在可以开始**第一步**：将锁定系统重构为独立的 `ULockOnComponent`，这会为后续所有模块的集成奠定良好基础。

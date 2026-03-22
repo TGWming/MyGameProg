@@ -1,0 +1,470 @@
+🎯 UE4角色代码模块化 - 第3阶段：相机控制组件
+重要保护措施（必须严格遵守）：
+❌ 绝对不要删除或修改MyCharacter.h和MyCharacter.cpp中的任何现有代码
+❌ 不要修改任何现有函数的签名
+✅ 只能新增组件文件和在MyCharacter中新增组件声明
+✅ 原始函数保留，内容改为调用组件方法
+✅ 确保所有原始功能100%兼容
+任务目标：
+创建相机控制组件，将锁定相机、平滑切换、自动修正和重置逻辑模块化。
+
+第1步：创建相机控制组件头文件
+创建新文件 CameraControlComponent.h：
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Components/ActorComponent.h"
+#include "LockOnConfig.h"
+#include "CameraControlComponent.generated.h"
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnCameraSwitchCompleted);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnCameraResetCompleted);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCameraCorrectionStarted, AActor*, Target);
+
+UENUM(BlueprintType)
+enum class ECameraState : uint8
+{
+    Normal          UMETA(DisplayName = "Normal"),
+    LockedOn        UMETA(DisplayName = "Locked On"),
+    SmoothSwitching UMETA(DisplayName = "Smooth Switching"),
+    AutoCorrection  UMETA(DisplayName = "Auto Correction"),
+    SmoothReset     UMETA(DisplayName = "Smooth Reset")
+};
+
+UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
+class SOUL_API UCameraControlComponent : public UActorComponent
+{
+    GENERATED_BODY()
+
+public:    
+    UCameraControlComponent();
+
+protected:
+    virtual void BeginPlay() override;
+
+public:    
+    virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+
+    // ==================== 核心相机控制接口 ====================
+    UFUNCTION(BlueprintCallable, Category = "Camera Control")
+    void UpdateLockOnCamera(AActor* Target);
+    
+    UFUNCTION(BlueprintCallable, Category = "Camera Control")
+    void UpdateCharacterRotationToTarget(AActor* Target);
+    
+    UFUNCTION(BlueprintCallable, Category = "Camera Control")
+    void StartSmoothTargetSwitch(AActor* NewTarget);
+    
+    UFUNCTION(BlueprintCallable, Category = "Camera Control")
+    void UpdateSmoothTargetSwitch();
+    
+    // ==================== 相机重置接口 ====================
+    UFUNCTION(BlueprintCallable, Category = "Camera Reset")
+    void StartSmoothCameraReset();
+    
+    UFUNCTION(BlueprintCallable, Category = "Camera Reset")
+    void UpdateSmoothCameraReset();
+    
+    UFUNCTION(BlueprintCallable, Category = "Camera Reset")
+    void StartCameraReset(const FRotator& TargetRotation);
+    
+    UFUNCTION(BlueprintCallable, Category = "Camera Reset")
+    void PerformSimpleCameraReset();
+    
+    // ==================== 自动修正接口 ====================
+    UFUNCTION(BlueprintCallable, Category = "Camera Correction")
+    void StartCameraAutoCorrection(AActor* Target);
+    
+    UFUNCTION(BlueprintCallable, Category = "Camera Correction")
+    void UpdateCameraAutoCorrection();
+    
+    UFUNCTION(BlueprintCallable, Category = "Camera Correction")
+    void StartCameraCorrectionForTarget(AActor* Target);
+    
+    UFUNCTION(BlueprintCallable, Category = "Camera Correction")
+    void DelayedCameraCorrection();
+    
+    // ==================== 状态管理接口 ====================
+    UFUNCTION(BlueprintCallable, Category = "Camera State")
+    void SetCameraFollowState(bool bShouldFollow, bool bShouldRotateCharacter);
+    
+    UFUNCTION(BlueprintCallable, Category = "Camera State")
+    void RestoreCameraFollowState();
+    
+    UFUNCTION(BlueprintCallable, Category = "Camera State")
+    void HandlePlayerInput(float TurnInput, float LookUpInput);
+    
+    UFUNCTION(BlueprintCallable, Category = "Camera State")
+    void HandlePlayerMovement(bool bIsMoving);
+    
+    // ==================== 计算工具接口 ====================
+    UFUNCTION(BlueprintCallable, Category = "Camera Utils")
+    float CalculateAngleToTarget(AActor* Target) const;
+    
+    // ==================== 属性访问器 ====================
+    UFUNCTION(BlueprintCallable, Category = "Camera Control")
+    ECameraState GetCurrentCameraState() const { return CurrentCameraState; }
+    
+    UFUNCTION(BlueprintCallable, Category = "Camera Control")
+    bool ShouldCameraFollowTarget() const { return bShouldCameraFollowTarget; }
+    
+    UFUNCTION(BlueprintCallable, Category = "Camera Control")
+    bool ShouldCharacterRotateToTarget() const { return bShouldCharacterRotateToTarget; }
+    
+    UFUNCTION(BlueprintCallable, Category = "Camera Control")
+    void SetCameraSettings(const FCameraSettings& NewSettings) { CameraSettings = NewSettings; }
+    
+    UFUNCTION(BlueprintCallable, Category = "Camera Control")
+    void SetDelayedCorrectionTarget(AActor* Target) { DelayedCorrectionTarget = Target; }
+    
+    // ==================== 事件委托 ====================
+    UPROPERTY(BlueprintAssignable, Category = "Camera Events")
+    FOnCameraSwitchCompleted OnCameraSwitchCompleted;
+    
+    UPROPERTY(BlueprintAssignable, Category = "Camera Events")
+    FOnCameraResetCompleted OnCameraResetCompleted;
+    
+    UPROPERTY(BlueprintAssignable, Category = "Camera Events")
+    FOnCameraCorrectionStarted OnCameraCorrectionStarted;
+
+protected:
+    // ==================== 配置 ====================
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings")
+    FCameraSettings CameraSettings;
+    
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
+    bool bEnableCameraDebugLogs = false;
+    
+    // ==================== 状态变量 ====================
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "State")
+    ECameraState CurrentCameraState = ECameraState::Normal;
+    
+    // 相机跟随控制
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "State")
+    bool bShouldCameraFollowTarget = true;
+    
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "State")
+    bool bShouldCharacterRotateToTarget = true;
+    
+    // 平滑切换状态
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Smooth Switch")
+    bool bIsSmoothSwitching = false;
+    
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Smooth Switch")
+    bool bShouldSmoothSwitchCamera = false;
+    
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Smooth Switch")
+    bool bShouldSmoothSwitchCharacter = false;
+    
+    float SmoothSwitchStartTime = 0.0f;
+    FRotator SmoothSwitchStartRotation = FRotator::ZeroRotator;
+    FRotator SmoothSwitchTargetRotation = FRotator::ZeroRotator;
+    
+    // 自动修正状态
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Auto Correction")
+    bool bIsCameraAutoCorrection = false;
+    
+    float CameraCorrectionStartTime = 0.0f;
+    FRotator CameraCorrectionStartRotation = FRotator::ZeroRotator;
+    FRotator CameraCorrectionTargetRotation = FRotator::ZeroRotator;
+    
+    UPROPERTY()
+    AActor* DelayedCorrectionTarget = nullptr;
+    
+    // 平滑重置状态
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Smooth Reset")
+    bool bIsSmoothCameraReset = false;
+    
+    float SmoothResetStartTime = 0.0f;
+    FRotator SmoothResetStartRotation = FRotator::ZeroRotator;
+    FRotator SmoothResetTargetRotation = FRotator::ZeroRotator;
+    
+    // 组件引用
+    UPROPERTY()
+    ACharacter* OwnerCharacter;
+    
+    UPROPERTY()
+    AController* OwnerController;
+    
+    // 常量定义
+    static constexpr float CHARACTER_ROTATION_SPEED = 10.0f;
+    static constexpr float TARGET_SWITCH_ANGLE_THRESHOLD = 20.0f;
+    static constexpr float TARGET_SWITCH_SMOOTH_SPEED = 3.0f;
+    static constexpr float LOCK_COMPLETION_THRESHOLD = 5.0f;
+    static constexpr float CAMERA_AUTO_CORRECTION_SPEED = 7.0f;
+    static constexpr float CAMERA_CORRECTION_OFFSET = 150.0f;
+    static constexpr float CAMERA_RESET_SPEED = 7.0f;
+    static constexpr float CAMERA_RESET_ANGLE_THRESHOLD = 1.0f;
+
+private:
+    // 内部辅助函数
+    void UpdateOwnerReferences();
+    void UpdateCameraState();
+    bool IsPlayerProvidingInput(float TurnInput, float LookUpInput) const;
+    void InterruptActiveOperations();
+};
+
+第2步：创建相机控制组件实现文件
+创建新文件 CameraControlComponent.cpp：
+
+#include "CameraControlComponent.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/Controller.h"
+#include "GameFramework/PlayerController.h"
+#include "Engine/World.h"
+#include "Kismet/KismetMathLibrary.h"
+#include "LockOnMathUtils.h"
+
+UCameraControlComponent::UCameraControlComponent()
+{
+    PrimaryComponentTick.bCanEverTick = true;
+}
+
+void UCameraControlComponent::BeginPlay()
+{
+    Super::BeginPlay();
+    UpdateOwnerReferences();
+}
+
+void UCameraControlComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+    Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+    
+    // 根据当前状态执行相应的更新逻辑
+    switch (CurrentCameraState)
+    {
+    case ECameraState::SmoothReset:
+        UpdateSmoothCameraReset();
+        break;
+    case ECameraState::AutoCorrection:
+        UpdateCameraAutoCorrection();
+        break;
+    case ECameraState::SmoothSwitching:
+        UpdateSmoothTargetSwitch();
+        break;
+    default:
+        break;
+    }
+}
+
+void UCameraControlComponent::UpdateLockOnCamera(AActor* Target)
+{
+    // 从MyCharacter.cpp复制UpdateLockOnCamera的完整实现
+    if (!Target || !OwnerController)
+        return;
+
+    if (!bShouldCameraFollowTarget)
+    {
+        return;
+    }
+
+    APlayerController* PlayerController = Cast<APlayerController>(OwnerController);
+    if (!PlayerController)
+        return;
+
+    FVector PlayerLocation = OwnerCharacter->GetActorLocation();
+    FVector TargetLocation = Target->GetActorLocation();
+    TargetLocation += CameraSettings.TargetLocationOffset;
+
+    FRotator LookAtRotation = UKismetMathLibrary::FindLookAtRotation(PlayerLocation, TargetLocation);
+    FRotator CurrentRotation = OwnerController->GetControlRotation();
+    FRotator NewRotation;
+    
+    float DeltaTime = GetWorld()->GetDeltaSeconds();
+    
+    if (CameraSettings.bEnableSmoothCameraTracking)
+    {
+        switch (CameraSettings.CameraTrackingMode)
+        {
+        case 0: // 完全跟踪
+            NewRotation = FMath::RInterpTo(CurrentRotation, LookAtRotation, DeltaTime, CameraSettings.CameraInterpSpeed);
+            break;
+        case 1: // 仅水平跟踪
+            {
+                FRotator HorizontalLookAt = FRotator(CurrentRotation.Pitch, LookAtRotation.Yaw, CurrentRotation.Roll);
+                NewRotation = FMath::RInterpTo(CurrentRotation, HorizontalLookAt, DeltaTime, CameraSettings.CameraInterpSpeed);
+            }
+            break;
+        default:
+            NewRotation = FMath::RInterpTo(CurrentRotation, LookAtRotation, DeltaTime, CameraSettings.CameraInterpSpeed);
+            break;
+        }
+    }
+    else
+    {
+        NewRotation = LookAtRotation;
+    }
+    
+    OwnerController->SetControlRotation(NewRotation);
+
+    if (bShouldCharacterRotateToTarget)
+    {
+        FRotator CharacterRotation = FMath::RInterpTo(OwnerCharacter->GetActorRotation(), FRotator(0, LookAtRotation.Yaw, 0), 
+            DeltaTime, CHARACTER_ROTATION_SPEED);
+        OwnerCharacter->SetActorRotation(CharacterRotation);
+    }
+}
+
+void UCameraControlComponent::StartSmoothTargetSwitch(AActor* NewTarget)
+{
+    // 从MyCharacter.cpp复制StartSmoothTargetSwitch的完整实现
+    if (!NewTarget || !OwnerController)
+        return;
+
+    float AngleDifference = CalculateAngleToTarget(NewTarget);
+
+    if (AngleDifference <= TARGET_SWITCH_ANGLE_THRESHOLD)
+    {
+        bShouldCameraFollowTarget = false;
+        bShouldCharacterRotateToTarget = false;
+        bIsSmoothSwitching = false;
+        CurrentCameraState = ECameraState::LockedOn;
+    }
+    else
+    {
+        bIsSmoothSwitching = true;
+        bShouldSmoothSwitchCamera = true;
+        bShouldSmoothSwitchCharacter = true;
+        CurrentCameraState = ECameraState::SmoothSwitching;
+        
+        SmoothSwitchStartTime = GetWorld()->GetTimeSeconds();
+        SmoothSwitchStartRotation = OwnerController->GetControlRotation();
+        
+        FVector PlayerLocation = OwnerCharacter->GetActorLocation();
+        FVector TargetLocation = NewTarget->GetActorLocation();
+        SmoothSwitchTargetRotation = UKismetMathLibrary::FindLookAtRotation(PlayerLocation, TargetLocation);
+        
+        bShouldCameraFollowTarget = false;
+        bShouldCharacterRotateToTarget = false;
+    }
+}
+
+void UCameraControlComponent::StartSmoothCameraReset()
+{
+    // 从MyCharacter.cpp复制StartSmoothCameraReset的完整实现
+    if (!OwnerController)
+        return;
+        
+    FRotator TargetRotation = OwnerCharacter->GetActorRotation() + FRotator(-10.0f, 0.0f, 0.0f);
+    
+    bIsSmoothCameraReset = true;
+    CurrentCameraState = ECameraState::SmoothReset;
+    SmoothResetStartTime = GetWorld()->GetTimeSeconds();
+    SmoothResetStartRotation = OwnerController->GetControlRotation();
+    SmoothResetTargetRotation = TargetRotation;
+}
+
+void UCameraControlComponent::HandlePlayerInput(float TurnInput, float LookUpInput)
+{
+    if (IsPlayerProvidingInput(TurnInput, LookUpInput))
+    {
+        InterruptActiveOperations();
+    }
+}
+
+void UCameraControlComponent::HandlePlayerMovement(bool bIsMoving)
+{
+    if (bIsMoving && CurrentCameraState == ECameraState::LockedOn)
+    {
+        if (bIsSmoothSwitching || bIsCameraAutoCorrection)
+        {
+            InterruptActiveOperations();
+        }
+        
+        if (!bShouldCameraFollowTarget)
+        {
+            bShouldCameraFollowTarget = true;
+            bShouldCharacterRotateToTarget = true;
+        }
+    }
+}
+
+// 实现其他所有函数，从MyCharacter.cpp复制相应逻辑...
+
+第3步：在MyCharacter中集成组件
+在 MyCharacter.h 中仅新增以下内容：
+
+// 在文件顶部新增include
+#include "CameraControlComponent.h"
+
+// 在类中新增组件声明（不删除任何现有代码）
+protected:
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    class UCameraControlComponent* CameraControlComponent;
+
+在 MyCharacter.cpp 构造函数中仅新增：
+
+// 在构造函数中新增组件初始化（不删除任何现有代码）
+CameraControlComponent = CreateDefaultSubobject<UCameraControlComponent>(TEXT("CameraControlComponent"));
+
+在 BeginPlay() 中仅新增：
+
+// 初始化组件设置
+if (CameraControlComponent)
+{
+    CameraControlComponent->SetCameraSettings(ModularCameraSettings);
+}
+
+第4步：更新原始函数为组件调用
+将MyCharacter.cpp中的相关函数保留签名，修改实现：
+
+void AMyCharacter::UpdateLockOnCamera()
+{
+    // 保留原函数，改为调用组件
+    if (CameraControlComponent && CurrentLockOnTarget)
+    {
+        CameraControlComponent->UpdateLockOnCamera(CurrentLockOnTarget);
+    }
+}
+
+void AMyCharacter::StartSmoothTargetSwitch(AActor* NewTarget)
+{
+    // 保留原函数，改为调用组件
+    if (CameraControlComponent)
+    {
+        CameraControlComponent->StartSmoothTargetSwitch(NewTarget);
+    }
+}
+
+void AMyCharacter::Turn(float Rate)
+{
+    // 在原函数中添加组件调用
+    if (CameraControlComponent)
+    {
+        CameraControlComponent->HandlePlayerInput(Rate, 0.0f);
+    }
+    
+    // 保留原有的输入处理逻辑...
+}
+
+void AMyCharacter::LookUp(float Rate)
+{
+    // 在原函数中添加组件调用
+    if (CameraControlComponent)
+    {
+        CameraControlComponent->HandlePlayerInput(0.0f, Rate);
+    }
+    
+    // 保留原有的输入处理逻辑...
+}
+
+// 其他相关函数同样处理...
+
+第5步：验证和测试
+编译项目，确保无错误
+测试所有相机控制功能
+验证平滑切换、自动修正、重置功能
+确认锁定时的相机行为完全正常
+预期结果：
+新增了相机控制组件
+MyCharacter保留所有原始函数接口
+相机功能完全兼容，行为一致
+为第4阶段UI管理组件奠定基础
+完成标准：
+ 项目正常编译
+ 所有相机控制功能正常工作
+ 平滑切换和重置功能正确
+ 没有破坏任何现有功能
+ 组件可以独立进行调试和优化
+请严格按照以上要求执行，确保相机控制模块化成功且不影响现有功能。

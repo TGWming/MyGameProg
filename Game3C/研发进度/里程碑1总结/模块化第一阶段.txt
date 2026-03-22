@@ -1,0 +1,123 @@
+🎯 UE4角色代码模块化 - 第1阶段：配置和工具模块
+重要保护措施（必须严格遵守）：
+❌ 绝对不要删除或修改MyCharacter.h和MyCharacter.cpp中的任何现有代码
+❌ 不要修改任何现有函数的签名或实现
+✅ 只能新增文件、新增#include和新增组件声明
+✅ 所有原始功能必须保持100%兼容
+✅ 每次修改后必须能够正常编译和运行
+任务目标：
+创建两个独立的工具模块，为后续模块化奠定基础。
+
+第1步：创建锁定配置结构体
+创建新文件 LockOnConfig.h：
+
+#pragma once
+#include "CoreMinimal.h"
+#include "Engine/DataAsset.h"
+#include "LockOnConfig.generated.h"
+
+USTRUCT(BlueprintType)
+struct SOUL_API FLockOnSettings
+{
+    GENERATED_BODY()
+
+    // 从MyCharacter.h复制所有锁定相关的配置参数
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LockOn")
+    float LockOnRange = 2000.0f;
+    
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LockOn")
+    float LockOnAngle = 120.0f;
+    
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LockOn")
+    float SectorLockAngle = 100.0f;
+    
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LockOn")
+    float EdgeDetectionAngle = 120.0f;
+    
+    // 添加其他所有相关配置...
+};
+
+USTRUCT(BlueprintType)
+struct SOUL_API FCameraSettings
+{
+    GENERATED_BODY()
+
+    // 从MyCharacter.h复制所有相机相关的配置参数
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
+    float CameraInterpSpeed = 5.0f;
+    
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
+    bool bEnableSmoothCameraTracking = true;
+    
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
+    FVector TargetLocationOffset = FVector(0.0f, 0.0f, -450.0f);
+    
+    // 添加其他所有相关配置...
+};
+
+第2步：创建数学工具类
+创建新文件 LockOnMathUtils.h：
+
+#pragma once
+#include "CoreMinimal.h"
+#include "Kismet/BlueprintFunctionLibrary.h"
+#include "LockOnMathUtils.generated.h"
+
+UCLASS()
+class SOUL_API ULockOnMathUtils : public UBlueprintFunctionLibrary
+{
+    GENERATED_BODY()
+
+public:
+    // 从MyCharacter.cpp提取所有数学计算函数
+    UFUNCTION(BlueprintCallable, Category = "LockOn Utils")
+    static float CalculateAngleToTarget(AActor* Player, AActor* Target, AController* Controller);
+    
+    UFUNCTION(BlueprintCallable, Category = "LockOn Utils")
+    static float CalculateDirectionAngle(AActor* Player, AActor* Target, AController* Controller);
+    
+    UFUNCTION(BlueprintCallable, Category = "LockOn Utils")
+    static bool IsTargetInSectorLockZone(AActor* Player, AActor* Target, AController* Controller, float SectorAngle);
+    
+    UFUNCTION(BlueprintCallable, Category = "LockOn Utils")
+    static bool IsTargetInEdgeDetectionZone(AActor* Player, AActor* Target, AController* Controller, float EdgeAngle, float SectorAngle);
+    
+    UFUNCTION(BlueprintCallable, Category = "LockOn Utils")
+    static FVector2D ProjectSocketToScreen(const FVector& SocketWorldLocation, APlayerController* PC);
+    
+    // 添加其他工具函数...
+};
+创建对应的 LockOnMathUtils.cpp，将MyCharacter.cpp中相应的计算逻辑复制过来。
+
+第3步：更新MyCharacter类（仅新增）
+在 MyCharacter.h 中仅新增以下内容（不删除任何现有代码）：
+
+// 在文件顶部新增include
+#include "LockOnConfig.h"
+#include "LockOnMathUtils.h"
+
+// 在类中新增配置实例（不删除原有参数）
+UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LockOn Modular")
+FLockOnSettings ModularLockOnSettings;
+
+UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Modular")
+FCameraSettings ModularCameraSettings;
+
+第4步：验证和测试
+编译项目，确保无错误
+测试所有锁定功能，确保行为完全一致
+确认MyCharacter的所有原始功能正常工作
+预期结果：
+新增了2个工具文件
+MyCharacter.h只增加了几行代码
+MyCharacter.cpp完全未改动
+所有原始功能保持不变
+为第2阶段的组件化奠定了基础
+完成标准：
+ 项目正常编译
+ 所有锁定功能正常工作
+ 没有破坏任何现有功能
+ 新工具类可以正常调用
+请严格按照以上要求执行，如有任何疑问，请先询问再动手修改代码。
+
+

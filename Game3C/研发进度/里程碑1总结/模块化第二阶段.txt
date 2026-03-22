@@ -1,0 +1,288 @@
+🎯 UE4角色代码模块化 - 第2阶段：目标检测组件
+
+重要保护措施（必须严格遵守）：
+❌ 绝对不要删除或修改MyCharacter.h和MyCharacter.cpp中的任何现有代码
+❌ 不要修改任何现有函数的签名
+✅ 只能新增组件文件和在MyCharacter中新增组件声明
+✅ 原始函数保留，内容改为调用组件方法
+✅ 确保所有原始功能100%兼容
+任务目标：
+创建目标检测组件，将目标搜索、验证和排序逻辑模块化。
+
+第1步：创建目标检测组件头文件
+创建新文件 TargetDetectionComponent.h：
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Components/ActorComponent.h"
+#include "Components/SphereComponent.h"
+#include "LockOnConfig.h"
+#include "TargetDetectionComponent.generated.h"
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTargetsUpdated, const TArray<AActor*>&, NewTargets);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnValidTargetFound, AActor*, Target);
+
+UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
+class SOUL_API UTargetDetectionComponent : public UActorComponent
+{
+    GENERATED_BODY()
+
+public:    
+    UTargetDetectionComponent();
+
+protected:
+    virtual void BeginPlay() override;
+
+public:    
+    virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+
+    // ==================== 公共接口 ====================
+    UFUNCTION(BlueprintCallable, Category = "Target Detection")
+    void FindLockOnCandidates();
+    
+    UFUNCTION(BlueprintCallable, Category = "Target Detection")
+    bool IsValidLockOnTarget(AActor* Target);
+    
+    UFUNCTION(BlueprintCallable, Category = "Target Detection")
+    bool IsTargetStillLockable(AActor* Target);
+    
+    UFUNCTION(BlueprintCallable, Category = "Target Detection")
+    AActor* GetBestTargetFromList(const TArray<AActor*>& TargetList);
+    
+    UFUNCTION(BlueprintCallable, Category = "Target Detection")
+    AActor* GetBestSectorLockTarget();
+    
+    UFUNCTION(BlueprintCallable, Category = "Target Detection")
+    AActor* TryGetSectorLockTarget();
+    
+    UFUNCTION(BlueprintCallable, Category = "Target Detection")
+    AActor* TryGetCameraCorrectionTarget();
+    
+    UFUNCTION(BlueprintCallable, Category = "Target Detection")
+    void SortCandidatesByDirection(TArray<AActor*>& Targets);
+    
+    UFUNCTION(BlueprintCallable, Category = "Target Detection")
+    bool HasCandidatesInSphere();
+
+    // ==================== 属性访问器 ====================
+    UFUNCTION(BlueprintCallable, Category = "Target Detection")
+    const TArray<AActor*>& GetLockOnCandidates() const { return LockOnCandidates; }
+    
+    UFUNCTION(BlueprintCallable, Category = "Target Detection")
+    void SetLockOnSettings(const FLockOnSettings& NewSettings) { LockOnSettings = NewSettings; }
+    
+    UFUNCTION(BlueprintCallable, Category = "Target Detection")
+    void SetDetectionSphere(USphereComponent* NewSphere) { LockOnDetectionSphere = NewSphere; }
+
+    // ==================== 事件委托 ====================
+    UPROPERTY(BlueprintAssignable, Category = "Target Detection")
+    FOnTargetsUpdated OnTargetsUpdated;
+    
+    UPROPERTY(BlueprintAssignable, Category = "Target Detection")
+    FOnValidTargetFound OnValidTargetFound;
+
+protected:
+    // ==================== 配置 ====================
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings")
+    FLockOnSettings LockOnSettings;
+    
+    // ==================== 状态 ====================
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "State")
+    TArray<AActor*> LockOnCandidates;
+    
+    UPROPERTY()
+    USphereComponent* LockOnDetectionSphere;
+    
+    UPROPERTY()
+    ACharacter* OwnerCharacter;
+    
+    UPROPERTY()
+    AController* OwnerController;
+    
+    // 性能优化
+    float LastFindTargetsTime = 0.0f;
+    static constexpr float TARGET_SEARCH_INTERVAL = 0.2f;
+    static constexpr float RAYCAST_HEIGHT_OFFSET = 50.0f;
+    static constexpr float EXTENDED_LOCK_RANGE_MULTIPLIER = 1.5f;
+
+private:
+    // 内部辅助函数
+    void UpdateOwnerReferences();
+    bool PerformLineOfSightCheck(AActor* Target) const;
+    float CalculateTargetScore(AActor* Target) const;
+};
+
+第2步：创建目标检测组件实现文件
+创建新文件 TargetDetectionComponent.cpp：
+
+#include "TargetDetectionComponent.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/Controller.h"
+#include "Engine/World.h"
+#include "DrawDebugHelpers.h"
+#include "LockOnMathUtils.h"
+#include "EngineUtils.h"
+
+UTargetDetectionComponent::UTargetDetectionComponent()
+{
+    PrimaryComponentTick.bCanEverTick = true;
+    PrimaryComponentTick.TickInterval = TARGET_SEARCH_INTERVAL;
+}
+
+void UTargetDetectionComponent::BeginPlay()
+{
+    Super::BeginPlay();
+    UpdateOwnerReferences();
+}
+
+void UTargetDetectionComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+    Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+    
+    // 定期更新目标候选列表
+    float CurrentTime = GetWorld()->GetTimeSeconds();
+    if (CurrentTime - LastFindTargetsTime > TARGET_SEARCH_INTERVAL)
+    {
+        FindLockOnCandidates();
+        LastFindTargetsTime = CurrentTime;
+    }
+}
+
+void UTargetDetectionComponent::FindLockOnCandidates()
+{
+    // 从MyCharacter.cpp复制FindLockOnCandidates的完整实现
+    LockOnCandidates.Empty();
+
+    if (!LockOnDetectionSphere || !OwnerCharacter)
+    {
+        return;
+    }
+
+    TArray<AActor*> OverlappingActors;
+    LockOnDetectionSphere->GetOverlappingActors(OverlappingActors, APawn::StaticClass());
+
+    TArray<AActor*> ValidTargets;
+    
+    for (AActor* Actor : OverlappingActors)
+    {
+        if (IsValidLockOnTarget(Actor))
+        {
+            ValidTargets.Add(Actor);
+        }
+    }
+
+    if (ValidTargets.Num() > 1)
+    {
+        SortCandidatesByDirection(ValidTargets);
+    }
+
+    LockOnCandidates = ValidTargets;
+    
+    // 触发事件
+    OnTargetsUpdated.Broadcast(LockOnCandidates);
+}
+
+bool UTargetDetectionComponent::IsValidLockOnTarget(AActor* Target)
+{
+    // 从MyCharacter.cpp复制IsValidLockOnTarget的完整实现
+    if (!Target || !OwnerCharacter || Target == OwnerCharacter)
+    {
+        return false;
+    }
+
+    if (Target->ActorHasTag(FName("Friendly")) || Target->ActorHasTag(FName("Player")))
+    {
+        return false;
+    }
+
+    if (APawn* TargetPawn = Cast<APawn>(Target))
+    {
+        if (!IsValid(TargetPawn) || TargetPawn->IsPendingKill())
+        {
+            return false;
+        }
+    }
+
+    FVector PlayerLocation = OwnerCharacter->GetActorLocation();
+    FVector TargetLocation = Target->GetActorLocation();
+
+    float Distance = FVector::Dist(PlayerLocation, TargetLocation);
+    if (Distance > LockOnSettings.LockOnRange)
+    {
+        return false;
+    }
+
+    return PerformLineOfSightCheck(Target);
+}
+
+// 实现其他所有函数，从MyCharacter.cpp复制相应逻辑...
+
+第3步：在MyCharacter中集成组件
+在 MyCharacter.h 中仅新增以下内容：
+
+// 在文件顶部新增include
+#include "TargetDetectionComponent.h"
+
+// 在类中新增组件声明（不删除任何现有代码）
+protected:
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    class UTargetDetectionComponent* TargetDetectionComponent;
+
+在 MyCharacter.cpp 构造函数中仅新增：
+
+// 在构造函数中新增组件初始化（不删除任何现有代码）
+TargetDetectionComponent = CreateDefaultSubobject<UTargetDetectionComponent>(TEXT("TargetDetectionComponent"));
+
+在 BeginPlay() 中仅新增：
+
+// 初始化组件设置
+if (TargetDetectionComponent)
+{
+    TargetDetectionComponent->SetLockOnSettings(ModularLockOnSettings);
+    TargetDetectionComponent->SetDetectionSphere(LockOnDetectionSphere);
+}
+
+第4步：更新原始函数为组件调用
+将MyCharacter.cpp中的相关函数保留签名，修改实现：
+
+void AMyCharacter::FindLockOnCandidates()
+{
+    // 保留原函数，改为调用组件
+    if (TargetDetectionComponent)
+    {
+        TargetDetectionComponent->FindLockOnCandidates();
+        // 同步候选列表到原始变量（保持兼容性）
+        LockOnCandidates = TargetDetectionComponent->GetLockOnCandidates();
+    }
+}
+
+bool AMyCharacter::IsValidLockOnTarget(AActor* Target)
+{
+    // 保留原函数，改为调用组件
+    if (TargetDetectionComponent)
+    {
+        return TargetDetectionComponent->IsValidLockOnTarget(Target);
+    }
+    return false;
+}
+
+// 其他相关函数同样处理...
+
+第5步：验证和测试
+编译项目，确保无错误
+测试所有目标检测功能
+验证锁定系统完全正常工作
+确认候选目标列表更新正确
+预期结果：
+新增了目标检测组件
+MyCharacter保留所有原始函数接口
+功能完全兼容，行为一致
+为第3阶段相机控制组件奠定基础
+完成标准：
+ 项目正常编译
+ 目标检测功能正常工作
+ 锁定候选目标显示正确
+ 没有破坏任何现有功能
+ 组件可以独立进行调试和优化
+请严格按照以上要求执行，确保每一步都能正常编译和运行。

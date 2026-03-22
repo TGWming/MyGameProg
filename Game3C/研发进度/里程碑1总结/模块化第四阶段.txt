@@ -1,0 +1,564 @@
+Copilot said: ## 🎯 **UE4角色代码模块化 - 第4阶段：UI管理和Socket投射组件** ### **重要保护措施（必须严格遵守）：** 1. ❌
+🎯 UE4角色代码模块化 - 第4阶段：UI管理和Socket投射组件
+
+重要保护措施（必须严格遵守）：
+❌ 绝对不要删除或修改MyCharacter.h和MyCharacter.cpp中的任何现有代码
+❌ 不要修改任何现有函数的签名
+✅ 只能新增组件文件和在MyCharacter中新增组件声明
+✅ 原始函数保留，内容改为调用组件方法
+✅ 确保所有原始功能100%兼容
+任务目标：
+创建UI管理组件，将UMG控件管理、Socket投射系统和锁定UI显示逻辑模块化。
+
+第1步：创建UI管理组件头文件
+创建新文件 UIManagerComponent.h：
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Components/ActorComponent.h"
+#include "Blueprint/UserWidget.h"
+#include "Components/WidgetComponent.h"
+#include "Components/CanvasPanelSlot.h"
+#include "LockOnConfig.h"
+#include "UIManagerComponent.generated.h"
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnLockOnWidgetShown, AActor*, Target);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnLockOnWidgetHidden, AActor*, Target);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnSocketProjectionUpdated, AActor*, Target, FVector2D, ScreenPosition);
+
+UENUM(BlueprintType)
+enum class EUIDisplayMode : uint8
+{
+    Traditional3D      UMETA(DisplayName = "Traditional 3D Widget"),
+    SocketProjection   UMETA(DisplayName = "Socket Projection"),
+    ScreenSpace        UMETA(DisplayName = "Screen Space Widget")
+};
+
+UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
+class SOUL_API UUIManagerComponent : public UActorComponent
+{
+    GENERATED_BODY()
+
+public:    
+    UUIManagerComponent();
+
+protected:
+    virtual void BeginPlay() override;
+
+public:    
+    virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+
+    // ==================== 核心UI管理接口 ====================
+    UFUNCTION(BlueprintCallable, Category = "UI Manager")
+    void ShowLockOnWidget(AActor* Target);
+    
+    UFUNCTION(BlueprintCallable, Category = "UI Manager")
+    void HideLockOnWidget();
+    
+    UFUNCTION(BlueprintCallable, Category = "UI Manager")
+    void HideAllLockOnWidgets();
+    
+    UFUNCTION(BlueprintCallable, Category = "UI Manager")
+    void UpdateLockOnWidget(AActor* CurrentTarget, AActor* PreviousTarget);
+    
+    // ==================== Socket投射系统接口 ====================
+    UFUNCTION(BlueprintCallable, Category = "Socket Projection")
+    FVector GetTargetSocketWorldLocation(AActor* Target) const;
+    
+    UFUNCTION(BlueprintCallable, Category = "Socket Projection")
+    bool HasValidSocket(AActor* Target) const;
+    
+    UFUNCTION(BlueprintCallable, Category = "Socket Projection")
+    FVector2D ProjectSocketToScreen(const FVector& SocketWorldLocation) const;
+    
+    UFUNCTION(BlueprintCallable, Category = "Socket Projection")
+    void ShowSocketProjectionWidget(AActor* Target);
+    
+    UFUNCTION(BlueprintCallable, Category = "Socket Projection")
+    void UpdateSocketProjectionWidget(AActor* Target);
+    
+    UFUNCTION(BlueprintCallable, Category = "Socket Projection")
+    void HideSocketProjectionWidget();
+    
+    // ==================== 调试和诊断接口 ====================
+    UFUNCTION(BlueprintCallable, Category = "UI Debug")
+    void DebugWidgetSetup();
+    
+    UFUNCTION(BlueprintCallable, Category = "UI Debug")
+    void LogWidgetState(const FString& Context);
+    
+    UFUNCTION(BlueprintCallable, Category = "UI Debug")
+    bool ValidateWidgetClass() const;
+    
+    // ==================== 配置和设置接口 ====================
+    UFUNCTION(BlueprintCallable, Category = "UI Settings")
+    void SetLockOnWidgetClass(TSubclassOf<UUserWidget> NewWidgetClass);
+    
+    UFUNCTION(BlueprintCallable, Category = "UI Settings")
+    void SetDisplayMode(EUIDisplayMode NewMode) { CurrentDisplayMode = NewMode; }
+    
+    UFUNCTION(BlueprintCallable, Category = "UI Settings")
+    void SetSocketProjectionSettings(const FName& SocketName, const FVector& Offset, float Scale);
+    
+    UFUNCTION(BlueprintCallable, Category = "UI Settings")
+    void SetUseSocketProjection(bool bEnable) { bUseSocketProjection = bEnable; }
+    
+    // ==================== 状态查询接口 ====================
+    UFUNCTION(BlueprintCallable, Category = "UI State")
+    bool IsWidgetCurrentlyShown() const;
+    
+    UFUNCTION(BlueprintCallable, Category = "UI State")
+    AActor* GetCurrentWidgetTarget() const { return CurrentWidgetTarget; }
+    
+    UFUNCTION(BlueprintCallable, Category = "UI State")
+    EUIDisplayMode GetDisplayMode() const { return CurrentDisplayMode; }
+    
+    UFUNCTION(BlueprintCallable, Category = "UI State")
+    bool IsSocketProjectionEnabled() const { return bUseSocketProjection; }
+    
+    // ==================== 事件委托 ====================
+    UPROPERTY(BlueprintAssignable, Category = "UI Events")
+    FOnLockOnWidgetShown OnLockOnWidgetShown;
+    
+    UPROPERTY(BlueprintAssignable, Category = "UI Events")
+    FOnLockOnWidgetHidden OnLockOnWidgetHidden;
+    
+    UPROPERTY(BlueprintAssignable, Category = "UI Events")
+    FOnSocketProjectionUpdated OnSocketProjectionUpdated;
+
+protected:
+    // ==================== UI配置 ====================
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI Configuration")
+    TSubclassOf<UUserWidget> LockOnWidgetClass;
+    
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI Configuration")
+    EUIDisplayMode CurrentDisplayMode = EUIDisplayMode::SocketProjection;
+    
+    // ==================== Socket投射配置 ====================
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Socket Projection")
+    FName TargetSocketName = TEXT("Spine2Socket");
+    
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Socket Projection")
+    FVector SocketOffset = FVector(0.0f, 0.0f, 50.0f);
+    
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Socket Projection")
+    float ProjectionScale = 1.0f;
+    
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Socket Projection")
+    bool bUseSocketProjection = true;
+    
+    // ==================== UI状态管理 ====================
+    UPROPERTY()
+    UUserWidget* LockOnWidgetInstance;
+    
+    UPROPERTY()
+    AActor* CurrentWidgetTarget;
+    
+    UPROPERTY()
+    AActor* PreviousWidgetTarget;
+    
+    UPROPERTY()
+    TMap<AActor*, UWidgetComponent*> TargetWidgetComponents;
+    
+    // ==================== 组件引用 ====================
+    UPROPERTY()
+    ACharacter* OwnerCharacter;
+    
+    UPROPERTY()
+    APlayerController* OwnerPlayerController;
+    
+    // ==================== 调试选项 ====================
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
+    bool bEnableUIDebugLogs = false;
+    
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
+    bool bShowSocketProjectionDebug = false;
+
+private:
+    // ==================== 内部辅助函数 ====================
+    void UpdateOwnerReferences();
+    bool CallWidgetUpdateFunction(const FVector2D& ScreenPosition);
+    void FindAndCacheWidgetComponents(AActor* Target);
+    void CleanupWidgetInstance();
+    void HandleTraditional3DWidget(AActor* Target);
+    void HandleScreenSpaceWidget(AActor* Target);
+    bool TryFindWidgetClassAtRuntime();
+    void LogSocketProjectionDetails(AActor* Target, const FVector& SocketLocation, const FVector2D& ScreenPosition) const;
+    
+    // Widget更新函数的参数检查
+    bool ValidateWidgetUpdateFunction(UFunction* UpdateFunction) const;
+    void SetWidgetParameterValue(UFunction* UpdateFunction, uint8* Params, const FVector2D& ScreenPosition) const;
+};
+
+第2步：创建UI管理组件实现文件
+创建新文件 UIManagerComponent.cpp：
+
+#include "UIManagerComponent.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/PlayerController.h"
+#include "Engine/World.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Blueprint/WidgetBlueprintLibrary.h"
+#include "UObject/UObjectGlobals.h"
+#include "Engine/Engine.h"
+
+UUIManagerComponent::UUIManagerComponent()
+{
+    PrimaryComponentTick.bCanEverTick = true;
+    PrimaryComponentTick.TickInterval = 0.016f; // ~60 FPS for UI updates
+}
+
+void UUIManagerComponent::BeginPlay()
+{
+    Super::BeginPlay();
+    UpdateOwnerReferences();
+    
+    if (bEnableUIDebugLogs)
+    {
+        DebugWidgetSetup();
+    }
+}
+
+void UUIManagerComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+    Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+    
+    // 如果有当前目标且使用Socket投射，持续更新位置
+    if (CurrentWidgetTarget && bUseSocketProjection && LockOnWidgetInstance && LockOnWidgetInstance->IsInViewport())
+    {
+        UpdateSocketProjectionWidget(CurrentWidgetTarget);
+    }
+}
+
+void UUIManagerComponent::ShowLockOnWidget(AActor* Target)
+{
+    // 从MyCharacter.cpp复制ShowLockOnWidget的完整实现
+    if (!Target)
+        return;
+
+    // 首先隐藏所有现有的锁定UI
+    HideAllLockOnWidgets();
+
+    CurrentWidgetTarget = Target;
+
+    // 根据显示模式选择相应的UI系统
+    switch (CurrentDisplayMode)
+    {
+    case EUIDisplayMode::SocketProjection:
+        if (bUseSocketProjection)
+        {
+            ShowSocketProjectionWidget(Target);
+            break;
+        }
+        // Fall through to Traditional3D if socket projection is disabled
+    case EUIDisplayMode::Traditional3D:
+        HandleTraditional3DWidget(Target);
+        break;
+    case EUIDisplayMode::ScreenSpace:
+        HandleScreenSpaceWidget(Target);
+        break;
+    }
+
+    // 触发事件
+    OnLockOnWidgetShown.Broadcast(Target);
+    PreviousWidgetTarget = Target;
+    
+    if (bEnableUIDebugLogs)
+    {
+        LogWidgetState(TEXT("ShowLockOnWidget"));
+    }
+}
+
+void UUIManagerComponent::ShowSocketProjectionWidget(AActor* Target)
+{
+    // 从MyCharacter.cpp复制ShowSocketProjectionWidget的完整实现
+    if (!Target)
+    {
+        UE_LOG(LogTemp, Error, TEXT("ShowSocketProjectionWidget: No target specified"));
+        return;
+    }
+
+    // 如果没有设置Widget类，尝试运行时查找
+    if (!LockOnWidgetClass)
+    {
+        if (!TryFindWidgetClassAtRuntime())
+        {
+            UE_LOG(LogTemp, Error, TEXT("ShowSocketProjectionWidget: Could not find any valid Widget class"));
+            return;
+        }
+    }
+
+    if (!OwnerPlayerController)
+    {
+        UE_LOG(LogTemp, Error, TEXT("ShowSocketProjectionWidget: No valid PlayerController"));
+        return;
+    }
+
+    // 清理现有实例
+    CleanupWidgetInstance();
+
+    // 创建新的Widget实例
+    LockOnWidgetInstance = CreateWidget<UUserWidget>(OwnerPlayerController, LockOnWidgetClass);
+    if (LockOnWidgetInstance)
+    {
+        LockOnWidgetInstance->AddToViewport();
+        
+        // 立即更新一次位置
+        UpdateSocketProjectionWidget(Target);
+        
+        if (bEnableUIDebugLogs)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("Socket projection widget created for target: %s"), *Target->GetName());
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create UMG widget instance"));
+    }
+}
+
+void UUIManagerComponent::UpdateSocketProjectionWidget(AActor* Target)
+{
+    // 从MyCharacter.cpp复制UpdateSocketProjectionWidget的完整实现
+    if (!Target || !LockOnWidgetInstance || !LockOnWidgetInstance->IsInViewport())
+        return;
+
+    // 获取Socket世界位置
+    FVector SocketWorldLocation = GetTargetSocketWorldLocation(Target);
+    
+    // 投射到屏幕坐标
+    FVector2D ScreenPosition = ProjectSocketToScreen(SocketWorldLocation);
+    
+    // 检查投射是否成功
+    if (ScreenPosition != FVector2D::ZeroVector)
+    {
+        // 调用UMG更新函数
+        if (CallWidgetUpdateFunction(ScreenPosition))
+        {
+            // 确保Widget可见
+            if (!LockOnWidgetInstance->IsVisible())
+            {
+                LockOnWidgetInstance->SetVisibility(ESlateVisibility::Visible);
+            }
+            
+            // 触发事件
+            OnSocketProjectionUpdated.Broadcast(Target, ScreenPosition);
+            
+            if (bShowSocketProjectionDebug)
+            {
+                LogSocketProjectionDetails(Target, SocketWorldLocation, ScreenPosition);
+            }
+        }
+    }
+    else
+    {
+        // 目标在屏幕外，隐藏Widget
+        if (LockOnWidgetInstance->IsVisible())
+        {
+            LockOnWidgetInstance->SetVisibility(ESlateVisibility::Hidden);
+        }
+    }
+}
+
+FVector UUIManagerComponent::GetTargetSocketWorldLocation(AActor* Target) const
+{
+    // 从MyCharacter.cpp复制GetTargetSocketWorldLocation的完整实现
+    if (!Target)
+    {
+        return FVector::ZeroVector;
+    }
+
+    USkeletalMeshComponent* SkeletalMesh = Target->FindComponentByClass<USkeletalMeshComponent>();
+    if (SkeletalMesh && SkeletalMesh->DoesSocketExist(TargetSocketName))
+    {
+        FVector SocketLocation = SkeletalMesh->GetSocketLocation(TargetSocketName);
+        return SocketLocation + SocketOffset;
+    }
+    else
+    {
+        return Target->GetActorLocation() + SocketOffset;
+    }
+}
+
+bool UUIManagerComponent::HasValidSocket(AActor* Target) const
+{
+    // 从MyCharacter.cpp复制HasValidSocket的完整实现
+    if (!Target)
+    {
+        return false;
+    }
+
+    USkeletalMeshComponent* SkeletalMesh = Target->FindComponentByClass<USkeletalMeshComponent>();
+    if (SkeletalMesh)
+    {
+        return SkeletalMesh->DoesSocketExist(TargetSocketName);
+    }
+
+    return false;
+}
+
+FVector2D UUIManagerComponent::ProjectSocketToScreen(const FVector& SocketWorldLocation) const
+{
+    // 从MyCharacter.cpp复制ProjectSocketToScreen的完整实现
+    if (!OwnerPlayerController)
+    {
+        return FVector2D::ZeroVector;
+    }
+
+    FVector2D ScreenLocation;
+    bool bProjected = OwnerPlayerController->ProjectWorldLocationToScreen(SocketWorldLocation, ScreenLocation);
+    
+    return bProjected ? ScreenLocation : FVector2D::ZeroVector;
+}
+
+void UUIManagerComponent::HideAllLockOnWidgets()
+{
+    // 从MyCharacter.cpp复制HideAllLockOnWidgets的完整实现
+    
+    // 隐藏Socket投射Widget
+    if (bUseSocketProjection)
+    {
+        HideSocketProjectionWidget();
+    }
+
+    // 隐藏传统3D Widget组件
+    for (auto& WidgetPair : TargetWidgetComponents)
+    {
+        if (IsValid(WidgetPair.Value) && WidgetPair.Value->IsVisible())
+        {
+            WidgetPair.Value->SetVisibility(false);
+        }
+    }
+
+    // 清理屏幕空间Widget
+    CleanupWidgetInstance();
+    
+    CurrentWidgetTarget = nullptr;
+}
+
+void UUIManagerComponent::DebugWidgetSetup()
+{
+    // 从MyCharacter.cpp复制DebugWidgetSetup的完整实现
+    UE_LOG(LogTemp, Warning, TEXT("=== UI MANAGER WIDGET SETUP DEBUG ==="));
+    UE_LOG(LogTemp, Warning, TEXT("LockOnWidgetClass is set: %s"), LockOnWidgetClass ? TEXT("YES") : TEXT("NO"));
+    
+    if (LockOnWidgetClass)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("LockOnWidgetClass name: %s"), *LockOnWidgetClass->GetName());
+        UE_LOG(LogTemp, Warning, TEXT("LockOnWidgetClass path: %s"), *LockOnWidgetClass->GetPathName());
+    }
+    
+    UE_LOG(LogTemp, Warning, TEXT("Current display mode: %d"), static_cast<int32>(CurrentDisplayMode));
+    UE_LOG(LogTemp, Warning, TEXT("Socket projection enabled: %s"), bUseSocketProjection ? TEXT("YES") : TEXT("NO"));
+    UE_LOG(LogTemp, Warning, TEXT("Target Socket Name: %s"), *TargetSocketName.ToString());
+    UE_LOG(LogTemp, Warning, TEXT("Socket Offset: (%.1f, %.1f, %.1f)"), SocketOffset.X, SocketOffset.Y, SocketOffset.Z);
+    UE_LOG(LogTemp, Warning, TEXT("PlayerController available: %s"), OwnerPlayerController ? TEXT("YES") : TEXT("NO"));
+    UE_LOG(LogTemp, Warning, TEXT("========================================"));
+}
+
+// 实现其他所有函数...
+
+第3步：在MyCharacter中集成组件
+在 MyCharacter.h 中仅新增以下内容：
+
+// 在文件顶部新增include
+#include "UIManagerComponent.h"
+
+// 在类中新增组件声明（不删除任何现有代码）
+protected:
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    class UUIManagerComponent* UIManagerComponent;
+
+在 MyCharacter.cpp 构造函数中仅新增：
+
+// 在构造函数中新增组件初始化（不删除任何现有代码）
+UIManagerComponent = CreateDefaultSubobject<UUIManagerComponent>(TEXT("UIManagerComponent"));
+
+在 BeginPlay() 中仅新增：
+
+// 初始化UI组件设置
+if (UIManagerComponent)
+{
+    UIManagerComponent->SetLockOnWidgetClass(LockOnWidgetClass);
+    UIManagerComponent->SetSocketProjectionSettings(TargetSocketName, SocketOffset, ProjectionScale);
+    UIManagerComponent->SetUseSocketProjection(bUseSocketProjection);
+}
+
+第4步：更新原始函数为组件调用
+将MyCharacter.cpp中的相关函数保留签名，修改实现：
+
+void AMyCharacter::ShowLockOnWidget()
+{
+    // 保留原函数，改为调用组件
+    if (UIManagerComponent && CurrentLockOnTarget)
+    {
+        UIManagerComponent->ShowLockOnWidget(CurrentLockOnTarget);
+    }
+}
+
+void AMyCharacter::HideLockOnWidget()
+{
+    // 保留原函数，改为调用组件
+    if (UIManagerComponent)
+    {
+        UIManagerComponent->HideLockOnWidget();
+    }
+}
+
+void AMyCharacter::UpdateLockOnWidget()
+{
+    // 保留原函数，改为调用组件
+    if (UIManagerComponent)
+    {
+        UIManagerComponent->UpdateLockOnWidget(CurrentLockOnTarget, PreviousLockOnTarget);
+    }
+}
+
+FVector AMyCharacter::GetTargetSocketWorldLocation(AActor* Target) const
+{
+    // 保留原函数，改为调用组件
+    if (UIManagerComponent)
+    {
+        return UIManagerComponent->GetTargetSocketWorldLocation(Target);
+    }
+    return FVector::ZeroVector;
+}
+
+void AMyCharacter::DebugWidgetSetup()
+{
+    // 保留原函数，改为调用组件
+    if (UIManagerComponent)
+    {
+        UIManagerComponent->DebugWidgetSetup();
+    }
+}
+
+// 其他UI相关函数同样处理...
+
+第5步：最终验证和清理
+编译项目，确保无错误
+测试所有UI功能，特别是Socket投射系统
+验证UMG Widget正常显示和更新
+确认所有锁定UI行为完全正常
+测试动态Socket投射是否按预期工作
+预期结果：
+✅ 完成了完整的4阶段模块化
+✅ MyCharacter保留所有原始函数接口
+✅ 所有功能模块化且完全兼容
+✅ UMG动态Socket投射正常工作
+✅ 代码结构清晰，便于Copilot分析和优化
+最终完成标准：
+ 项目正常编译
+ 所有UI和Socket投射功能正常工作
+ UMG Widget正确显示和更新位置
+ 锁定系统完整功能保持不变
+ 4个组件可以独立调试和优化
+ MyCharacter类保持完整兼容性
+🎉 模块化完成后的优势：
+Copilot友好 - 每个组件有明确边界，便于上下文扫描
+独立调试 - 可以单独优化某个模块而不影响其他功能
+功能完整 - 所有原始功能100%保留
+扩展性强 - 易于添加新功能或修改现有逻辑
+请严格按照以上要求执行第4阶段，完成整个模块化项目！
+
