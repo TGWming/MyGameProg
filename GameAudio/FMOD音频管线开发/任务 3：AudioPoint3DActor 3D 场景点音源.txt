@@ -1,0 +1,35 @@
+## 项目背景
+UE4.27 + FMOD 2.02 的类魂/血源风格游戏项目。我们正在构建一套 C++ 音频触发系统。Build.cs 已追加 FMOD 依赖，AudioTypes.h 已创建。本任务创建用于关卡中固定位置 3D 音源（火把、水流、雾气等）的 Actor 类。
+
+## 任务
+新建两个文件：
+- Source/YourProject/Public/AudioPoint3DActor.h
+- Source/YourProject/Private/AudioPoint3DActor.cpp
+
+## 类设计要求
+
+### AudioPoint3DActor.h
+- 继承自 AActor
+- 包含以下组件（在构造函数中创建）：
+    - UFMODAudioComponent* AudioComp（根组件）
+- 包含以下 UPROPERTY(EditAnywhere, Category = "Audio Point") 属性：
+    - UFMODEvent* Event = nullptr（要播放的 FMOD 事件）
+    - bool bAutoPlay = true（是否关卡加载后自动播放）
+    - TMap<FName, float> DefaultParams（实例级默认参数）
+- 包含以下 UFUNCTION(BlueprintCallable, Category = "Audio Point") 公开方法：
+    - void PlaySound()
+    - void StopSound(float FadeOutTime = 0.f)
+    - void SetParam(FName ParamName, float Value)
+
+### AudioPoint3DActor.cpp
+- 构造函数：创建 UFMODAudioComponent 并设为 RootComponent
+- BeginPlay：如果 bAutoPlay 为 true 且 Event 不为空，调用 SetEvent 设置事件，遍历 DefaultParams 调用 SetParameter 应用参数，然后调用 Play
+- PlaySound：SetEvent + 应用 DefaultParams + Play
+- StopSound：如果 FadeOutTime > 0 则调用 UFMODAudioComponent 的 Stop 方法（FMOD 的淡出由事件内部 AHDSR 控制），否则直接 Stop
+- SetParam：调用 AudioComp->SetParameter(ParamName, Value)
+
+## 安全约束
+- 不能越界改动其他任何无关代码，禁止使用 PowerShell 以防造成 Copilot 返回断线
+- 需要每一个步骤尽量保证修改代码不超过 10 行
+- 尽量原子化所有步骤，并且保证之间独立
+- 编译方面由我手动执行，Agent 完成任务后只需简约报告是否完成并且完成了什么即可

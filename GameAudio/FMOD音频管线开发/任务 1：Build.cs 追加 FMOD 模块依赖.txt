@@ -1,0 +1,16 @@
+## 项目背景
+UE4.27 + FMOD 2.02 的类魂/血源风格游戏项目。我们正在构建一套 C++ 音频触发系统，包含区域 2D 音频管理、3D 场景点音源、动画驱动音效三个子系统。所有音频播放基于 FMOD Studio UE4 集成插件。
+
+## 任务
+修改项目的 Build.cs 文件（位于 Source/YourProject/YourProject.Build.cs），在 PublicDependencyModuleNames 中追加 "FMODStudio" 模块依赖。
+
+## 具体要求
+- 找到 PublicDependencyModuleNames.AddRange 所���行
+- 在现有模块列表中追加 "FMODStudio"
+- 仅追加这一个字符串，不改动其他任何内容
+
+## 安全约束
+- 不能越界改动其他任何无关代码，禁止使用 PowerShell 以防造成 Copilot 返回断线
+- 需要每一个步骤尽量保证修改代码不超过 10 行
+- 尽量原子化所有步骤，并且保证之间独立
+- 编译方面由我手动执行，Agent 完成任务后只需简约报告是否完成并且完成了什么即可

@@ -1,0 +1,35 @@
+## 项目背景
+UE4.27 + FMOD 2.02 的类魂/血源风格游戏项目。我们正在构建一套 C++ 音频触发系统。Build.cs 已追加 FMOD 依赖。本任务创建用于 AnimMontage 中触发 FMOD 音效的自定义 AnimNotify 类。此类独立于其他音频子系统。
+
+## 任务
+新建两个文件：
+- Source/YourProject/Public/AnimNotify_FMODPlay.h
+- Source/YourProject/Private/AnimNotify_FMODPlay.cpp
+
+## 类设计要求
+
+### AnimNotify_FMODPlay.h
+- 继承自 UAnimNotify
+- 包含以下 UPROPERTY(EditAnywhere, Category = "FMOD") 属性：
+    - UFMODEvent* Event = nullptr（要播放的 FMOD 事件��
+    - bool bFollow = false（是否跟随骨骼移动）
+    - FName AttachBoneName = NAME_None（附着的骨骼名，bFollow 为 true 时生效）
+    - TMap<FName, float> Params（可选参数）
+- 重写 Notify 方法：
+    - virtual void Notify(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation) override
+
+### AnimNotify_FMODPlay.cpp
+- 包含必要头文件：FMODBlueprintStatics.h
+- Notify 实现：
+    - 检查 Event 和 MeshComp 有效性，无效则直接 return
+    - 获取 MeshComp 的 Owner Actor
+    - 如果 bFollow 为 true：使用 UFMODBlueprintStatics::PlayEventAttached 在指定骨骼上播放
+    - 如果 bFollow 为 false：使用 UFMODBlueprintStatics::PlayEventAtLocation 在 Actor 当前位置播放
+    - 播放后遍历 Params，对返回的 UFMODAudioComponent 调用 SetParameter
+- 重写 GetNotifyName_Implementation 返回 FString("FMOD Play") 用于 Montage 编辑器显示名称
+
+## 安全约束
+- 不能越界改动其他任何无关代码，禁止使用 PowerShell 以防造成 Copilot 返回断线
+- 需要每一个步骤尽量保证修改代码不超过 10 行
+- 尽量原子化所有步骤，并且保证之间独立
+- 编译方面由我手动执行，Agent 完成任务后只需简约报告是否完成并且完成了什么即可

@@ -1,0 +1,47 @@
+## 项目背景
+UE4.27 + FMOD 2.02 的类魂/血源风格游戏项目。我们正在构建一套 C++ 音频触发系统。Build.cs 已追加 FMOD 依赖，AudioTypes.h 已创建，AudioManager（或 AudioManagerActor）已创建并提供 EnterZone/ExitZone 方法。本任务创建关卡中的区域碰撞盒 Actor，��只负责标识区域归属并通知 AudioManager。
+
+## 任务
+新建两个文件：
+- Source/YourProject/Public/AudioZoneTrigger.h
+- Source/YourProject/Private/AudioZoneTrigger.cpp
+
+## 类设计要求
+
+### AudioZoneTrigger.h
+- 继承自 AActor
+- 包含以下组件（构造函数中创建）：
+    - UBoxComponent* TriggerBox（根组件，设为碰撞盒）
+- 包含以下 UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio Zone") 属性：
+    - FName ZoneID（关卡设计人员在 Details 面板填写的区域标识）
+- 声明 Overlap 回调函数：
+    - UFUNCTION() void OnBeginOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+    - UFUNCTION() void OnEndOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+
+### AudioZoneTrigger.cpp
+- 构造函数：
+    - 创建 UBoxComponent 设为 RootComponent
+    - 设置碰撞为 OverlapAllDynamic（或 QueryOnly）
+    - 设置默认 BoxExtent 为 FVector(500.f, 500.f, 300.f)
+    - 绑定 OnComponentBeginOverlap 到 OnBeginOverlap
+    - 绑定 OnComponentEndOverlap 到 OnEndOverlap
+- OnBeginOverlap：
+    - 检查 OtherActor 是否为玩家角色（Cast to ACharacter 并检查是否是 PlayerController 控制的 Pawn）
+    - 如果不是玩家则 return
+    - 通过 UGameplayStatics::GetActorOfClass 获取关卡中的 AudioManagerActor
+    - 调用 AudioManagerActor->EnterZone(ZoneID)
+- OnEndOverlap：
+    - 同样检查是否为玩家
+    - 获取 AudioManagerActor
+    - 调用 AudioManagerActor->ExitZone(ZoneID)
+
+## 关键细节
+- 此 Actor 自身不持有任何 FMOD Event 引用
+- 此 Actor 自身不播放任何声音
+- 它只是一个"区域标记"，所有播放逻辑在 AudioManager 中
+
+## 安全约束
+- 不能越界改动其他任何无关代码，禁止使用 PowerShell 以防造成 Copilot 返回断线
+- 需要每一个步骤尽量保证修改代码不超过 10 行
+- 尽量原子化所有步骤，并且保证之间独立
+- 编译方面由我手动执行，Agent 完成任务后只需简约报告是否完成并且完成了什么即可

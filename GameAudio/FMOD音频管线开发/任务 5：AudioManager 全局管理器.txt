@@ -1,0 +1,59 @@
+## 项目背景
+UE4.27 + FMOD 2.02 的类魂/血源风格游戏项目。我们正在构建一套 C++ 音频触发系统。Build.cs 已追加 FMOD 依赖，AudioTypes.h 已创建（包含 FAudioZoneConfig 结构体）。本任务创建全局音频管理器，负责区域音频切换、音乐互斥、全局参数广播。
+
+## 任务
+新建两个文件：
+- Source/YourProject/Public/AudioManager.h
+- Source/YourProject/Private/AudioManager.cpp
+
+## 类设计要求
+
+### AudioManager.h
+- 继承自 UGameInstanceSubsystem
+- 包含头文件 AudioTypes.h
+- 包含以下 UPROPERTY 属性：
+    - TMap<FName, FAudioZoneConfig> ZoneConfigMap（EditAnywhere，编辑器配置 Zone 到 Event 的映射）
+    - FName CurrentZoneID（运行时当前所在区域，非编辑器可见）
+    - TMap<FName, float> GlobalParams（全局参数缓存）
+- 包含以下非 UPROPERTY 成员：
+    - UFMODAudioComponent* CurrentAmbienceComp = nullptr
+    - UFMODAudioComponent* CurrentMusicComp = nullptr
+- 包含以下 UFUNCTION(BlueprintCallable, Category = "Audio Manager") 公开方法：
+    - void EnterZone(FName ZoneID)
+    - void ExitZone(FName ZoneID)
+    - void SetGlobalParam(FName ParamName, float Value)
+    - FName GetCurrentZoneID() const
+
+### AudioManager.cpp
+- EnterZone 逻辑：
+    - 如果 ZoneID == CurrentZoneID，直接 return（同区域不重复触发）
+    - 在 ZoneConfigMap 中查找 ZoneID，找不到则 UE_LOG 警告并 return
+    - 如果 CurrentAmbienceComp 有效且正在播放，调用 Stop
+    - 如果 CurrentMusicComp 有效且正在播放，调用 Stop
+    - 创建新的 UFMODAudioComponent（通过 NewObject 或 UGameplayStatics 方式，附着在合适的 Outer 上）
+    - 注意：因为 UGameInstanceSubsystem 没有世界上下文的 Actor，音频组件的创建方式需要特殊处理——建议用 UFMODBlueprintStatics::PlayEvent2D 播放 2D 事件，将返回的 Component 缓存
+    - 分别为 AmbienceEvent 和 MusicEvent 调用 PlayEvent2D，缓存返回的 Component
+    - 遍历 FAudioZoneConfig 的 DefaultParams 和 GlobalParams，对新 Component 调用 SetParameter
+    - 更新 CurrentZoneID
+- ExitZone 逻辑：
+    - 如果 ZoneID != CurrentZoneID，直接 return（离开的不是当前区域）
+    - Stop 当前 Ambience 和 Music
+    - 清空 CurrentZoneID
+- SetGlobalParam 逻辑：
+    - 更新 GlobalParams 缓存
+    - 如果 CurrentAmbienceComp 有效，调用 SetParameter
+    - 如果 CurrentMusicComp 有效，调用 SetParameter
+- GetCurrentZoneID：返回 CurrentZoneID
+
+## 重要说明
+- UGameInstanceSubsystem 的 ZoneConfigMap 需要在某处初始化配置数据。建议在 Initialize() 重写中做，或者通过 DataAsset 加载。由于 UGameInstanceSubsystem 的 UPROPERTY 不会出现在编辑器 Details 面板中，需要改用以下方案之一：
+    - 方案 A：创建一个 UDataAsset 子类持有 ZoneConfigMap，AudioManager 引用该 DataAsset
+    - 方案 B：将 AudioManager 改为放在关卡中的 AActor（如 AAudioManagerActor），这样可以直接在 Details 面板配置
+    - 推荐方案 B，因为更直观且本项目不使用 Level Streaming，一个关卡放一个 AudioManagerActor 即可
+- 如果采用方案 B，则将类改为继承 AActor 而非 UGameInstanceSubsystem，名称改为 AAudioManagerActor，使用 UGameplayStatics::GetActorOfClass 方式让 ZoneTrigger 获取它
+
+## 安全约束
+- 不能越界改动其他任何无关代码，禁止使用 PowerShell 以防造成 Copilot 返回断线
+- 需要每一个步骤尽量保证修改代码不超过 10 行
+- 尽量原子化所有步骤，并且保证之间独立
+- 编译方面由我手动执行，Agent 完成任务后只需简约报告是否完成并且完成了什么即可
