@@ -1,0 +1,11 @@
+DSMapStudio Version 1.11.1
+
+The value cannot be an empty string. (Parameter 'path')
+
+   at System.ArgumentException.ThrowNullOrEmptyException(String, String)
+   at System.ArgumentException.ThrowIfNullOrEmpty(String , String )
+   at System.IO.File.WriteAllBytes(String, Byte[])
+   at StudioCore.Editor.ProjectSettings.Serialize(String path) in ./src/StudioCore/Editor/ProjectSettings.cs:line 51
+   at StudioCore.MapStudioNew.SaveAll() in ./src/StudioCore/MapStudioNew.cs:line 633
+   at StudioCore.MapStudioNew.AttemptSaveOnCrash() in ./src/StudioCore/MapStudioNew.cs:line 666
+   at DSMapStudio.Program.Main(String[]) in ./src/Studio.App/DSMapStudio/Program.cs:line 40

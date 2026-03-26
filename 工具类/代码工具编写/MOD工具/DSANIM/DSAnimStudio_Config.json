@@ -61,13 +61,33 @@
   "ShowEventHoverInfo": true,
   "TaeLoadFromArchivesWizardJsonSaveData": {
     "GameExePath": "D:\\Program Files (x86)\\Steam\\steamapps\\common\\ELDEN RING\\Game\\eldenring.exe",
-    "AnibndPath": "/chr/c2120.anibnd.dcx",
-    "ChrbndPath": "/chr/c2120.chrbnd.dcx",
-    "ProjectSaveFolder": "E:\\EldenRing_Ming_Animmod",
+    "AnibndPath": "/chr/c2190.anibnd.dcx",
+    "ChrbndPath": "/chr/c2190.chrbnd.dcx",
+    "ProjectSaveFolder": "F:\\GameMod\\EldenRing_Ming_Mod\\_DSAS_CACHE\\ER",
     "LoadLooseGameParam": false,
     "ModEngineDirectory": ""
   },
   "RecentFilesList": [
+    {
+      "TaeFile": "F:\\GameMod\\EldenRing_Ming_Mod\\_DSAS_CACHE\\ER\\c2190.anibnd.dcx",
+      "ModelFile": "/chr/c2190.chrbnd.dcx"
+    },
+    {
+      "TaeFile": "F:\\GameMod\\EldenRing_Ming_Animmod\\c2190.anibnd.dcx",
+      "ModelFile": "/chr/c2190.chrbnd.dcx"
+    },
+    {
+      "TaeFile": "F:\\GameMod\\EldenRing_Ming_Animmod\\c0000.anibnd.dcx",
+      "ModelFile": "/chr/c0000.chrbnd.dcx"
+    },
+    {
+      "TaeFile": "F:\\GameMod\\EldenRing_Ming_Mod\\c2120.anibnd.dcx",
+      "ModelFile": "/chr/c2120.chrbnd.dcx"
+    },
+    {
+      "TaeFile": "F:\\GameMod\\EldenRing_Ming_Animmod\\c2120.anibnd.dcx",
+      "ModelFile": "/chr/c2120.chrbnd.dcx"
+    },
     {
       "TaeFile": "E:\\EldenRing_Ming_Animmod\\c2120.anibnd.dcx",
       "ModelFile": "/chr/c2120.chrbnd.dcx"
@@ -636,9 +656,9 @@
   "LayoutViewportWidth": 600.0,
   "LayoutViewportHeight": 600.0,
   "LayoutWindowX": 472,
-  "LayoutWindowY": 230,
+  "LayoutWindowY": 204,
   "LayoutWindowWidth": 1616,
-  "LayoutWindowHeight": 939,
+  "LayoutWindowHeight": 965,
   "LoopEnabled": true,
   "LoopEnabled_BeforeCombo": true,
   "DisableConfigFileAutoSave": false,

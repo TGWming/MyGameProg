@@ -1,0 +1,18 @@
+DSMapStudio Version 1.11.1
+
+Unknown DCX format.
+
+   at SoulsFormats.DCX.Decompress(BinaryReaderEx br, Type& type) in ./src/Andre/SoulsFormats/SoulsFormats/Formats/DCX.cs:line 159
+   at SoulsFormats.SFUtil.GetDecompressedBR(BinaryReaderEx br, Type& compression) in ./src/Andre/SoulsFormats/SoulsFormats/Util/SFUtil.cs:line 212
+   at SoulsFormats.MountedSoulsFile`1.Read(Memory`1 bytes) in ./src/Andre/SoulsFormats/SoulsFormats/Util/MountedSoulsFile.cs:line 28
+   at SoulsFormats.SFUtil.DecryptERRegulation(String path) in ./src/Andre/SoulsFormats/SoulsFormats/Util/SFUtil.cs:line 531
+   at StudioCore.ParamEditor.ParamBank.LoadParamsERFromFile(String path, Boolean encrypted) in ./src/StudioCore/ParamEditor/ParamBank.cs:line 952
+   at StudioCore.ParamEditor.ParamBank.LoadParamsER(Boolean partial) in ./src/StudioCore/ParamEditor/ParamBank.cs:line 878
+   at StudioCore.ParamEditor.ParamBank.<>c__DisplayClass73_0.<ReloadParams>b__0() in ./src/StudioCore/ParamEditor/ParamBank.cs:line 1112
+   at StudioCore.Editor.TaskManager.LiveTask.<CreateTask>b__15_0() in ./src/StudioCore/Editor/TaskManager.cs:line 183
+   at System.Threading.Tasks.Task.InnerInvoke()
+   at System.Threading.Tasks.Task.<>c.<.cctor>b__281_0(Object obj)
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread, ExecutionContext, ContextCallback, Object)
+--- End of stack trace from previous location ---
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread, ExecutionContext, ContextCallback, Object)
+   at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task&, Thread )
