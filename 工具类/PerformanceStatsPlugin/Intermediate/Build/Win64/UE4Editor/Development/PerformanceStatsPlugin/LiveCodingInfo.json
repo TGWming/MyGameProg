@@ -1,0 +1,17 @@
+{
+	"RemapUnityFiles": 
+	{
+		"Module.PerformanceStatsPlugin.cpp.obj": [
+			"PerformanceConsoleManager.cpp.obj",
+			"PerformanceDataCollector.cpp.obj",
+			"PerformanceStatsFunctionLibrary.cpp.obj",
+			"PerformanceStatsPluginModule.cpp.obj",
+			"PerformanceStatsSettings.cpp.obj"
+		],
+		"Module.PerformanceStatsPlugin.gen.cpp.obj": [
+			"PerformanceStatsFunctionLibrary.gen.cpp.obj",
+			"PerformanceStatsPlugin.init.gen.cpp.obj",
+			"PerformanceStatsSettings.gen.cpp.obj"
+		]
+	}
+}

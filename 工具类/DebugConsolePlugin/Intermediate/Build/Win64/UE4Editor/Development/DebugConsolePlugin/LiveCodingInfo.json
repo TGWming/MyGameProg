@@ -1,0 +1,16 @@
+{
+	"RemapUnityFiles": 
+	{
+		"Module.DebugConsolePlugin.cpp.obj": [
+			"DebugConsoleManager.cpp.obj",
+			"DebugConsoleOutputDevice.cpp.obj",
+			"DebugConsolePluginModule.cpp.obj",
+			"DebugConsoleSettings.cpp.obj",
+			"GameEventMonitor.cpp.obj"
+		],
+		"Module.DebugConsolePlugin.gen.cpp.obj": [
+			"DebugConsolePlugin.init.gen.cpp.obj",
+			"DebugConsoleSettings.gen.cpp.obj"
+		]
+	}
+}

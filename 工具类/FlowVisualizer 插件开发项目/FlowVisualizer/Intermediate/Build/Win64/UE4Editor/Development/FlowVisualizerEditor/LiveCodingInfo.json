@@ -1,0 +1,11 @@
+{
+	"RemapUnityFiles": 
+	{
+		"Module.FlowVisualizerEditor.cpp.obj": [
+			"FlowVisualizerEditorModule.cpp.obj",
+			"FlowVisualizerStyle.cpp.obj",
+			"FMODAutoCapture.cpp.obj",
+			"SFlowVisualizerPanel.cpp.obj"
+		]
+	}
+}

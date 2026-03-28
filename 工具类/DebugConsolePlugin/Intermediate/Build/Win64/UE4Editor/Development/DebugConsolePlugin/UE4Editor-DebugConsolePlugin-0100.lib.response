@@ -1,0 +1,13 @@
+/NOLOGO
+/errorReport:prompt
+/MACHINE:x64
+/SUBSYSTEM:WINDOWS
+/DEF
+/NAME:"UE4Editor-DebugConsolePlugin-0100.dll"
+/IGNORE:4221
+/NODEFAULTLIB
+"H:\codeCam\MyProject\Intermediate\Build\Win64\MyProjectEditor\Development\UnrealEd\SharedPCH.UnrealEd.ShadowErrors.h.obj"
+"H:\codeCam\MyProject\Plugins\DebugConsolePlugin\Intermediate\Build\Win64\UE4Editor\Development\DebugConsolePlugin\Module.DebugConsolePlugin.cpp.obj"
+"H:\codeCam\MyProject\Plugins\DebugConsolePlugin\Intermediate\Build\Win64\UE4Editor\Development\DebugConsolePlugin\Module.DebugConsolePlugin.gen.cpp.obj"
+"H:\codeCam\MyProject\Plugins\DebugConsolePlugin\Intermediate\Build\Win64\UE4Editor\Development\DebugConsolePlugin\Default.rc2.res"
+/OUT:"H:\codeCam\MyProject\Plugins\DebugConsolePlugin\Intermediate\Build\Win64\UE4Editor\Development\DebugConsolePlugin\UE4Editor-DebugConsolePlugin-0100.lib"

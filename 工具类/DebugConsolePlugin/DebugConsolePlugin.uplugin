@@ -1,0 +1,21 @@
+﻿{
+    "FileVersion": 3,
+    "Version": 1,
+    "VersionName": "1.0",
+    "FriendlyName": "Debug Console Plugin",
+    "Description": "Standalone debug console window that displays UE_LOG output and waits for keypress on exit",
+    "Category": "Developer Tools",
+    "CreatedBy": "Developer",
+    "EnabledByDefault": true,
+    "CanContainContent": false,
+    "IsBetaVersion": false,
+    "Installed": false,
+    "Modules": [
+        {
+            "Name": "DebugConsolePlugin",
+            "Type": "DeveloperTool",
+            "LoadingPhase": "Default",
+            "WhitelistPlatforms": ["Win64"]
+        }
+    ]
+}

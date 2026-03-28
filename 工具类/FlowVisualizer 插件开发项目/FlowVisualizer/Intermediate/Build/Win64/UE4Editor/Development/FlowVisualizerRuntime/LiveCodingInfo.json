@@ -1,0 +1,11 @@
+{
+	"RemapUnityFiles": 
+	{
+		"Module.FlowVisualizerRuntime.cpp.obj": [
+			"FlowFMODBridge.cpp.obj",
+			"FlowPipelineRegistry.cpp.obj",
+			"FlowTracer.cpp.obj",
+			"FlowVisualizerRuntimeModule.cpp.obj"
+		]
+	}
+}

@@ -1,0 +1,10 @@
+H:\codeCam\MyProject\Plugins\PerformanceStatsPlugin\Intermediate\Build\Win64\UE4Editor\Development\PerformanceStatsPlugin\Definitions.PerformanceStatsPlugin.h
+H:/codeCam/MyProject/Plugins/PerformanceStatsPlugin/Intermediate/Build/Win64/UE4Editor/Inc/PerformanceStatsPlugin/PerformanceStatsFunctionLibrary.gen.cpp
+C:\Program Files\Epic Games\UE_4.27\Engine\Source\Runtime\CoreUObject\Public\UObject/GeneratedCppIncludes.h
+C:\Program Files\Epic Games\UE_4.27\Engine\Source\Runtime\CoreUObject\Public\UObject/MetaData.h
+H:\codeCam\MyProject\Plugins\PerformanceStatsPlugin\Source\PerformanceStatsPlugin/Public/PerformanceStatsFunctionLibrary.h
+H:\codeCam\MyProject\Plugins\PerformanceStatsPlugin\Intermediate\Build\Win64\UE4Editor\Inc\PerformanceStatsPlugin\PerformanceStatsFunctionLibrary.generated.h
+H:/codeCam/MyProject/Plugins/PerformanceStatsPlugin/Intermediate/Build/Win64/UE4Editor/Inc/PerformanceStatsPlugin/PerformanceStatsPlugin.init.gen.cpp
+H:/codeCam/MyProject/Plugins/PerformanceStatsPlugin/Intermediate/Build/Win64/UE4Editor/Inc/PerformanceStatsPlugin/PerformanceStatsSettings.gen.cpp
+H:\codeCam\MyProject\Plugins\PerformanceStatsPlugin\Source\PerformanceStatsPlugin/Public/PerformanceStatsSettings.h
+H:\codeCam\MyProject\Plugins\PerformanceStatsPlugin\Intermediate\Build\Win64\UE4Editor\Inc\PerformanceStatsPlugin\PerformanceStatsSettings.generated.h

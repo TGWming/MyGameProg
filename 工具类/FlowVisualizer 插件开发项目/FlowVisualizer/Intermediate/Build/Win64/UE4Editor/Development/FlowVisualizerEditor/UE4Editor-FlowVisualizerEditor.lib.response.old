@@ -1,0 +1,12 @@
+/NOLOGO
+/errorReport:prompt
+/MACHINE:x64
+/SUBSYSTEM:WINDOWS
+/DEF
+/NAME:"UE4Editor-FlowVisualizerEditor.dll"
+/IGNORE:4221
+/NODEFAULTLIB
+"E:\MyProject\soul\Intermediate\Build\Win64\soulEditor\Development\UnrealEd\SharedPCH.UnrealEd.ShadowErrors.h.obj"
+"E:\MyProject\soul\Plugins\FlowVisualizer\Intermediate\Build\Win64\UE4Editor\Development\FlowVisualizerEditor\FlowVisualizerEditorModule.cpp.obj"
+"E:\MyProject\soul\Plugins\FlowVisualizer\Intermediate\Build\Win64\UE4Editor\Development\FlowVisualizerEditor\Default.rc2.res"
+/OUT:"E:\MyProject\soul\Plugins\FlowVisualizer\Intermediate\Build\Win64\UE4Editor\Development\FlowVisualizerEditor\UE4Editor-FlowVisualizerEditor.lib"

@@ -1,0 +1,13 @@
+/NOLOGO
+/errorReport:prompt
+/MACHINE:x64
+/SUBSYSTEM:WINDOWS
+/DEF
+/NAME:"UE4Editor-PerformanceStatsPlugin.dll"
+/IGNORE:4221
+/NODEFAULTLIB
+"H:\codeCam\MyProject\Intermediate\Build\Win64\MyProjectEditor\Development\Engine\SharedPCH.Engine.ShadowErrors.h.obj"
+"H:\codeCam\MyProject\Plugins\PerformanceStatsPlugin\Intermediate\Build\Win64\UE4Editor\Development\PerformanceStatsPlugin\Module.PerformanceStatsPlugin.cpp.obj"
+"H:\codeCam\MyProject\Plugins\PerformanceStatsPlugin\Intermediate\Build\Win64\UE4Editor\Development\PerformanceStatsPlugin\Module.PerformanceStatsPlugin.gen.cpp.obj"
+"H:\codeCam\MyProject\Plugins\PerformanceStatsPlugin\Intermediate\Build\Win64\UE4Editor\Development\PerformanceStatsPlugin\Default.rc2.res"
+/OUT:"H:\codeCam\MyProject\Plugins\PerformanceStatsPlugin\Intermediate\Build\Win64\UE4Editor\Development\PerformanceStatsPlugin\UE4Editor-PerformanceStatsPlugin.lib"

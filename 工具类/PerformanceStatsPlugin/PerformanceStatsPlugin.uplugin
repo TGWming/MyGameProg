@@ -1,0 +1,21 @@
+﻿{
+    "FileVersion": 3,
+    "Version": 1,
+    "VersionName": "1.0",
+    "FriendlyName": "Performance Stats Plugin",
+    "Description": "Real-time performance monitoring with asset-level profiling",
+    "Category": "Developer Tools",
+    "CreatedBy": "Developer",
+    "EnabledByDefault": true,
+    "CanContainContent": false,
+    "IsBetaVersion": false,
+    "Installed": false,
+    "Modules": [
+        {
+            "Name": "PerformanceStatsPlugin",
+            "Type": "DeveloperTool",
+            "LoadingPhase": "Default",
+            "WhitelistPlatforms": ["Win64"]
+        }
+    ]
+}
