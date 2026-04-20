@@ -1,0 +1,486 @@
+# 类魂箱庭项目 - 地面视觉最终行动手册（UE4.27）
+
+> **前置条件**：本手册假设你已经按《关闭 Landscape Tessellation 操作手册》关闭了 Tessellation 并解决了打包崩溃问题。  
+> **本手册聚焦**：在不使用 Tessellation 的前提下，如何让地面达到"类魂级别"的视觉质感。  
+> **目标项目类型**：UE4.27 + Landscape Pro V2 + 半开放箱庭关卡
+
+---
+
+## 核心思路
+
+> **地面视觉 = Landscape（地形本体）+ Static Mesh（装饰细节）+ Decal（氛围叠加）+ 光照后处理（质感天花板）**
+>
+> 每个系统只做自己最擅长的事，不要让任何一个系统超负荷。
+
+### 角色分工速查表
+
+| 系统 | 职责 | 不该做的事 |
+|---|---|---|
+| **Landscape Pro V2** | 整体地貌、坡道、平滑碰撞、NavMesh、大面积材质混合 | 不靠它做几何凸起 |
+| **Static Mesh** | 石头、植被、断壁、可交互物、关键路径凸起感 | 不再用它拼"地面本体" |
+| **Decal** | 裂缝、苔藓、水渍、血迹、脚印、烧痕 | 不堆叠太多，控制密度 |
+| **光照 + 后处理** | 整体质感、氛围、对比度、色调 | 不靠它弥补根本性的材质缺陷 |
+
+---
+
+# 第一部分：Landscape 本体优化
+
+## 步骤 1.1：提高 Landscape 几何密度（弥补无 Tessellation）
+
+1. 选中 Landscape Actor
+2. Details 面板找到 **Landscape** 分类
+3. 调整以下参数（如果是新建 Landscape）：
+   - **Quads Per Section**：从默认 `31` 提升到 `63`
+   - **Section Size**：保持或略减
+4. 已建好的 Landscape 不能直接改，但可以：
+   - 用 **Sculpt 工具** 手动加细节起伏
+   - 或在重要区域用 Static Mesh 补几何
+
+> ⚠️ Quads Per Section 调到 127 会显著增加 VRAM，对箱庭项目 63 通常够用。
+
+---
+
+## 步骤 1.2：用 Sculpt 工具做大尺度起伏
+
+> 关掉 Tessellation 后，地形的"起伏感"主要靠 Sculpt 工具直接雕刻。
+
+### 推荐工作流
+
+1. **进入 Landscape Mode**（快捷键 `Shift + 2`）
+2. 切到 **Sculpt 标签页**
+3. 优先使用这几个笔刷：
+
+| 笔刷 | 用途 | 推荐参数 |
+|---|---|---|
+| **Sculpt（基础）** | 大形体起伏（小山、洼地、坡道） | Brush Size: 1024~4096, Strength: 0.3~0.5 |
+| **Smooth** | 平滑过于尖锐的边缘 | Strength: 0.5 |
+| **Noise** | 大面积自然不规则起伏 | Strength: 0.05~0.15（关键：要小！） |
+| **Erosion** | 模拟雨水冲刷的真实感 | Strength: 0.1~0.2 |
+| **Hydro Erosion** | 模拟水流冲刷沟壑 | Strength: 0.1 |
+| **Flatten** | 玩家行走路径压平 | 拉到适中位置 |
+
+### Noise Brush 使用注意
+
+- **强度要小**（0.05~0.15）：玩家走在地上会感觉到微小起伏，但不会卡顿
+- **避开导航路径**：玩家行走的主路要保持相对平整，否则 NavMesh 会出问题
+- **大尺度低频 Noise** > 小尺度高频 Noise：自然地形是大起伏，不是密集小颠簸
+
+### 最后必做：Flatten 关键路径
+
+- 玩家主路、Boss 房入口、存档点周围 **必须用 Flatten 压平**
+- 否则会出现：跑动时镜头抖、AI 寻路异常、玩家被微小凸起卡住
+
+---
+
+## 步骤 1.3：强化 Landscape 材质细节（不重做材质）
+
+在 Landscape Pro V2 现有材质基础上做这些**轻量优化**：
+
+### A. 加强 Normal Map
+- 在每层材质实例的 **Normal Strength** 参数（如果有）拉高到 1.2~1.5
+- 让光照下的凹凸感更明显
+
+### B. 启用 Detail Normal（近景细节法线）
+- 如果 Landscape Pro V2 主材质支持 Detail Normal 输入：
+  - 喂入一张 **高频细节法线贴图**（小石粒、纹理）
+  - Tile 设置为 **较高频率**（如 32~64）
+  - **只在近距离生效**（用 Distance Fade 控制）
+- 效果：近距离地面颗粒感大幅提升
+
+### C. 加 Macro Variation（防平铺）
+- 在材质里叠一层 **大尺度噪波贴图**（Tile 设置为 0.1~0.5，非常低）
+- 用它调制 BaseColor 的明暗
+- 效果：远景地面不再有明显重复感
+
+### D. 距离 Tile 变化
+- 近距离：高 Tile（细节清晰）
+- 远距离：低 Tile（避免摩尔纹和过密细节）
+- 用 **Distance Blend** 节点实现
+
+> 这四步做完，**不需要任何 POM**，地面视觉就能提升一个档次。
+
+---
+
+# 第二部分：Static Mesh 装饰性摆放
+
+## 步骤 2.1：明确 Static Mesh 的新角色
+
+> ⚠️ **重要心智转变**：Static Mesh 不再用于"拼地形"，而是用于"装饰地形"。
+
+### 该摆什么
+
+| 类别 | 示例 | 用途 |
+|---|---|---|
+| **岩石 / 石块** | 大石头、碎石堆、岩柱 | 打破地形单调、提供视觉焦点 |
+| **植被 / 草丛** | 灌木、蕨类、枯草 | 增加生机和自然感 |
+| **断壁残垣** | 倒塌石柱、破墙、铁栏 | 类魂氛围必备，引导路径 |
+| **倒木 / 树枝** | 横倒大树、树根 | 自然地阻挡视线、形成捷径暗示 |
+| **可交互物** | 木桶、宝箱、灯笼 | 玩法+装饰双用途 |
+| **路径凸起补充** | ���石子、泥块、砖堆 | 在玩家特写区域补"凹凸感" |
+
+### 不该摆什么
+
+- ❌ 大块"地面 Mesh"（让 Landscape 负责）
+- ❌ 密集到撞见的小石子（性能杀手）
+- ❌ 完全平贴地面的 Mesh（用 Decal 替代）
+
+---
+
+## 步骤 2.2：用 Foliage Tool 高效摆放
+
+> 不要一个一个手摆，用 Foliage Tool 大面积散布。
+
+### 操作步骤
+
+1. **打开 Foliage Mode**（快捷键 `Shift + 3`）
+2. 拖入要散布的 Mesh（石头、草丛等）
+3. 关键参数设置：
+   - **Density**: 控制密度，类魂项目建议 **稀疏一点**（10~50/1000sq）
+   - **Radius**: Mesh 之间的最小间距，防止重叠
+   - **Align to Normal**: ✅ 开启，让 Mesh 贴合地面坡度
+   - **Random Yaw**: ✅ 开启，避免方向重复
+   - **Scale**: 设置随机范围（如 0.7~1.3），打破大小均一
+4. 在 Landscape 上**笔刷涂抹**散布
+5. 散布后用 **Select 笔刷** 局部清理不合理的位置
+
+### 类魂项目散布建议
+
+| 区域 | 密度 | 风格 |
+|---|---|---|
+| 主路径 | 极稀疏 | 空旷压抑感 |
+| 路径两侧 | 中等 | 引导视线 |
+| 远离玩家区域 | 高密度 | 视觉边界感 |
+| 战斗区 | 极稀疏 | 不阻挡战斗操作 |
+| 隐藏路径 | 中密度 | 营造"被遗忘"感 |
+
+> **类魂美学的精髓是"克制"**：宁可少摆 30%，也不要摆得密密麻麻。
+
+---
+
+## 步骤 2.3：手摆"英雄物体"补充关键区域
+
+Foliage 之后，**手动摆放关键的"英雄物体"**：
+
+### 摆放原则
+1. **玩家路径凸起感**：在玩家主路偶尔放一两块大石头/泥块，让地面不那么平
+2. **战斗区域焦点**：Boss 房入口放标志性物体（柱子、雕像、火把）
+3. **存档点装饰**：存档点周围放可识别的物体，便于玩家记忆位置
+4. **路径引导**：用断壁、倒木"暗示"路径方向
+5. **氛围深化**：在阴暗角落放残骸、武器、骸骨
+
+### Mesh 资源推荐
+- **Quixel Megascans**（UE4 用户免费）：高质量扫描资产，自带 Normal/Roughness/AO
+- **UE Marketplace**：搜 "ruins"、"medieval rocks"、"dark fantasy props"
+- 优先选 **带 RVT 支持** 的资产
+
+---
+
+## 步骤 2.4：用 RVT 解决"Mesh 浮在地面"问题
+
+> ⚠️ **这是让 Mesh 与 Landscape 自然融合的关键技术**，强烈推荐做。
+
+### 问题
+- 摆完石头后，会发现石头底部边缘很硬，看起来像"浮在地面上"
+- Landscape 的颜色不会"过渡"到石头底部
+
+### 解决方案：Runtime Virtual Texture (RVT)
+
+#### 简化操作步骤
+1. **创建 RVT 资产**：
+   - Content Browser 右键 → Misc → **Runtime Virtual Texture**
+   - 创建两个：`RVT_BaseColor`（Material Type: Base Color, Normal, Roughness）和（可选）`RVT_Height`
+2. **创建 RVT Volume**：
+   - 在场景中放置 **Runtime Virtual Texture Volume**
+   - 包裹住整个 Landscape 区域
+   - 在 Volume 的 Details 中绑定上面创建的 RVT 资产
+   - 点击 **Set Bounds** 自动适配 Landscape
+3. **修改 Landscape 材质**：
+   - 在 Landscape Master Material 输出节点旁加 **Runtime Virtual Texture Output** 节点
+   - 把最终 BaseColor / Normal / Roughness 喂进去
+4. **修改石头 Mesh 材质**：
+   - 在石头的 Material 里用 **Runtime Virtual Texture Sample** 节点读取 Landscape 颜色
+   - 用 **Lerp** 节点：底部混合 Landscape 颜色，顶部保持原贴图
+   - 用石头的 **World Z 坐标 / 高度** 控制 Lerp 的 Alpha
+
+### 效果
+- 石头底部自然"染上"地面的泥土/草地颜色
+- 视觉上完美融入 Landscape，不再像"摆上去"
+- **这是 AAA 项目地面看起来真实的关键之一**
+
+---
+
+# 第三部分：Decal 氛围叠加
+
+## 步骤 3.1：Decal 类型规划
+
+类魂氛围地面常用 Decal 分类：
+
+| 类型 | 用途 | 摆放位置 |
+|---|---|---|
+| **裂缝 / 破损** | 增加历史感 | 石板路、墙脚 |
+| **苔藓 / 青苔** | 潮湿感 | 阴暗角落、石头底部 |
+| **水渍 / 积水** | 湿润反光 | 路径、低洼 |
+| **血迹** | 类魂招牌 | 战斗区、Boss 房 |
+| **烧痕 / 焦黑** | 战斗痕迹 | 重要事件场地 |
+| **脚印 / 车辙** | 引导路径 | 主路 |
+| **散落物** | 落叶、小石子、纸张 | 自然散布 |
+
+## 步骤 3.2：Decal 制作与摆放
+
+### 创建 Decal Material
+1. 新建 Material → 把 **Material Domain** 设为 **Deferred Decal**
+2. 设置：
+   - **Blend Mode**：通常用 `Translucent` 或 `Modulate`
+   - **Decal Blend Mode**：根据需求选 `DBuffer Translucent Color, Normal, Roughness` （可同时影响这三项）
+3. 喂入 BaseColor + Opacity Mask + Normal
+
+### 摆放 Decal
+1. 在 **Modes 面板** 拖出 **Deferred Decal Actor**
+2. 旋转使其法线朝向地面（默认 X 轴朝下）
+3. 调整缩放控制覆盖范围
+4. **Sort Order** 控制 Decal 之间的叠加顺序
+
+### 类魂项目 Decal 使用原则
+
+- **数量克制**：单个区域不超过 5~8 个明显 Decal，否则视觉混乱
+- **大小变化**：大 Decal 做"片状"覆盖，小 Decal 做"点状"细节
+- **旋转随机**：每个 Decal 旋转角度不同，避免明显重复
+- **优先放在玩家会停留的地方**：路径、存档点、Boss 房
+
+> **小技巧**：把常用的 Decal 做成 **Blueprint Actor 预设**（一个 BP 包含 3~5 个组合好的 Decal），方便复用。
+
+---
+
+# 第四部分：光照与后处理（质感上限）
+
+> ⚠️ **这一部分对最终视觉的贡献度 > 前面所有部分的总和**。  
+> AAA 类魂游戏地面看起来"高级"，**主要靠这里**。
+
+## 步骤 4.1：方向光（Directional Light）配置
+
+### 推荐参数（类魂典型氛围）
+
+| 参数 | 推荐值 | 说明 |
+|---|---|---|
+| **Intensity** | 3.0~5.0 lux | 不要太亮，类魂偏暗 |
+| **Light Color** | 偏冷（淡蓝/淡黄） | 营造阴郁感 |
+| **Source Angle** | 0.5~1.5 | 控制阴影柔和度 |
+| **Cast Shadow** | ✅ | 必开 |
+| **Dynamic Shadow Distance** | 5000~10000 | 主关卡足够 |
+| **Cascaded Shadow Map**: Num Dynamic Shadow Cascades | 3~4 | 阴影质量 |
+| **Atmosphere Sun Light** | ✅ | 与大气联动 |
+
+### 角度设置
+- **倾角 30~45 度**：长阴影最有戏剧感
+- **避免顶光**（90 度）：会让地面平淡无趣
+
+---
+
+## 步骤 4.2：Sky Light 与天空设置
+
+1. 放置 **Sky Light**
+2. 设置：
+   - **Mobility**: `Movable` 或 `Stationary`
+   - **Source Type**: `SLS Captured Scene`
+   - **Intensity Scale**: 0.3~0.6（不要太亮，否则失去对比）
+   - **Cast Shadows**: ✅
+3. 配合 **HDRI 天空贴图** 或 **Sky Atmosphere** 系统
+
+> 类魂的"压抑感"很大程度来自 **Sky Light 强度比 Directional Light 弱**，让阴影区域是真的暗。
+
+---
+
+## 步骤 4.3：Exponential Height Fog（雾气）
+
+> 雾气是类魂氛围的灵魂之一。
+
+放置 **Exponential Height Fog**，推荐参数：
+
+| 参数 | 推荐值 |
+|---|---|
+| **Fog Density** | 0.02~0.1 |
+| **Fog Height Falloff** | 0.2~0.5 |
+| **Fog Inscattering Color** | 偏冷灰蓝 |
+| **Directional Inscattering** | ✅ 开启（让阳光方向有光柱感） |
+| **Volumetric Fog** | ✅ 开启（高级感关键，但有性能开销） |
+| **Volumetric Fog Scattering Distribution** | 0.2~0.5 |
+| **Volumetric Fog Albedo** | 接近白色 |
+
+### 效果
+- 远景自然消隐，不需要硬切 LOD
+- 阳光透过雾气有 **God Ray（神光）** 效果
+- 整体氛围立刻提升一个档次
+
+---
+
+## 步骤 4.4：Post Process Volume（后处理）
+
+放置 **Post Process Volume**，勾选 **Unbound** 让其全局生效。
+
+### 关键设置
+
+#### 颜色分级（Color Grading）
+| 参数 | 推荐方向 |
+|---|---|
+| **Saturation** | 0.7~0.9（降低饱和度，类魂招牌） |
+| **Contrast** | 1.1~1.3（增强对比） |
+| **Gamma** | 1.0~1.1 |
+| **Gain** | 偏冷色（淡蓝/淡青） |
+| **Offset** | 阴影区偏蓝 |
+
+#### Bloom
+- **Intensity**: 0.3~0.6（不要过曝）
+- **Threshold**: 1.0~2.0
+
+#### Eye Adaptation（自动曝光）
+- **Method**: `Manual` 或 `Auto Exposure Histogram`
+- **Min/Max Brightness**: 锁定范围避免画面忽明忽暗
+
+#### Ambient Occlusion
+- **Intensity**: 0.5~0.8
+- **Radius**: 50~100
+- 让物体接触地面更真实
+
+#### Screen Space Reflections (SSR)
+- **Intensity**: 50~100
+- 让潮湿地面有反光
+
+#### Vignette（暗角）
+- **Intensity**: 0.3~0.5
+- 增加沉浸感和压迫感
+
+---
+
+## 步骤 4.5：Distance Field Ambient Occlusion (DFAO)
+
+> 让 Static Mesh 与 Landscape 的接触阴影更真实。
+
+1. **Project Settings** → Rendering
+2. 启用：
+   - **Generate Mesh Distance Fields**: ✅
+3. 在 Static Mesh 的设置中启用 **Generate Distance Field**
+4. 在 Post Process Volume 中调整：
+   - **AO Distance**: 100~500
+   - **AO Intensity**: 1.0
+
+### 效果
+- 石头底部、墙角等接触面有自然柔和阴影
+- 大幅减少"物体浮在地面"的感觉
+
+---
+
+# 第五部分：完整执行顺序（推荐工作流）
+
+按这个顺序做，每一步完成后都能看到明显进步：
+
+### 第一阶段：地形本体（1~2 天）
+1. ✅ 已完成关闭 Tessellation
+2. 用 Sculpt + Noise + Erosion 完善大形体
+3. Flatten 玩家主路径
+4. 强化 Landscape 材质（Normal、Detail Normal、Macro Variation）
+
+### 第二阶段：装饰摆放（2~3 天）
+5. Foliage Tool 散布石头、草丛
+6. 手摆"英雄物体"（断壁、雕像、火把）
+7. 配置 RVT，让 Mesh 与 Landscape 融合
+
+### 第三阶段：氛围细节（1~2 天）
+8. 制作核心 Decal 库（裂缝、苔藓、水渍、血迹）
+9. 在关键区域摆放 Decal
+10. 用 Foliage Tool 散布散落物（小石子、落叶）
+
+### 第四阶段：光照后处理（1 天，但收益最大）
+11. 配置 Directional Light + Sky Light
+12. 加 Exponential Height Fog + Volumetric Fog
+13. 调 Post Process Volume（颜色分级 + Bloom + AO + SSR）
+14. 启用 DFAO
+15. 整体调试，反复打包测试
+
+---
+
+# 第六部分：性能与质量平衡
+
+## 性能预算建议
+
+| 项目 | 数值 | 说明 |
+|---|---|---|
+| Foliage Mesh 数量 | 单关卡 5,000~20,000 | 用 HISM 自动合批 |
+| Decal 总数 | 单关卡 < 200 | 注意 Sort Order |
+| Volumetric Fog | 开启 | 性能换氛围，值得 |
+| Dynamic Shadow Distance | 5000~10000 | 不要拉太远 |
+
+## 性能检查命令
+
+Editor 内按 `~`，常用命令：
+
+| 命令 | 用途 |
+|---|---|
+| `stat fps` | 显示 FPS |
+| `stat unit` | Game / Draw / GPU 时间 |
+| `stat scenerendering` | 渲染细节 |
+| `r.VisualizeOccludedPrimitives 1` | 检查遮挡剔除 |
+| `Foliage.ToggleVisibility` | 切换 Foliage 显示 |
+| `r.ScreenSpaceReflections 0/1` | 切换 SSR |
+
+---
+
+# 第七部分：完整验证清单
+
+### 地形本体
+- [ ] Sculpt 大形体完成，起伏自然
+- [ ] 主路径已 Flatten，玩家行走不卡顿
+- [ ] Landscape 材质 Normal Strength 已加强
+- [ ] Detail Normal 已启用（如果材质支持）
+- [ ] Macro Variation 已添加
+
+### Static Mesh 装饰
+- [ ] Foliage Tool 已散布基础石头/植被
+- [ ] 关键区域手摆"英雄物体"完成
+- [ ] RVT 已配置，石头与地面自然融合
+- [ ] 所有 Static Mesh 启用 Generate Distance Field
+
+### Decal 氛围
+- [ ] 核心 Decal 库已建立（至少 8~15 种）
+- [ ] 主要场景 Decal 摆放完成
+- [ ] Decal 数量克制，未过密堆叠
+
+### 光照后处理
+- [ ] Directional Light 角度与强度已调
+- [ ] Sky Light 强度低于 Directional Light
+- [ ] Exponential Height Fog + Volumetric Fog 已启用
+- [ ] Post Process Volume（Unbound）已配置
+- [ ] 颜色分级偏类魂风格（低饱和、冷调、高对比）
+- [ ] AO + SSR 已开启
+- [ ] DFAO 已启用
+
+### 最终验证
+- [ ] 打 Development 包测试运行流畅
+- [ ] 玩家视角观察地面视觉满意度高
+- [ ] 战斗区域无碰撞问题
+- [ ] NavMesh 寻路正常
+- [ ] FPS 满足目标（建议 60FPS @ 1080p）
+
+---
+
+# 总结
+
+**这套方案的本质**：
+- 用 **Landscape Pro V2 Layer Paint** 解决地形本体和碰撞
+- 用 **Static Mesh + Foliage Tool + RVT** 解决细节和融合
+- 用 **Decal** 解决氛围和故事感
+- 用 **光照 + 后处理** 解决"高级感"
+
+**性价比排序**（投入小、收益大优先）：
+1. 🥇 光照 + 后处理（收益最大）
+2. 🥇 Sculpt 调整地形 + Macro Variation
+3. 🥈 Decal 氛围叠加
+4. 🥈 Foliage 散布石头植被
+5. 🥉 RVT 融合（进阶）
+6. 🥉 DFAO 接触阴影（进阶）
+
+**不需要做的事**：
+- ❌ POM（性价比低，难度高）
+- ❌ 重新拼 Static Mesh 地形（已被验证不可行）
+- ❌ 全 Landscape Layer 铺位移效果
+
+按本手册执行，地面视觉可以达到 **类魂 AAA 入门级别**，且完全规避 Tessellation 崩溃风险，性能可控，可维护性高 🚀
