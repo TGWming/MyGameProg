@@ -1,0 +1,461 @@
+好的，今天就到这里，明晚见 👋
+
+下面是进度存档，明晚你回来直接看这一条就能续上：
+
+📌 进度存档（2026-04-23 夜）
+✅ 已完成
+Common UI 插件 LOG 问题 —— 已挂起
+
+结论：材质丢失是 Warning 级别，不影响打包和运行，暂不清理
+后续触发条件：打包失败 / UI 出现棋盘格 / Warning 升级为 Error
+Zone ID 环境管理系统开发手册 —— 已通读并理解确认
+
+核心哲学：区域是状态，边界只是切换信号
+三层架构：ZoneVolume → EnvironmentZoneManager → 场景 Actor
+先锋阶段范围：3 个字段（FogDensity / LightAttenuationRadius / RainAmount）+ BlendTime + 栈机制 + 3 个 Scene References + ValidateReferences
+协作纪律已记牢：单 Code Block Prompt / Agent 不编译 / 不用 PowerShell / 原子化分步
+⏭️ 明晚的起点
+任务：开始用 VS Code 给 Agent 做诊断
+
+我会产出第一个诊断类 Prompt，目标是让 Agent 调研：
+
+项目 C++ 主模块名
+音频 Zone Trigger 系统的类名/命名风格（避免冲突）
+现有 ABCD 触发盒子的位置和实现方式
+合适的新代码文件放置目录
+SkyCreator 蓝图 Actor 的可调用函数（决定用反射还是 UInterface）
+🗂️ 上下文清单（明晚我需要记住的）
+引擎：UE 4.27
+类型：第三人称类魂
+关卡架构：独立 .umap + OpenLevel
+阶段：Pioneer Phase（先锋）
+IDE：用户改用 VS Code（注意：手册原文写的是 VS2019，明晚确认 Agent 是哪个）
+编译：用户手动，Agent 严禁自行编译
+旧 ABCD 盒子暂保留，并行测试通过后才删
+明晚回来时，你只要说一句"继续 Zone ID 系统，开始诊断"，我就直接出第一个诊断 Prompt 给你。
+
+晚安，优化加油 💪
+
+You said: 哦对了，我的确要跟你补充一下，我用的的确是VS 2019
+哦对了，我的确要跟你补充一下，我用的的确是VS 2019
+Copilot said: 收到，已更正 ✅ ## 📌 存档修正 - **IDE：Visual Studio 2019**（不是
+收到，已更正 ✅
+
+📌 存档修正
+IDE：Visual Studio 2019（不是 VS Code，是我刚才记错了）
+Agent 运行环境：VS 2019 的 Copilot Agent
+这与手册 7.1 原文一致，后续产 Prompt 时会按 VS 2019 的工作流来写（比如搜索方式建议用 VS 内建搜索 / Git Bash grep / cmd findstr，不用 PowerShell）
+明晚见，晚安 🌙
+
+You said: 还记得我们的对话吗？
+还记得我们的对话吗？
+Copilot said: 记得 ✅ 给你快速回顾一下存档： ## 📌 当前进度 ### ✅ 已挂起 1.
+记得 ✅ 给你快速回顾一下存档：
+
+📌 当前进度
+✅ 已挂起
+Common UI 插件材质丢失 LOG —— Warning 级别，不影响打包和运行，暂不清理
+📖 已确认理解
+Zone ID 环境管理系统开发手册 —— 全文通读完毕
+核心哲学：区域是状态，边界只是切换信号
+三层架构：ZoneVolume → EnvironmentZoneManager → 场景 Actor（Fog/Light/SkyCreator）
+先锋阶段范围：3 字段配置（FogDensity / LightAttenuationRadius / RainAmount）+ BlendTime + 栈机制 + 3 个 Scene References + ValidateReferences 按钮
+不做：GameplayTag / WorldStateSubsystem / Variants / DataAsset / 存档 / 多 Manager
+🛠️ 协作纪律
+IDE：Visual Studio 2019 + Copilot Agent
+Prompt 格式：单一 Code Block，分诊断类 / 执行类
+Agent 红线：不自行编译、不用 PowerShell 搜索、原子化分步、每步汇报
+你：手动编译、回传报告/错误
+我：产 Prompt、根据报告迭代
+⏭️ 今晚的起点
+任务：开始给 Agent 做诊断，准备产出第一个诊断 Prompt，目标调研：
+
+项目 C++ 主模块名
+音频 Zone Trigger 系统类名/命名风格（避免冲突）
+现有 ABCD 触发盒子的位置和实现
+新代码文件合适的放置目录
+SkyCreator 蓝图 Actor 可调用的函数（决定用反射还是 UInterface）
+要直接开工出第一个诊断 Prompt 吗？还是开工前你想先补充什么信息 / 调整方向？
+
+You said: 可以先出第一个诊断PROMPT，记得我们的安全约束 # Copilot Agent 通用协作安全约束 > **适用范围**：本工作室所有项目（Unreal Engine /
+可以先出第一个诊断PROMPT，记得我们的安全约束
+
+# Copilot Agent 通用协作安全约束
+
+> **适用范围**：本工作室所有项目（Unreal Engine / C++ / 蓝图开发）  
+> **协作对象**：Visual Studio 2019 Copilot Agent（执行端）+ Copilot Chat（讨论与产出 Prompt 端）  
+> **创建日期**：2026-04-22  
+> **版本**：v1.0
+
+---
+
+## 📑 目录
+
+1. [协作工作流](#1-协作工作流)
+2. [Prompt 类型与格式约定](#2-prompt-类型与格式约定)
+3. [Agent 强制规则](#3-agent-强制规则)
+4. [Copilot Chat 职责](#4-copilot-chat-职责)
+5. [用户职责](#5-用户职责)
+6. [常用 Prompt 模板](#6-常用-prompt-模板)
+7. [异常处理流程](#7-异常处理流程)
+
+---
+
+## 1. 协作工作流
+
+┌─────────────────────────────────────────────────────┐
+│ 1. 用户提出需求/问题                                  │
+│    ↓                                                 │
+│ 2. 用户与 Copilot Chat 讨论方案                      │
+│    ↓                                                 │
+│ 3. 方案确定                                          │
+│    ↓                                                 │
+│ 4. Copilot Chat 产出 Prompt（单一 Code Block）       │
+│    ↓                                                 │
+│ 5. 用户一键复制 → 粘贴给 Visual Studio Agent         │
+│    ↓                                                 │
+│ 6. Agent 原子化分步执行 + 每步汇报                    │
+│    ↓                                                 │
+│ 7. 用户将 Agent 报告反馈给 Copilot Chat              │
+│    ↓                                                 │
+│ 8. 用户手动编译                                      │
+│    ↓                                                 │
+│ 9. 编译成功 → 进入下一轮 / 编译失败 → 反馈错误         │
+│    ↓                                                 │
+│ 10. Copilot Chat 根据报告/错误产出下一个 Prompt       │
+└─────────────────────────────────────────────────────┘
+
+---
+
+## 2. Prompt 类型与格式约定
+
+### 2.1 两种 Prompt 类型
+
+| 类型 | 用途 | 是否改代码 |
+|------|------|-----------|
+| **诊断类（Diagnostic）** | 了解项目结构、确认介入点、调研现状 | ❌ 不改代码 |
+| **执行类（Execution）** | 落地具体代码实现 | ✅ 改代码 |
+
+### 2.2 格式约定
+- 所有 Prompt 必须包含在**单一 Code Block 内**（使用 ```` ```text ```` 或 ```` ```prompt ````）
+- 便于用户**一键复制**
+- 开头必须包含：任务类型、目标、约束
+- 结尾必须包含：分步执行要求、汇报格式
+
+---
+
+## 3. Agent 强制规则
+
+### 3.1 ⚠️ 搜索方式约束
+
+- **🚫 禁止使用 PowerShell** 进行文件搜索或内容查询
+  - 原因：在大型项目中 PowerShell 搜索容易导致编辑器/IDE 卡顿
+- **✅ 推荐工具**：
+  - IDE 内建搜索（Find in Files）
+  - `grep`（Git Bash 环境）
+  - `findstr`（cmd 环境）
+  - 代码索引工具（如 ReSharper、VS 内建索引）
+
+### 3.2 🧱 任务原子化原则
+
+- **每次执行任务必须分步骤**，单步改动范围最小化
+- **严禁"一次性大重构"**
+- **每完成一个子任务必须简短汇报**：
+  - 文件路径
+  - 改动摘要（1-2 句）
+  - 下一步建议（可选）
+- 报告格式：
+  ```
+  [已完成] 子任务编号 X.Y
+  - 文件：path/to/file.cpp
+  - 改动：（简短描述）
+  - 下一步建议：（如有）
+  ```
+
+### 3.3 🛑 编译职责（最重要！）
+
+- **Agent 严禁自行执行编译**
+- **编译由用户手动进行**
+- 如果编译报错：
+  1. 用户将错误信息反馈给 Copilot Chat
+  2. Copilot Chat 分析并产出修复 Prompt
+  3. Agent 根据修复 Prompt 执行
+  4. **Agent 不得在编译失败后自行猜测并修改代码**
+- 原因：Agent 自行修复编译错误容易导致代码越改越乱、引入隐藏 Bug
+
+### 3.4 📁 文件改动安全规则
+
+- **改动前必须先读取文件**，确认现有内容
+- **不得删除/重命名**未在任务范围内的文件
+- **不得修改以下文件**（除非 Prompt 明确要求）：
+  - `.uproject`
+  - `*.Build.cs`
+  - `*.Target.cs`
+  - `DefaultEngine.ini` / `DefaultGame.ini`
+  - 任何 `.uasset`（资产文件）
+- **不得修改 git 配置或执行**：
+  - `git push`
+  - `git merge`
+  - `git rebase`
+  - `git reset --hard`
+  - 创建/删除分支
+
+### 3.5 🚫 禁止行为清单
+
+- ❌ 自行安装第三方插件、NuGet 包或依赖
+- ❌ 修改引擎源码
+- ❌ 创建超出任务范围的新文件
+- ❌ 在没有明确指令的情况下重构现有代码
+- ❌ 修改命名空间、类名、接口签名（除非 Prompt 明确要求）
+- ❌ 自行执行单元测试或集成测试（除非 Prompt 要求）
+- ❌ 提交代码到远程仓库
+
+### 3.6 ✅ 鼓励行为
+
+- ✅ 改动前读取文件确认上下文
+- ✅ 遇到不确定时**停下来询问**而非猜测
+- ✅ 改动后输出 diff 摘要
+- ✅ 如发现 Prompt 与现有代码冲突，**立即停止并报告**
+- ✅ 保留原有代码注释与格式风格
+
+---
+
+## 4. Copilot Chat 职责
+
+- 与用户进行需求讨论与方案设计
+- 输出**结构化、原子化、可一键复制**的 Prompt
+- Prompt 必须包含明确的：
+  - 任务类型（诊断 / 执行）
+  - 目标与范围
+  - 约束条件（含本文档所有约束）
+  - 分步骤清单
+  - 汇报要求
+- 接收用户反馈的 Agent 报告或编译错误
+- 根据反馈迭代产出下一个 Prompt
+- **不得直接执行代码**（Copilot Chat 是讨论端，不是执行端）
+
+---
+
+## 5. 用户职责
+
+- 提出明确的需求或问题
+- 与 Copilot Chat 充分讨论后确认方案
+- 复制 Copilot Chat 产出的 Prompt 给 Agent 执行
+- **手动编译项目**
+- 将 Agent 的执行报告反馈给 Copilot Chat
+- 将编译错误（如有）反馈给 Copilot Chat
+- 对 Agent 的改动进行 Code Review
+
+---
+
+## 6. 常用 Prompt 模板
+
+### 6.1 诊断类模板
+
+任务类型：诊断（不改代码）
+目标：[描述要了解的内容，例如"调研项目中已存在的 Volume 类与音频 Zone 系统的命名规范"]
+
+约束：
+- 禁止使用 PowerShell 搜索
+- 不得修改任何代码或配置
+- 仅输出调研报告
+
+请按以下顺序调研并汇报：
+1. [子任务 1：例如查找 Source/ 下所有 AVolume 派生类]
+2. [子任务 2：例如确认音频 Zone Manager 类名与文件位置]
+3. [子任务 3：例如列出 Module 名称与依赖]
+
+每完成一项请简短汇报，最终输出汇总报告。
+
+### 6.2 执行类模板
+
+任务类型：执行（修改代码）
+目标：[描述要实现的功能，例如"创建 FZoneEnvConfig 结构体与 AEnvironmentZoneVolume 类"]
+范围：[明确文件路径或类名]
+
+约束：
+- 禁止使用 PowerShell 搜索
+- 严禁自行编译（用户手动编译）
+- 原子化分步骤，每步完成后简短汇报
+- 不修改任务范围外的代码
+- 不修改 .uproject / Build.cs / Target.cs / DefaultEngine.ini
+- 改动前先读取文件确认上下文
+- 遇到不确定情况立即停止并报告
+
+步骤：
+1. [子任务 1：例如创建 ZoneEnvConfig.h 并定义结构体]
+2. [子任务 2：例如创建 EnvironmentZoneVolume.h/.cpp 并实现 Overlap 通知]
+3. [子任务 3：例如更新 ModuleName.Build.cs 添加依赖（如需要）]
+
+每完成一步请汇报：
+- 文件路径
+- 改动摘要
+- 是否有阻塞问题
+
+完成后输出汇总报告，等待用户编译验证。
+
+### 6.3 修复编译错误模板
+
+任务类型：执行（修复编译错误��
+目标：修复以下编译错误
+错误信息：
+[粘贴用户提供的编译错误]
+
+约束：
+- 禁止使用 PowerShell 搜索
+- 严禁自行编译验证
+- 仅修复明确指出的错误，不做额外重构
+- 改动前先读取相关文件确认上下文
+- 如错误原因不明确，停止并报告分析结果
+
+步骤：
+1. 定位错误对应的文件与行号
+2. 分析错误原因
+3. 应用最小化修复
+4. 汇报修复内容
+
+完成后等待用户重新编译验证。
+
+---
+
+## 7. 异常处理流程
+
+### 7.1 Agent 遇到不确定情况
+1. **立即停止当前任务**
+2. 输出报告：
+   - 当前进度（已完成哪些子任务）
+   - 阻塞原因（具体描述）
+   - 建议方案（如有）
+3. **等待用户/Chat 进一步指令**
+4. **不得自行猜测继续执行**
+
+### 7.2 编译失败
+1. 用户将完整编译错误日志反馈给 Copilot Chat
+2. Copilot Chat 分析错误并产出修复 Prompt
+3. 用户复制 Prompt 给 Agent 执行
+4. Agent 完成修复后用户重新手动编译
+5. 循环直到编译通过
+
+### 7.3 Agent 改动超出范围
+1. 用户立即停止 Agent
+2. 用 git diff 检查改动范围
+3. 回滚超出范围的改动
+4. 反馈给 Copilot Chat 调整 Prompt 措辞
+
+### 7.4 Prompt 与现有代码冲突
+1. Agent 发现冲突立即停止
+2. 输出冲突报告：
+   - 冲突文件
+   - 冲突点描述
+   - 当前代码与 Prompt 期望的差异
+3. 等待 Copilot Chat 调整方案
+
+---
+
+## 📌 文档结束语
+
+本约束文档适用于本工作室所有项目，**所有 Copilot Chat 与 Agent 协作必须遵守**。
+
+如需扩展或调整，请通过工作室内部流程更新本文档版本号。
+
+> 安全开发，稳健推进 🛡️
+
+收到，安全约束已完整加载 🛡️
+
+下面是第一个诊断 Prompt，目标是收集所有后续执行 Prompt 所需的项目背景信息。直接复制粘贴给 VS 2019 Agent 即可。
+
+任务类型：诊断（不改代码）
+项目背景：UE 4.27 第三人称类魂游戏，准备新增一套 "Zone ID 环境管理系统"（Volume + Manager + 配置 TMap），
+用于替代现有 ABCD 触发盒子。本次任务只做调研，不写任何代码、不改任何文件。
+
+目标：收集后续编码所需的项目结构与命名信息，避免命名冲突、放错目录、依赖缺失。
+
+==================== 强制约束 ====================
+- 🚫 禁止使用 PowerShell 进行任何搜索（防止 IDE 卡顿）
+- ✅ 允许使用：Visual Studio 2019 内建 Find in Files / Git Bash 的 grep / cmd 的 findstr / VS 代码索引
+- ❌ 不得修改任何代码、配置、资产文件
+- ❌ 不得修改 .uproject / *.Build.cs / *.Target.cs / DefaultEngine.ini / DefaultGame.ini
+- ❌ 不得执行任何 git 写操作
+- ❌ 不得编译项目
+- ⚠️ 遇到不确定情况立即停止并报告，不得猜测
+- 📋 每完成一个子任务必须立即简短汇报（不要全部做完才汇报）
+
+==================== 调研子任务清单 ====================
+
+【子任务 1：项目模块结构】
+- 打开 .uproject 文件（只读不改），列出所有 Modules 名称及其 Type（Runtime / Editor 等）
+- 在 Source/ 目录下列出每个模块的根目录路径
+- 找出"游戏主模块"（通常是与项目同名的那个）
+- 汇报：模块名清单 + 主模块名 + 主模块根目录绝对/相对路径
+
+【子任务 2：音频 Zone Trigger 系统调研】
+- 在 Source/ 下搜索关键字：Zone、ZoneID、ZoneTrigger、ZoneManager、ZoneVolume（区分大小写不敏感）
+- 找出与"音频 Zone 系统"相关的所有类（C++ 类，注意排除非音频用途的）
+- 对每个相关类记录：
+  - 类名（含 A/U/F 前缀）
+  - 文件路径（.h / .cpp）
+  - 父类
+  - 是否使用 FName 作为 ZoneID 字段（字段名是什么）
+- 汇报：完整的音频 Zone 类清单 + 命名风格特征（前缀、命名空间、目录约定）
+
+【子任务 3：现有 ABCD 触发盒子位置】
+- 搜索可能的关键字：BoxA、BoxB、BoxC、BoxD、TriggerBox、FogTrigger、AttenuationTrigger、HeightFog、PointLight 相关的自定义 Actor
+- 注意：ABCD 盒子可能是蓝图 Actor 而非 C++（如果 Source 里找不到，说明是纯蓝图），如果是蓝图请汇报"未在 C++ 中找到，疑似纯蓝图实现"
+- 如果是 C++：列出文件路径 + 类名 + 父类
+- 如果是蓝图：在 Content/ 下搜索可能的 BP_ 资产文件名（仅列文件名，不打开 .uasset）
+- 汇报：ABCD 盒子的实现形式（C++ / 蓝图）+ 位置
+
+【子任务 4：新代码合适的放置目录】
+- 基于子任务 1、2 的结果，建议新代码（ZoneEnvConfig.h / EnvironmentZoneVolume.h+cpp / EnvironmentZoneManager.h+cpp）放在哪个目录
+- 推荐参考音频 Zone 系统的目录约定，保持风格一致
+- 检查目标目录下是否已有同名/相近名文件（避免冲突）
+- 汇报：建议目录路径 + 是否有命名冲突 + 推荐的类名前缀（避免与音频系统冲突，例如 AEnvZoneVolume vs AAudioZoneVolume）
+
+【子任务 5：主模块 Build.cs 依赖检查】
+- 只读查看主模块的 *.Build.cs 文件
+- 列出当前 PublicDependencyModuleNames / PrivateDependencyModuleNames 内容
+- 判断是否已包含以下模块（本系统会用到）：
+  - "Engine"（必有）
+  - "CoreUObject"（必有）
+  - "Core"（必有）
+- 暂不需要 GameplayTags 模块（先锋阶段不用 Tag）
+- 汇报：当前依赖清单 + 是否需要新增（预期答案：不需要新增）
+
+【子任务 6：SkyCreator 蓝图 Actor 调研】
+- 在 Content/ 下搜索 SkyCreator 相关蓝图资产文件名（仅文件名，不打开 .uasset）
+- 在 Plugins/ 下检查是否有 SkyCreator 插件，如有：
+  - 插件名
+  - 插件目录路径
+  - 插件是否包含 C++ 模块（看是否有 Source/ 子目录）
+  - 如果有 C++ 模块，列出公开的 .h 文件名（不需读内容）
+- 重点判断：Manager 调用 SkyCreator 的"下雨量"功能时，是用反射（FindFunction + ProcessEvent）还是有现成的 UInterface / C++ API
+- 汇报：SkyCreator 形态（纯蓝图 / 插件含 C++）+ 推荐的调用方式
+
+==================== 汇报格式 ====================
+每个子任务完成后立即按以下格式汇报：
+
+[已完成] 子任务 X
+- 调研方式：（用了什么工具，例如"VS Find in Files 搜索关键字 ZoneID"）
+- 发现：（结构化列出）
+- 异常/疑问：（如有）
+
+全部完成后，输出一份汇总报告：
+==================== 汇总报告 ====================
+1. 主模块名：XXX，路径：XXX
+2. 音频 Zone 系统类清单：...
+3. ABCD 盒子形态：...
+4. 新代码建议目录：...
+5. Build.cs 依赖现状：...
+6. SkyCreator 调用方式建议：...
+（最后附：你认为下一步执行 Prompt 应注意的事项）
+
+现在开始执行子任务 1。
+
+
+使用说明：
+
+复制上面整段给 VS 2019 Agent
+它会一边调研一边汇报，理论上每个子任务一条汇报
+全部跑完会有一份汇总报告
+把汇总报告（或中途异常）回传给我，我会基于真实数据产出第二个 Prompt（要么继续诊断细节，要么直接进入第一个执行 Prompt：建结构体 + Volume 类）
+如果 Agent 在某一步卡住或报告与预期严重不符，你直接把那段贴给我就行，不用等全部跑完。

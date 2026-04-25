@@ -1,0 +1,47 @@
+短答：**绝大多数情况下不会影响打包，也不会影响运行**，可以先不管。
+
+### 为什么通常没影响
+
+UE 里这种 "材质引用但不存在" 的 LOG，常见的几种类型和后果：
+
+| LOG 类型 | 严重程度 | 对打包的影响 |
+|---|---|---|
+| `LogUObjectGlobals: Warning: Failed to find object 'Material /CommonUI/...'` | ⚠️ Warning | **无影响**，只是引用查找失败，引擎会走 fallback |
+| `LogLinker: Warning: Can't find file '/CommonUI/...'` | ⚠️ Warning | **无影响**，加载时跳过 |
+| `LogStreaming: Error: Couldn't find file for package` | ❌ Error | 一般也不会让打包失败，但运行时该 UI 元素会丢图 |
+| `LogInit: Fatal` 或 Cook 阶段的 `Error` | ❌❌ Fatal | 会导致打包失败 |
+
+Common UI 这种插件自带资源引用丢失，**几乎都是前两种 Warning**，属于"吵但无害"。
+
+### 具体会发生什么
+
+- ✅ **打包能成功**：Cook 阶段会跳过找不到的资源，不会中断。
+- ✅ **游戏能运行**：引擎对丢失材质有兜底机制（用默认的棋盘格 WorldGridMaterial 或纯色替代）。
+- ⚠️ **可能的副作用**：
+  - 如果你项目里**真的有 UI 用到了那个材质**，运行时那块 UI 会显示成默认棋盘格或者纯色 → **视觉异常**
+  - 如果只是插件加载时的引用（你项目根本没用到 Common UI 的控件）→ **完全无感**
+- ⚠️ **打包后的 LOG 里还是会有这条 Warning**，但玩家看不到 LOG，无所谓。
+
+### 建议的判断方式
+
+1. **打一个开发版包（Development）跑一下**，看 UI 有没有异常的棋盘格/紫色/纯黑块。
+2. 没有 → 放心忽略，这就是个噪音 LOG。
+3. 有 → 再回头处理（补材质 or 改引用 or 禁用插件）。
+
+### 如果只是想让 LOG 干净点
+
+可以在 `DefaultEngine.ini` 里压一下日志级别，把这条特定的 LogCategory 调成 Error：
+
+```ini name=DefaultEngine.ini
+[Core.Log]
+LogUObjectGlobals=Error
+; 或者更精准地针对某个 category
+LogLinker=Error
+```
+
+不过我**不太推荐这么做**，因为会顺带把同类别的其他有用 Warning 也藏起来。
+
+---
+
+**结论**：先不清理它没关系，等你看到 UI 真的出问题，或者打包阶段它升级成 Error 了，再处理也不迟。 LOG 优化的优先级应该放在 **Error / Fatal**，Warning 里先挑那些**频繁刷屏**或**性能相关**的处理。
+

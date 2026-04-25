@@ -1,0 +1,457 @@
+# UE4.27 Zone ID 环境管理系统 — 开发手册
+
+> **项目类型**：第三人称类魂游戏（Unreal Engine 4.27）  
+> **关卡架构**：独立 Level 切换（每个章节独立 .umap）  
+> **文档目的**：让任何 Copilot Chat 接手后能立刻理解项目背景、设计方案与下一步开发任务  
+> **创建日期**：2026-04-22  
+> **当前阶段**：先锋开发阶段（Pioneer Phase）
+
+---
+
+## 📑 目录
+
+1. [项目背景与开发者现状](#1-项目背景与开发者现状)
+2. [问题的由来（Why）](#2-问题的由来why)
+3. [提出的方案（What）](#3-提出的方案what)
+4. [解决方案落地细节（How）](#4-解决方案落地细节how)
+5. [先锋开发任务范围](#5-先锋开发任务范围)
+6. [扩展规划（未来）](#6-扩展规划未来)
+7. [Copilot Agent 协作安全约束](#7-copilot-agent-协作安全约束)
+8. [快速接续指南（给新 Copilot Chat）](#8-快速接续指南给新-copilot-chat)
+
+---
+
+## 1. 项目背景与开发者现状
+
+### 1.1 项目情况
+- **引擎**：Unreal Engine 4.27
+- **游戏类型**：第三人称类魂游戏（参考魂系列、血源诅咒）
+- **开发进度**：3C 里 Camera 已完成，Control 部分完成，目前在做关卡设计与场景编辑逻辑
+- **关卡架构决策**：**独立 Level 切换**（不使用 Level Streaming），每个章节是独立的 .umap，通过 `OpenLevel` 传送
+
+### 1.2 已有系统（不要破坏）
+- **音频 Zone Trigger 系统**：基于 Volume + Manager Actor 的音乐/氛围音效配置系统
+  - 每个 Volume 在 Details 里填写 Zone ID（FName）
+  - 一个 Manager Actor 集中配置所有 Zone ID 对应的 Music Event 和 Ambience Event
+  - 3D 音效不在范围内
+  - Stinger 是另一套触发式 Volume + Cooldown 机制
+- **现有 ABCD 触发盒子**（即将被新系统替代）：
+  - A 盒子：变换质感全局灯 Attenuation Radius
+  - B 盒子：雾气 Float 变化
+  - C 盒子：A+B 合并，处理中→下层过渡
+  - D 盒子：从下层经长梯子回上层时恢复初始值
+  - **当前 Bug**：第二次进入时盒子失效；C 盒子反向走 Attenuation 不恢复
+
+---
+
+## 2. 问题的由来（Why）
+
+### 2.1 现状问题
+现有 ABCD 盒子机制是**事件驱动 + 状态记忆**模式，存在以下问题：
+
+| 问题 | 根本原因 |
+|------|---------|
+| Box A/B 第二次失效 | 状态变量（Float）没被正确重置，Branch 走了错误分支 |
+| C 盒子反向恢复 Attenuation 失败 | 单 Box 同时管理多个目标，反向逻辑遗漏了某个 Set |
+| Index/Count 缺失 | 没有"当前所在区域"的概念，全靠 Box Overlap 推断 |
+| 扩展性差 | 每加一种数据（UI/天气/音效）就要改 Box 蓝图 |
+
+**根本问题**：用 **"边界事件"** 模拟 **"区域状态"**，是反过来的。  
+**正确做法**：**区域是状态，边界只是切换信号。**
+
+### 2.2 设计目标
+1. 玩家在不同区域间往返时，环境（雾、灯光、雨等）能正确切换且**可恢复**
+2. 同 ZoneID 的多个 Volume 重叠时**不冲突**（不规则地形需求）
+3. 系统**易于扩展**（未来加新数据字段不破坏架构）
+4. 支持**剧情后世界状态变化**（如打完 Boss 后区域永久变化）
+5. 策划友好：在 Manager Details 面板可视化配置
+
+---
+
+## 3. 提出的方案（What）
+
+### 3.1 核心思想：**Zone State Machine + Configuration-Driven**
+
+```
+不要问"玩家穿过了哪个盒子"
+要问"玩家现在在哪个区域 + 世界处于什么状态"
+然后：当前匹配的配置 = 应该呈现的环境
+```
+
+### 3.2 架构概览（三层）
+
+```
+┌──────────────────────────────────────────────────┐
+│ 第一层：ZoneVolume（轻量边界 Actor）               │
+│    - Details 填 ZoneID (FName)                   │
+│    - 仅负责：进入时通知 Manager "我进入了 X"        │
+│    - 不存数据，不做 Set                            │
+└──────────────────────────────────────────────────┘
+                    ↓ 通知
+┌──────────────────────────────────────────────────┐
+│ 第二层：EnvironmentZoneManager（核心管理 Actor）   │
+│    - 关卡内放一个                                  │
+│    - 维护"当前激活区域栈"（TArray，支持重叠）      │
+│    - Details 填 TMap<ZoneID, FZoneEnvConfig>     │
+│    - Details 引用场景中的 Fog/Light/SkyCreator    │
+│    - 解析当前应用配置 + 平滑过渡                    │
+└──────────────────────────────────────────────────┘
+                    ↓ 应用
+┌──────────────────────────────────────────────────┐
+│ 第三层：场景 Actor（被 Manager 引用）              │
+│    - ExponentialHeightFog                        │
+│    - 全局质感灯（PointLight 等）                  │
+│    - BP_SkyCreator（控制天气）                    │
+└──────────────────────────────────────────────────┘
+```
+
+### 3.3 关键机制
+
+#### 栈机制（解决重叠问题）
+- 用 `TArray<UZoneDataAsset*>` 而非 `TSet`
+- 进入 Volume → `Add`，离开 → `RemoveSingle`
+- 同 ZoneID 重叠时栈中有多个相同项 → 离开一个仍激活
+- 完全离开栈空 → 回到默认区域
+
+```
+玩家进入 V1（ZoneID=Upper） → Stack: [Upper]
+玩家进入 V2（ZoneID=Upper，重叠） → Stack: [Upper, Upper]
+玩家离开 V1 → Stack: [Upper] ✅ 仍激活
+玩家离开 V2 → Stack: [] → 回到默认
+```
+
+#### GameplayTag 动态状态（剧情/Boss 后变化）
+- **不是**给 ZoneID 加 Tag，而是给**全局世界状态**加 Tag
+- ZoneID 配置里有 Default + Variants，Variants 用 `FGameplayTagQuery` 描述匹配条件
+- Boss 死亡 → `WorldStateSubsystem.AddWorldTag("State.PostBoss.Vordt")`
+- Manager 监听 Tag 变化，自动重新匹配并应用配置
+
+### 3.4 关注点分离
+
+| 类型 | 触发方式 | 例子 |
+|------|---------|------|
+| **持续性氛围** | Zone Volume + Manager | BGM、雾、光、雨 |
+| **瞬时事件** | 直接调用 | Boss 死亡 Stinger、UI 提示音 |
+| **状态变化通知** | AddWorldTag | 跨系统响应（环境/音乐/AI） |
+
+> Stinger 等瞬时事件**不要**塞进 Zone 系统，直接在 Boss 蓝图里调用音频接口。
+
+---
+
+## 4. 解决方案落地细节（How）
+
+### 4.1 类结构设计
+
+#### 4.1.1 配置数据结构
+
+```cpp
+USTRUCT(BlueprintType)
+struct FZoneEnvConfig
+{
+    GENERATED_BODY()
+
+    // === 先锋阶段：仅 3 个核心字段 ===
+    UPROPERTY(EditAnywhere, Category="Fog")
+    float FogDensity = 0.02f;
+
+    UPROPERTY(EditAnywhere, Category="Lighting")
+    float GlobalLightAttenuationRadius = 5000.f;
+
+    UPROPERTY(EditAnywhere, Category="Weather")
+    float SkyCreatorRainAmount = 0.f;
+
+    // === 过渡控制（必备）===
+    UPROPERTY(EditAnywhere, Category="Transition")
+    float BlendTime = 2.0f;
+};
+```
+
+#### 4.1.2 ZoneVolume
+
+```cpp
+UCLASS()
+class AEnvironmentZoneVolume : public AVolume
+{
+    GENERATED_BODY()
+public:
+    UPROPERTY(EditInstanceOnly, Category="Zone")
+    FName ZoneID;
+
+    UPROPERTY(EditInstanceOnly, Category="Zone")
+    int32 Priority = 0;
+
+    virtual void NotifyActorBeginOverlap(AActor* Other) override;
+    virtual void NotifyActorEndOverlap(AActor* Other) override;
+};
+```
+
+#### 4.1.3 Manager（核心）
+
+```cpp
+UCLASS()
+class AEnvironmentZoneManager : public AActor
+{
+    GENERATED_BODY()
+public:
+    // === 场景对象引用（Details 面板下拉选）===
+    UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category="Scene References",
+        meta=(DisplayName="高度雾对象"))
+    AExponentialHeightFog* TargetFog;
+
+    UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category="Scene References",
+        meta=(DisplayName="质感灯对象"))
+    APointLight* TargetGlobalLight;
+
+    UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category="Scene References",
+        meta=(DisplayName="天空创建器（蓝图Actor）"))
+    AActor* TargetSkyCreator;
+
+    // === 配置 ===
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Zone Configurations")
+    TMap<FName, FZoneEnvConfig> ZoneConfigs;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Zone Configurations",
+        meta=(DisplayName="默认区域 ID（栈空时使用）"))
+    FName DefaultZoneID = TEXT("Default");
+
+    // === 运行时状态 ===
+private:
+    UPROPERTY(Transient)
+    TArray<FName> ActiveZoneStack;
+
+    FZoneEnvConfig CurrentConfig;
+    FZoneEnvConfig TargetConfig;
+    float BlendAlpha = 1.0f;
+    float CurrentBlendTime = 0.f;
+
+public:
+    void PushZone(FName ZoneID);
+    void PopZone(FName ZoneID);
+    FName ResolveActiveZoneID() const;
+
+    UFUNCTION(BlueprintCallable, Category="Zone")
+    void ApplyConfig(const FZoneEnvConfig& Config);
+
+    UFUNCTION(CallInEditor, Category="Validation")
+    void ValidateReferences();
+
+protected:
+    virtual void BeginPlay() override;
+    virtual void Tick(float DeltaTime) override;
+};
+```
+
+### 4.2 关键机制实现要点
+
+- **PushZone/PopZone**：栈操作，触发后调用 `ResolveActiveZoneID` 拿当前应用 ZoneID
+- **ResolveActiveZoneID**：栈空 → 返回 `DefaultZoneID`；否则取栈顶（或最高 Priority）
+- **Tick**：处理 BlendTime 内 Float 插值（FogDensity / Attenuation / RainAmount）
+- **ApplyConfig**：实际写入 Fog/Light 组件 + 调用 SkyCreator 蓝图函数
+- **SkyCreator 调用**：用 `FindFunction` + `ProcessEvent`，或推荐用 `UInterface`
+
+### 4.3 Details 面板效果（策划视角）
+
+```
+┌─ EnvironmentZoneManager ──────────────────────────┐
+│ Scene References:                                  │
+│   高度雾对象:        [ExponentialHeightFog_1 ▼]   │
+│   质感灯对象:        [PointLight_Global ▼]        │
+│   天空创建器:        [BP_SkyCreator_1 ▼]          │
+│                                                    │
+│ Zone Configurations:                               │
+│   Default Zone ID: [Default          ]             │
+│   Zone Configs (Map):                              │
+│     ▼ "UpperWorld"                                │
+│        Fog Density:                  0.02          │
+│        Global Light Attenuation:     5000          │
+│        Sky Creator Rain Amount:      0.0           │
+│        Blend Time:                   2.0           │
+│     ▼ "MiddleWorld"                               │
+│        Fog Density:                  0.05          │
+│        Global Light Attenuation:     3000          │
+│        Sky Creator Rain Amount:      0.3           │
+│        Blend Time:                   2.5           │
+│     ▼ "LowerWorld"                                │
+│        ...                                         │
+└────────────────────────────────────────────────────┘
+```
+
+---
+
+## 5. 先锋开发任务范围
+
+> **本阶段只实现这三件事**，其余字段、Tag 系统、跨章节等都暂不做。
+
+### 5.1 必须实现
+- [x] `FZoneEnvConfig` 结构体（仅 3 个字段 + BlendTime）
+- [x] `AEnvironmentZoneVolume`（BeginOverlap / EndOverlap → 通知 Manager）
+- [x] `AEnvironmentZoneManager`（栈机制 + TMap 配置 + 3 个 Scene References）
+- [x] FogDensity 平滑过渡
+- [x] LightAttenuationRadius 平滑过渡
+- [x] SkyCreator RainAmount 调用（通过函数名反射或接口）
+- [x] `ValidateReferences` 编辑器内按钮，输出未配置项警告
+
+### 5.2 暂不实现（明确边界）
+- ❌ GameplayTag 系统（后续阶段）
+- ❌ WorldStateSubsystem（后续阶段）
+- ❌ Variants 变体配置（后续阶段）
+- ❌ DataAsset 抽离（后续阶段）
+- ❌ Level Streaming 跨子关卡（项目决定不用）
+- ❌ 多 Manager 协作（每关卡只一个 Manager）
+- ❌ 存档系统集成（后续阶段）
+
+### 5.3 验收标准
+1. 关卡里放 1 个 Manager + 3 个 Volume（不同 ZoneID）
+2. Volume 之间走动 → Fog/Light/Rain 平滑过渡 ✅
+3. 两个相同 ZoneID 的 Volume 重叠 → 离开一个不掉出区域 ✅
+4. 栈空时 → 自动应用 DefaultZoneID 的配置 ✅
+5. Manager Details 引用未填 → 编辑器有警告日志 ✅
+
+---
+
+## 6. 扩展规划（未来）
+
+按需逐步加入，**不要预先实现**：
+
+| 阶段 | 内容 |
+|------|------|
+| Phase 2 | 加 FogColor / LightColor / FogHeightFalloff 字段 |
+| Phase 3 | 引入 GameplayTag + WorldStateSubsystem |
+| Phase 4 | 加 Variants（条件配置） |
+| Phase 5 | 配置抽离到 DataAsset，跨关卡复用 |
+| Phase 6 | 接入存档（FGameplayTagContainer 序列化） |
+| Phase 7 | 与音频 Zone 系统统一 ZoneID 命名 |
+
+---
+
+## 7. Copilot Agent 协作安全约束
+
+### 7.1 工作流程
+1. **需求讨论**：用户提出问题，与 Copilot Chat 讨论方案
+2. **方案确定**：用户与 Copilot Chat 共同确认实施方案
+3. **Prompt 输出**：Copilot Chat 将最终任务输出为**单一 Code Block 内的 Prompt**，便于一键复制
+4. **Agent 执行**：用户将 Prompt 复制粘贴给 Visual Studio 2019 的 Copilot Agent 执行
+5. **报告反馈**：用户将 Agent 报告反馈给 Copilot Chat
+6. **下一轮迭代**：Copilot Chat 根据报告产出下一个 Prompt
+
+### 7.2 Prompt 类型
+- **诊断类 Prompt**：用于了解游戏代码架构、确认介入点、收集现状信息
+- **执行类 Prompt**：用于具体落地代码实现，必须原子化分步骤
+
+### 7.3 强制规则（Agent 必须遵守）
+
+#### ⚠️ 搜索方式
+- **禁止使用 PowerShell** 进行文件搜索或内容查询（防止编辑器/IDE 卡顿）
+- 优先使用 IDE 内建搜索、`grep` (Git Bash)、`findstr` (cmd) 或代码索引工具
+
+#### 🧱 任务原子化
+- 每次执行任务必须**分步骤、最小化改动**
+- **每完成一个子任务**必须**简短汇报已完成内容**（文件名 + 改动摘要）
+- 严禁"一次性大重构"
+
+#### 🛑 编译职责
+- **Agent 严禁自行执行编译**
+- 编译由**用户手动进行**
+- 如果编译报错，用户会将错误反馈给 Copilot Chat
+- Copilot Chat 出修复 Prompt → Agent 执行
+- **Agent 不得在编译失败后自行猜测并修改代码**
+
+#### 📁 文件改动安全
+- 改动前先读取文件，确认现有内容
+- 不得删除/重命名未在任务范围内的文件
+- 不得修改 `.uproject`、`Build.cs`、`Target.cs`（除非 Prompt 明确要求）
+- 不得修改 git 配置或执行 git 推送/合并
+
+#### 🚫 禁止行为
+- 不得自行安装第三方插件或依赖
+- 不得修改引擎源码
+- 不得创建超出任务范围的新文件
+- 不得在没有明确指令的情况下重构现有代码
+
+#### ✅ 报告格式（Agent 完成子任务后）
+```
+[已完成] 子任务编号 X.Y
+- 文件：path/to/file.cpp
+- 改动：（简短描述，1-2 句）
+- 下一步建议：（如有）
+```
+
+### 7.4 Copilot Chat 输出 Prompt 的格式约定
+- 所有 Prompt 必须包含在**单一 Code Block 内**（用 ```` ```text ```` 包裹）
+- Prompt 开头明确说明：任务类型（诊断/执行）、范围、约束
+- Prompt 末尾明确要求：分步执行、每步汇报、不编译
+
+---
+
+## 8. 快速接续指南（给新 Copilot Chat）
+
+> 如果你是新接手的 Copilot Chat，请先读完本节再开始工作。
+
+### 8.1 当前��态
+- 项目处于**先锋阶段（Pioneer Phase）**
+- 仅实现 Section 5.1 列出的最小功能集
+- 旧 ABCD 盒子**暂时保留**，新系统并行测试通过后再删除
+
+### 8.2 下一步可能的工作方向（任选其一）
+1. **诊断阶段**：让 Agent 调研项目结构，确定 C++ 模块名、放置位置、与音频 Zone 系统的命名冲突等
+2. **创建结构体和 Volume 类**：从 `FZoneEnvConfig` + `AEnvironmentZoneVolume` 开始
+3. **创建 Manager 类**：实现栈机制 + Scene References
+4. **实现 Apply + Tick 插值逻辑**：先做 FogDensity，再 Light，再 SkyCreator
+5. **编辑器测试 + 验收**：参照 Section 5.3
+
+### 8.3 与用户协作要点
+- **用户负责**：编译、测试、提供 Agent 报告与编译错误
+- **Copilot Chat 负责**：方案讨论、产出 Prompt、根据报告迭代
+- **Agent 负责**：按 Prompt 执行原子化代码改动 + 简短汇报
+
+### 8.4 必读上下文
+- 已有音频 Zone Trigger 系统（操作风格的参考样板）
+- 现有 ABCD 触发盒子（要被替代的对象）
+- 项目使用独立 Level 切换架构（每章节一个 .umap）
+- SkyCreator 是蓝图 Actor，调用方式需用反射或接口
+
+### 8.5 常用 Prompt 模板
+
+#### 诊断类模板
+```text
+任务类型：诊断
+目标：[描述要了解什么]
+约束：
+- 禁止使用 PowerShell 搜索
+- 不修改任何代码
+- 仅输出报告
+请按以下顺序调研并汇报：
+1. [子任务 1]
+2. [子任务 2]
+...
+每完成一项请简短汇报。
+```
+
+#### 执行类模板
+```text
+任务类型：执行
+目标：[描述要做什么]
+范围：[明确文件/类/函数]
+约束：
+- 禁止使用 PowerShell 搜索
+- 严禁自行编译（用户手动编译）
+- 原子化分步骤，每步完成后简短汇报
+- 不修改任务范围外的代码
+步骤：
+1. [子任务 1]
+2. [子任务 2]
+...
+完成后输出汇总报告。
+```
+
+---
+
+## 📌 文档结束语
+
+本手册是一份**活文档**，随着开发推进会更新。任何接手的 Copilot Chat 应：
+1. 先读完本文档
+2. 询问用户当前进度（已完成哪些 Section 5 中的任务）
+3. 在用户指引下产出下一步 Prompt
+4. 严格遵守 Section 7 的安全约束
+
+> 祝开发顺利 🎮

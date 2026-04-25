@@ -1,0 +1,537 @@
+目前编译成功：
+
+AGENT对于任务的报告：
+
+## [已完成] 步骤 6
+
+### 文件改动
+- **`Source\soul\Private\EnvironmentZoneManager.cpp`**：实现 `ValidateReferences()`，按顺序检查 `TargetFog` / `TargetGlobalLight` / `TargetSkyCreator` / `ZoneConfigs.Num()` / `ZoneConfigs.Contains(DefaultZoneID)` / SkyCreator 是否实现 `SetRainAmount`，全通过则 Log "通过 ✓"。
+- **`Source\soul\Public\EnvironmentZoneVolume.h`**：新增私有成员 `UPROPERTY(Transient) class AEnvironmentZoneManager* CachedManager = nullptr;`（前置声明形式，避免引入额外 include）。
+- **`Source\soul\Private\EnvironmentZoneVolume.cpp`**：
+  - 顶部新增 `#include "EnvironmentZoneManager.h"`、`#include "Kismet/GameplayStatics.h"`
+  - `NotifyActorBeginOverlap` / `NotifyActorEndOverlap` 中替换 TODO，首次访问时通过 `UGameplayStatics::GetActorOfClass(GetWorld(), AEnvironmentZoneManager::StaticClass())` 解析并缓存到 `CachedManager`，调用 `EnterZone` / `ExitZone`；找不到时 Warning。原 Log 降级为 Verbose。
+
+### 自检
+- ✅ 未引入与父类同名局部变量（未使用 Brush/Tags/Owner/Role 等命名）
+- ✅ `FActiveEnvZoneEntry` 仍仅在 `EnvironmentZoneVolume.h` 中声明一次
+- ✅ 新文件 include 路径正确
+- ✅ `ZoneEnvConfig.h` 已在 `EnvironmentZoneManager.h` 中 include
+- ✅ 未修改 .uasset / Build.cs / .uproject / ini
+
+---
+
+## 汇总报告
+
+### 1. 新增 / 修改文件清单
+| 状态 | 文件 |
+|---|---|
+| 新增（前序步骤） | `Source\soul\Public\ZoneEnvConfig.h` |
+| 新增（前序步骤） | `Source\soul\Public\EnvironmentZoneVolume.h` |
+| 新增（前序步骤） | `Source\soul\Private\EnvironmentZoneVolume.cpp` |
+| 新增（前序步骤） | `Source\soul\Public\EnvironmentZoneManager.h` |
+| 新增（前序步骤） | `Source\soul\Private\EnvironmentZoneManager.cpp` |
+| 本步修改 | `Source\soul\Public\EnvironmentZoneVolume.h`（新增 `CachedManager` 成员） |
+| 本步修改 | `Source\soul\Private\EnvironmentZoneVolume.cpp`（include + 替换 TODO） |
+| 本步修改 | `Source\soul\Private\EnvironmentZoneManager.cpp`（实现 `ValidateReferences`） |
+
+### 2. 是否修改范围外文件
+否。仅触及计划允许的 Manager / Volume / Config 三组文件。
+
+### 3. 是否修改 Build.cs
+否。`TimerManager`、`GameplayStatics`、`ExponentialHeightFog`、`PointLight`、`BoxComponent` 等全部在 Engine 模块（一般 `Core` / `CoreUObject` / `Engine` 已默认在 Build.cs 中）。
+
+### 4. 编译前用户应注意的事项
+- 确认 `soul.Build.cs` 的 `PublicDependencyModuleNames` 至少含 `"Core","CoreUObject","Engine"`（默认已有，无需改动）。
+- 第一次编译前请关闭 UE Editor，避免 `.dll` 占用导致链接失败。
+- `AExponentialHeightFog::GetComponent()` 返回 `UExponentialHeightFogComponent*`（4.27 已确认），无需 `FindComponentByClass`。
+- `FogDensity` 写完调用了 `MarkRenderStateDirty()`，渲染线程会刷新。
+
+### 5. 遗留 TODO / FIXME
+- 无遗留 TODO（已全部替换）。
+- 可选优化（非阻塞）：
+  - 在 `Tick` 中加入 `bDirty` 标记，仅在 Blend 进行中或属性变化时调用 `ApplyCurrentBlendedToScene()`。
+  - 多实例 Manager 情况下可在 Manager `BeginPlay` 中注册到 GameInstance，Volume 直接索引代替 `GetActorOfClass` 全场扫描。
+
+### 6. 关卡侧使用步骤
+1. **放置 Manager**：在关卡中放 1 个 `AEnvironmentZoneManager`（拖到场景，仅一个）。
+   - Details 面板：
+     - `高度雾对象` → 选场景里的 `ExponentialHeightFog`
+     - `质感灯对象` → 选 `PointLight`
+     - `天空创建器中介Actor` → 选下一步创建的 SkyCreator BP 实例
+     - `区域配置表`：添加若干 `FName -> FZoneEnvConfig`，至少包含一项匹配 `默认区域 ID`（默认 `Default`）。
+   - 点击 `检查场景引用与配置完整性` 按钮，输出窗口确认 "通过 ✓"。
+2. **创建 SkyCreator 中介蓝图**：
+   - 新建一个 `Actor` 蓝图，命名如 `BP_SkyCreatorBridge`。
+   - 在其中创建一个**蓝图函数** `SetRainAmount(Amount: float)`（注意函数名严格匹配，区分大小写）。
+   - 函数体内调用真实 SkyCreator 插件的接口（设置雨量节点）。
+   - 在关卡放置该蓝图实例，并把它拖到 Manager 的 `天空创建器中介Actor` 槽位。
+3. **放置 Volume**：拖入 `AEnvironmentZoneVolume`，
+   - `区域 ID` 填写需匹配 Manager 的 `区域配置表` Key。
+   - `优先级` 控制叠加顺序。
+   - `触发形状` 在 `Brush / Box / Sphere / Capsule` 中选择，拖动 Component 调整大小。
+4. **测试**：PIE，玩家走入/离开 Volume，观察输出日志（`LogEnvZoneMgr`）确认 EnterZone/ExitZone/应用配置流程。
+
+等待您编译验证后再继续。
+Copilot said: 太棒了 🎉 编译通过 = Manager 全套机制已就位。先锋阶段的 C++
+太棒了 🎉 编译通过 = Manager 全套机制已就位。先锋阶段的 C++ 代码骨架全部完成！
+
+📊 当前进度
+Code
+✅ FZoneEnvConfig 结构体（5 字段）
+✅ EEnvZoneTriggerShape 枚举 + AEnvironmentZoneVolume（4 形状）
+✅ FActiveEnvZoneEntry 栈条目
+✅ AEnvironmentZoneManager（栈 / Tick 插值 / Cooldown 定时器 / 反射调 SkyCreator / 校验按钮）
+✅ Volume ↔ Manager 接入（缓存 + 兜底查找）
+✅ 编译通过
+⏳ 关卡侧测试 + 验收
+🎯 下一步：进入"关卡侧测试 + 验收"阶段
+代码层面 Agent 的活已经干完了，接下来主要是你的事——在 UE 编辑器里搭测试场景、跑验收用例。我不准备再出执行 Prompt 给 Agent（没活干），而是给你一份 手动操作清单 + 验收用例。
+
+如果测试中发现问题（行为异常、闪烁、不切换等），你贴现象给我，我再分析是代码 bug 还是配置问题，决定要不要出修复 Prompt。
+
+🛠️ 关卡侧操作清单（按顺序做）
+第 1 步：编辑器准备
+在项目里新建一个测试关卡（独立 .umap，例如 TestMap_EnvZone），避免污染主关卡
+关卡里基本环境：放一个地板 + Player Start + 一个 Light
+第 2 步：放置必要 Actor
+顺序	操作	备注
+1	拖一个 Exponential Height Fog 到场景	引擎自带
+2	拖一个 Point Light 到场景	当"质感灯"用
+3	创建 BP_SkyCreatorBridge（详见第 3 步）	中介蓝图
+4	把 BP_SkyCreatorBridge 拖到场景	中介实例
+5	拖一个 EnvironmentZoneManager 到场景（只放一个）	在 Place Actors 面板搜 "Environment"
+第 3 步：创建 SkyCreator 中介蓝图（关键！）
+Content Browser 右键 → Blueprint Class → 父类选 Actor（不是 SkyCreator，避免硬依赖；后面手动持有 SkyCreator 引用即可）
+命名为 BP_SkyCreatorBridge
+打开蓝图，新建 Function 命名为 SetRainAmount（严格匹配，区分大小写）
+Function 添加一个 float 类型的输入参数，命名为 Amount
+Function 内部：
+测试阶段先随便连个 Print String（输出 Amount），验证反射调用是否成功
+后续再接真正的 SkyCreator API（你已经知道是 SetWeatherSettings / LerpWeatherSettings）
+编译保存
+💡 小窍门：Print String 测试通过后，再考虑接真 SkyCreator。这样能隔离"反射调用是否工作"和"SkyCreator API 调用是否正确"两个问题。
+
+第 4 步：配置 Manager
+点击 Manager Actor → Details 面板：
+
+字段	填什么
+高度雾对象	下拉选 ExponentialHeightFog
+质感灯对象	下拉选 PointLight
+天空创建器中介Actor	下拉选 BP_SkyCreatorBridge 实例
+默认区域 ID	Default（保持默认）
+区域配置表	添加 3 个条目（见下）
+TMap 配置示例（点 + 添加，Key 是 FName，Value 展开填字段）：
+
+Key	Fog Density	Light Attenuation	Rain	Blend Time	Cooldown
+Default	0.02	5000	0.0	1.0	0.0
+UpperWorld	0.02	5000	0.0	2.0	0.5
+MiddleWorld	0.05	3000	0.3	2.5	1.0
+LowerWorld	0.10	1500	0.6	3.0	1.5
+第 5 步：点 ValidateReferences 按钮
+Manager Details 面板里有个 检查场景引用与配置完整性 按钮，点一下。
+
+预期输出窗口看到：
+
+Code
+LogTemp: [EnvZoneMgr][校验] 通过 ✓
+如有警告，按提示补全。
+
+第 6 步：放置测试 Volume
+拖 3 个 EnvironmentZoneVolume 到场景（在 Place Actors 面板搜 "Environment"），间隔布置：
+
+Volume	ZoneID	Priority	形状
+V1	UpperWorld	0	Box
+V2	MiddleWorld	0	Sphere
+V3	LowerWorld	0	Capsule
+第 7 步：开 Output Log 准备观察
+Window → Developer Tools → Output Log，留着别关。
+
+✅ 验收用例（按顺序跑）
+打开 Output Log + PIE，按下面顺序在 Volume 间走动，对照预期结果：
+
+用例 1：基础进出（最低验收）
+PIE 启动 → 玩家在所有 Volume 外
+预期：Log 出现 [EnvZoneMgr] BeginPlay: 应用 Default=Default，雾/光是 Default 配置的值
+走进 V1（UpperWorld）
+预期：
+Log: [EnvZone] BeginOverlap: ZoneID=UpperWorld, Priority=0, TriggerID=...
+Log: [EnvZoneMgr] 应用配置: UpperWorld, BlendTime=2.00, Cooldown=0.50
+雾/光在 2 秒内平滑过渡到 UpperWorld 配置 ✅
+走出 V1
+预期：
+Log: [EnvZone] EndOverlap: ZoneID=UpperWorld...
+0.5 秒 cooldown 后：Log: [EnvZoneMgr] 应用配置: Default...
+雾/光过渡回 Default ✅
+用例 2：栈机制（重叠 Volume）
+在编辑器里把 V1 和 V2 拖到部分重叠
+PIE 进入只有 V1 的区域 → 应用 UpperWorld
+走入 V1 ∩ V2（重叠区） → 栈应该是 [V1, V2]
+预期：应用 MiddleWorld（V2，最近 Push）
+走出 V1 范围（仍在 V2 内） → 栈是 [V2]
+预期：仍是 MiddleWorld，不该切回 Default ✅
+完全走出 V2 → 栈空 → Default
+用例 3：相同 ZoneID 重叠（最关键的 bug 修复点）
+在编辑器里复制 V1，命名 V1b，让 V1 和 V1b 部分重叠（两个都是 UpperWorld）
+PIE 进入 V1 → 栈 [UpperWorld(V1)]
+进入 V1b（重叠区） → 栈 [UpperWorld(V1), UpperWorld(V1b)]
+走出 V1（仍在 V1b 内） → 栈 [UpperWorld(V1b)]
+预期：仍是 UpperWorld，环境不该闪回 Default ✅
+走出 V1b → 栈空 → Default
+用例 4：Cooldown 防抖（你的核心需求）
+配置 V1 的 Cooldown=2.0（去 Manager 调）
+PIE 进入 V1 → 立刻应用 UpperWorld + 启动 2s 定时器
+0.5s 后走出 V1
+预期：栈为空了，但不立刻切回 Default，Log 出现 Cooldown 中，暂缓切换
+等到 2s 总时长结束
+预期：Log: Cooldown 到期，然后切到 Default
+用例 5：Cooldown 期间反复横跳（防抖核心）
+V1 的 Cooldown=2.0
+进入 V1 → 应用 UpperWorld
+在 cooldown 期间反复走入走出 V1（横跳）
+预期：环境保持 UpperWorld 不变，2s 后才根据当前栈状态决定切不切
+用例 6：形状切换
+选中 V1，Details 把 ShapeType 改成 Sphere
+预期：编辑器里立刻变成球体可视化（PostEditChangeProperty 触发）
+调整 SphereCollision 的 Radius
+PIE 测试 Sphere 形状的 Overlap 是否正确
+用例 7：SkyCreator 反射调用
+PIE 进入 V3（LowerWorld，Rain=0.6）
+预期：BP_SkyCreatorBridge 的 Print String 输出 Amount = 0.6（或 Blend 期间从 0 到 0.6 的中间值）
+走出 V3
+预期：Print String 输出 Amount 逐渐回到 Default 的 0.0
+用例 8：缺配置警告
+故意删掉 Manager 配置表里的 Default 条目
+点 ValidateReferences
+预期：Log Warning: DefaultZoneID=Default 未在配置表中
+PIE 启动后栈空时
+预期：Log Warning: ZoneID=Default 在 ZoneConfigs 中未配置，但不崩溃
+📝 测试结果反馈格式
+跑完用例后，回我以下信息（不用全跑完，跑到哪算哪）：
+
+Code
+✅ 通过：用例 1 / 2 / 3 / ...
+❌ 失败：
+   用例 X：
+   - 现象：（实际看到什么）
+   - 预期：（应该看到什么）
+   - Log 截取：（相关行）
+⚠️ 异常但不阻塞：
+   - （任何奇怪但不影响功能的事）
+🎯 验收通过后的下一步规划
+如果用例 1~8 全部通过，先锋阶段就正式收官 ✅，接下来选项：
+
+挂起新系统，去做别的（旧 ABCD 盒子先不删，等下一阶段再回来）
+直接进 Phase 2：加 FogColor / LightColor / FogHeightFalloff 字段
+去删旧 ABCD 盒子（手动操作）
+整合测试：在真实关卡里验证 + 与音频 Zone 联动测试
+慢慢测，不急。有问题随时回来贴现象 🎮
+
+You said: 请先把今晚这个开发进度保存一下，明天上午我们继续，准备用关卡测试验收
+请先把今晚这个开发进度保存一下，明天上午我们继续，准备用关卡测试验收
+Copilot said: 好的，今晚到这里 👋 下面是**今晚的进度存档**，明早回来直接看这一条就能续上。 --- ## 📌 进度存档（2026-04-24 夜 →
+好的，今晚到这里 👋 下面是今晚的进度存档，明早回来直接看这一条就能续上。
+
+📌 进度存档（2026-04-24 夜 → 2026-04-25 晨续）
+✅ 今晚完成的事
+Common UI LOG 问题
+已挂起，Warning 级别，不影响打包/运行
+Zone ID 环境管理系统 —— 先锋阶段 C++ 全部收官 🎉
+已完成的诊断：
+
+诊断 #1：项目结构、音频 Zone 系统、ABCD 盒子位置、Build.cs、SkyCreator 插件
+诊断 #2：AAudioZoneTrigger 形状切换机制对齐
+已完成的执行：
+
+Prompt #1：建 FZoneEnvConfig + AEnvironmentZoneVolume（4 形状：Brush/Box/Sphere/Capsule）
+中途修复：Brush 局部变量与父类 ABrush::Brush 同名（C4458）→ 改为 BrushComp
+Prompt #2：建 AEnvironmentZoneManager（栈机制 / Tick 插值 / Cooldown 定时器 / SkyCreator 反射调用 / ValidateReferences 按钮）+ Volume 接入 Manager
+编译已通过 ✅
+关键设计决策（已落地）：
+
+维度	决策
+父类	Volume 用 AVolume，Manager 用 AActor
+ZoneID 类型	FName（与音频系统统一）
+API 签名	EnterZone/ExitZone(FName, int32 Priority, int32 TriggerUniqueID)（对齐音频）
+TriggerUniqueID 生成	BeginPlay 中 static_cast<int32>(GetUniqueID())
+形状切换	4 Component 常驻 + enable/disable + PostEditChangeProperty 即时切换
+默认形状	Box
+Overlap 回调	NotifyActorBeginOverlap/EndOverlap（不绑 Component）
+玩家过滤	Cast<ACharacter> + IsPlayerControlled()
+Cooldown 机制	FTimerHandle 定时器；期间栈照常更新但不 ApplyConfig；到期重新 Resolve
+BlendTime 插值	Tick 中 Lerp 三个标量；中途打断会用当前快照作为新起点
+SkyCreator 调用	反射 FindFunction("SetRainAmount") + ProcessEvent（蓝图中介方案）
+Manager 引用获取	Volume 端 GetActorOfClass + 缓存指针
+新增文件清单：
+
+Code
+Source\soul\Public\ZoneEnvConfig.h
+Source\soul\Public\EnvironmentZoneVolume.h
+Source\soul\Private\EnvironmentZoneVolume.cpp
+Source\soul\Public\EnvironmentZoneManager.h
+Source\soul\Private\EnvironmentZoneManager.cpp
+范围外文件全部未动；Build.cs / .uproject / .ini / .uasset 全部未改。
+
+⏭️ 明早的起点
+任务：进入关卡侧测试 + 验收阶段
+
+我已经准备好了完整的测试操作清单 + 8 个验收用例，明早直接开干，不需要再让 Agent 写代码（除非测试发现 bug）。
+
+操作清单概要
+新建测试关卡 TestMap_EnvZone
+放置：ExponentialHeightFog / PointLight / BP_SkyCreatorBridge / Manager
+创建 BP_SkyCreatorBridge（Actor 蓝图，含 SetRainAmount(float Amount) 函数，先用 Print String 占位）
+配置 Manager 的 TMap：4 个 Zone（Default / UpperWorld / MiddleWorld / LowerWorld）
+点 检查场景引用与配置完整性 按钮，应输出"通过 ✓"
+放置 3 个 Volume：V1=UpperWorld(Box) / V2=MiddleWorld(Sphere) / V3=LowerWorld(Capsule)
+开 Output Log，开始跑 8 个验收用例
+8 个验收用例
+基础进出（Default ↔ UpperWorld）
+栈机制（不同 ZoneID 重叠）
+相同 ZoneID 重叠（修复旧 ABCD bug 的核心）
+Cooldown 防抖（你的核心需求）
+Cooldown 期间反复横跳（防抖核心）
+形状切换（Box → Sphere → Capsule）
+SkyCreator 反射调用（Print String 验证）
+缺配置警告（删 Default 看是否提示）
+测试反馈格式
+Code
+✅ 通过：用例 1 / 2 / 3 / ...
+❌ 失败：用例 X / 现象 / 预期 / Log
+⚠️ 异常但不阻塞：...
+🗂️ 上下文锚点
+引擎：UE 4.27
+项目：H:\soul（主模块名 soul）
+类型：第三人称类魂，独立 .umap + OpenLevel
+阶段：Pioneer Phase（先锋）
+IDE：Visual Studio 2019 + Copilot Agent
+编译：用户手动，Agent 严禁自行编译
+旧 ABCD 盒子暂保留，验收通过后才删
+Common UI LOG 问题挂起中
+明早回来时，你只要说一句"继续，开始关卡测试"，我会把那份操作清单和验收用例重新整理一遍贴出来给你照着做，你边测边反馈。
+
+晚安，明早见 🌙
+
+You said: 开始关卡测试，但是目前我发现两个问题，第一个问题是，拖入Variant Manager Test Actor和拖入EnviromentZoneManager,在关卡内看不见其坐标
+开始关卡测试，但是目前我发现两个问题，第一个问题是，拖入Variant Manager Test Actor和拖入EnviromentZoneManager,在关卡内看不见其坐标
+Copilot said: 这是个**正常现象**，不是 bug ✅ 但确实影响策划/你自己定位 Actor 的位置，值得修一下。 --- ## 🔍
+这是个正常现象，不是 bug ✅ 但确实影响策划/你自己定位 Actor 的位置，值得修一下。
+
+🔍 根因
+AEnvironmentZoneManager 继承自 AActor，构造函数里没创建任何 Component（连 RootComponent 都没有），所以：
+
+在视口里没有可视化图标（没有"小图标 sprite"）
+没有 RootComponent → 没有 Transform Gizmo（不能在视口里拖动，只能在 Details 改 Location）
+World Outliner 里能看到，但视口找不到
+音频系统的 AAudioManagerActor 估计也是同样情况（你可以确认一下）。
+
+🛠️ 修复方案（3 选 1）
+方案 A：加个 SceneComponent 当 Root（最小化）
+优点：有 Transform Gizmo，可以在视口拖动
+缺点：还是没有可视化图标，视口里仍然"看不见"
+方案 B：加个 BillboardComponent（编辑器 Sprite 图标）✅ 推荐
+优点：视口里有一个小图标（类似 PlayerStart、TriggerVolume 的图标），一眼能看到位置；运行时不影响
+缺点：无
+方案 C：加个 BillboardComponent + 一个 ArrowComponent
+优点：图标 + 朝向箭头，更醒目
+缺点：Manager 没有"朝向"的概念，箭头略多余
+📋 我的推荐
+方案 B：加一个 UBillboardComponent 作为 RootComponent，挂个内置图标（比如引擎自带的 S_Note 或 S_Trigger），编辑器里直接看到位置，运行时自动隐藏。
+
+要不要我直接出一个小修复 Prompt 给 Agent？只改 EnvironmentZoneManager.h/.cpp 两个文件，加 5~10 行代码，编译完你就能在视口里看到 Manager 图标了。
+
+❓ 顺便问一下你的"第二个问题"
+你提到"两个问题"，但只说了第一个。第二个是什么？我可以一起放进同一个修复 Prompt 里，省得 Agent 跑两次。
+
+请回复：
+
+「先告诉我第二个问题」 → 你说，我汇总后一起出 Prompt
+「先解决第一个，方案 B」 → 我直接出 Prompt
+「方案 X」 → 按你选的来
+You said: 关于第一个问题我还需要跟你补齐一个事实，AUDIO的ACTOR拉进去是可以看到有一个BOX已经在场景里的，根据选择形状形状会改变成对应的，现在我们这个VARIANT MANAGER TEST ACOTR拉进去是什么都看不见的，在WORLD OUTLINER和其DETAILS面板有内容 第二个问题是，MANAGER本身我发现只支持POINT LIGHT，但是我的质感灯其实是一个SPOT LIGHT，所以希望可以支持除了POINT
+关于第一个问题我还需要跟你补齐一个事实，AUDIO的ACTOR拉进去是可以看到有一个BOX已经在场景里的，根据选择形状形状会改变成对应的，现在我们这个VARIANT MANAGER TEST ACOTR拉进去是什么都看不见的，在WORLD OUTLINER和其DETAILS面板有内容
+
+第二个问题是，MANAGER本身我发现只支持POINT LIGHT，但是我的质感灯其实是一个SPOT LIGHT，所以希望可以支持除了POINT LIGHT外，其他类型的灯光也需要支持
+Copilot said: 收到，先确认一下我的理解，然后给方案。 ## 🤔 先确认一个名词 你说的 **"Variant Manager Test Actor"**——UE
+收到，先确认一下我的理解，然后给方案。
+
+🤔 先确认一个名词
+你说的 "Variant Manager Test Actor"——UE 里没有这个名字的 Actor，能不能确认一下：
+
+(a) 你是想说 EnvironmentZoneVolume（我们做的 Volume）？
+(b) 还是你额外拖了别的什么 Actor 进来？
+因为根据"音频 ACTOR 拖进去能看到 Box"这个对比，对照物应该是我们的 Volume（音频的 AAudioZoneTrigger 对应的是我们的 EnvironmentZoneVolume）。所以我猜测你说的 VMTA 其实是 EnvironmentZoneVolume，先按这个假设走，错了你打断我。
+
+🐛 三个问题汇总分析
+问题 1a：EnvironmentZoneVolume 拖进去什么都看不见
+根因猜测：Agent 在初始化和 ApplyShapeSelection 里用了 SetHiddenInGame(true/false) 来控制可见性。但 SetHiddenInGame 只影响 PIE 运行时，不影响编辑器视口。所以编辑器里不管哪个形状都被某种方式藏起来了。
+
+正确做法：编辑器可见性应该用 SetVisibility(true/false)（影响编辑器+运行时），或者 SetHiddenInGame + 不要在编辑器里隐藏。
+
+修复：把 4 个 Component 的可见性控制改成 SetVisibility，让选中的形状在编辑器和运行时都可见，未选中的两者都隐藏。这样行为和音频 Trigger 一致。
+
+问题 1b：EnvironmentZoneManager 拖进去看不见坐标
+根因：Manager 继承自 AActor，构造函数没创建任何 Component → 没有 RootComponent → 没 Gizmo、没图标。
+
+修复：加一个 UBillboardComponent 作为 RootComponent，挂个引擎自带图标，视口里就有一个小图标可见、可点选、可拖动。
+
+问题 2：质感灯只支持 PointLight，需要支持 SpotLight 等
+根因：当前 TargetGlobalLight 字段类型写死 APointLight*，下拉只能选 PointLight。
+
+最优修复方案：
+
+UE 灯光体系中，ULocalLightComponent 是 PointLight / SpotLight / RectLight 三种"局部灯"的共同父类，它就拥有 AttenuationRadius 属性。DirectionalLight 没有 Attenuation 概念（无限远），不在支持范围。
+
+所以改造方法：
+
+字段类型从 APointLight* 改成 ALight*（下拉能选 PointLight / SpotLight / RectLight 任意一种）
+实际写入时用 Cast<ULocalLightComponent>(TargetGlobalLight->GetLightComponent()) 拿到组件，统一调用 SetAttenuationRadius
+在 ValidateReferences 里检查：如果填的是 DirectionalLight 或 SkyLight（没有 LocalLightComponent），输出 Warning
+这样一次性支持 Point/Spot/Rect 三种，未来如果你换成 RectLight 也无需改代码。
+
+📦 我准备出一个合并修复 Prompt
+包含 3 件事：
+
+✅ Volume 形状可见性修复（用 SetVisibility）
+✅ Manager 加 BillboardComponent 作为 Root（带编辑器图标）
+✅ TargetGlobalLight 类型改为 ALight*，调用改为 LocalLightComponent 通用写法 + Validate 警告 DirectionalLight
+❓ 等你回复
+请回复：
+
+「VMTA 就是 EnvironmentZoneVolume，3 件事一起修」 → 我直接出 Prompt
+「VMTA 是别的东西：XXX」 → 你说清楚后我再调整
+「先只修 1b 和 2，问题 1a 我再确认一下」 → 按你说的来
+You said: 稍等，这里我犯了一个错误，我拖入错误的ACOTR了，现在找到了ENVIROMENT ZONE VOLUME，拖进去看见了形状，那么这个部分我们首先OK了，应该是不用修复的，但是MANAGER你可以添加一个标识，编辑器图标，另外，请你看看是否可以实现这个ACTOR本身可以做LOCAITON移动，就是说我可以把他拉到天上不用在地面打扰到我其他的地图编辑。 第二个就是关于你执行手册里有提到让我建立一个SKY CREATOR中介，鉴于我目前关卡内已经有SKY CREATOR了，这个部分的执行部分可以请你简单易懂的一步步讲解给我吗？ 最后，没错，射灯和其他类灯光的仍然不存在，需要除了POINTLIGHT之外，其他类型的UE4.27灯光都需要支持上（虽然大概率可能我只会用RECT, SPOT和，DIRECTIONAL 和POINT
+稍等，这里我犯了一个错误，我拖入错误的ACOTR了，现在找到了ENVIROMENT ZONE VOLUME，拖进去看见了形状，那么这个部分我们首先OK了，应该是不用修复的，但是MANAGER你可以添加一个标识，编辑器图标，另外，请你看看是否可以实现这个ACTOR本身可以做LOCAITON移动，就是说我可以把他拉到天上不用在地面打扰到我其他的地图编辑。
+
+第二个就是关于你执行手册里有提到让我建立一个SKY CREATOR中介，鉴于我目前关卡内已经有SKY CREATOR了，这个部分的执行部分可以请你简单易懂的一步步讲解给我吗？
+
+最后，没错，射灯和其他类灯光的仍然不存在，需要除了POINTLIGHT之外，其他类型的UE4.27灯光都需要支持上（虽然大概率可能我只会用RECT, SPOT和，DIRECTIONAL 和POINT LIGHT）
+Copilot said: 好的，逐个说。 --- ## 1️⃣ Manager 编辑器图标 + 可移动 Location 这两个其实是**同一件事**：只要给
+好的，逐个说。
+
+1️⃣ Manager 编辑器图标 + 可移动 Location
+这两个其实是同一件事：只要给 Manager 加一个 RootComponent，两个问题一起解决：
+
+加 UBillboardComponent 作为 Root → 编辑器视口看到小图标 ✅
+有了 RootComponent → 自动获得 Transform Gizmo，可以在视口里随便拖（包括拖到天上）✅
+运行时 Billboard 自动隐藏，不影响游戏
+这个我会放进修复 Prompt 里，没歧义。
+
+2️⃣ SkyCreator 中介蓝图建立 —— 一步步讲
+你说"关卡里已经有 SkyCreator 了"，那就更简单了，不用从头建，只要做一个中介去调它。
+
+🎯 为什么需要中介？
+我们 Manager 是 C++，调 SkyCreator 用的是反射（按字符串名字找函数）。但 SkyCreator 真正的接口是 SetWeatherSettings(FSkyCreatorWeatherSettings)——参数是个 USTRUCT，反射调用 USTRUCT 参数非常麻烦。
+
+所以我们做一个"翻译官"：
+
+Manager → 反射调用 → SetRainAmount(float) ← 这层简单
+中介内部 → 把 float 包装成 USTRUCT → 调 SkyCreator 真正的 API ← 这层蓝图里很简单
+📋 操作步骤（最简单版本）
+Step 1：新建一个 Actor 蓝图
+
+Content Browser 任意文件夹 → 右键 → Blueprint Class
+父类选 Actor（不要选 SkyCreator——保持解耦）
+命名为 BP_SkyCreatorBridge
+双击打开
+Step 2：在中介里持有"真正的 SkyCreator"引用
+
+蓝图编辑器左侧 Variables 面板 → 点 + 添加变量
+变量名：SkyCreatorRef
+变量类型：搜 SkyCreator → 选 Sky Creator（Object Reference 类型，类名 ASkyCreator）
+在变量面板里勾上 Instance Editable（让你能在关卡里拖引用进来）
+编译保存
+Step 3：创建 SetRainAmount 函数
+
+左侧 Functions 面板 → 点 + Function
+函数名：SetRainAmount（严格区分大小写！）
+打开这个函数，左侧 Inputs → + 添加输入参数
+参数名：Amount
+参数类型：float
+Step 4：函数内部连线（先用 Print String 占位）
+
+进入函数的图表，按下面顺序连线：
+
+Code
+[Function Entry: Amount(float)]
+        ↓
+[Print String]
+  In String: 接 Amount（会自动转 float→string）
+这一步先只放 Print String，目的是验证"反射调用通了"。后面再接真正的 SkyCreator。
+
+编译保存。
+
+Step 5：把中介拖到关卡
+
+把 BP_SkyCreatorBridge 从 Content Browser 拖到关卡里
+选中它 → Details 面板找到 Sky Creator Ref（就是你 Step 2 加的变量）
+下拉选择关卡里现有的那个 SkyCreator 实例
+Step 6：把中介接进 Manager
+
+选中 EnvironmentZoneManager
+Details 面板 → 天空创建器中介Actor 字段
+下拉选择刚才那个 BP_SkyCreatorBridge 实例
+Step 7：点 ValidateReferences 按钮验证
+
+应输出 [EnvZoneMgr][校验] 通过 ✓
+如果输出 TargetSkyCreator 缺少 SetRainAmount(float) 蓝图函数 → 检查函数名拼写、是否大小写正确、是否编译保存
+Step 8：PIE 测试
+
+走进配置了 Rain=0.5 的 Volume
+应该看到屏幕上 Print String 输出 0.5（或 Blend 期间从 0 到 0.5 的中间数）
+✅ 反射调用通了
+Step 9（之后再做，今天可以先不做）：替换 Print String 为真 SkyCreator 调用
+
+等 Step 8 成功后，再把函数内部改成：
+
+Code
+[Function Entry: Amount(float)]
+        ↓
+[SkyCreatorRef] → [Get Weather Settings] → [Break SkyCreatorWeatherSettings]
+                                                    ↓
+                                            (修改 Rain Amount = Amount，其他保持)
+                                                    ↓
+                                            [Make SkyCreatorWeatherSettings]
+                                                    ↓
+                                          [SkyCreatorRef] → [Set Weather Settings]
+或者直接用 Lerp Weather Settings（更平滑），等你跑通 Print String 我再单独教你这一步。
+
+3️⃣ 灯光支持扩展
+UE 灯光体系：
+
+Code
+ALight (基类，所有灯)
+├── ADirectionalLight   ← 没有 AttenuationRadius（无限远，定向光）
+├── ASkyLight            ← 没有 AttenuationRadius
+└── (各种 LocalLight，有 AttenuationRadius)
+    ├── APointLight
+    ├── ASpotLight
+    └── ARectLight
+⚠️ 一个必须先告诉你的事实
+DirectionalLight 没有 AttenuationRadius 属性——它是模拟太阳的，光是无限远的平行光，没有"衰减半径"这个概念。这是物理/引擎层面的事实，不是我们代码限制。
+
+所以我们当前 FZoneEnvConfig 里这个字段：
+
+C++
+float GlobalLightAttenuationRadius = 5000.f;  // 衰减半径
+对 DirectionalLight 本质上无意义。
+
+🔀 怎么处理 DirectionalLight？我给 3 个选项
+选项	行为	适用场景
+A. 跳过模式	字段类型改成 ALight*，可以选 Directional，但应用时如果是 Directional 就跳过 AttenuationRadius 写入（不报错，只在 Validate 里说"DirectionalLight 不支持 Attenuation，将忽略"）	你想填 Directional 但又不想真控制它的强度
+B. 字段语义扩展	把 GlobalLightAttenuationRadius 改名 / 拆分 → 加一个 Intensity 字段；DirectionalLight 改 Intensity，LocalLight 改 Attenuation	你真的想让 Directional 也跟着 Zone 切换变化（变暗变亮）
+C. 完全分两个字段	TargetLocalLight: ALight*（只接 Point/Spot/Rect）+ TargetDirectionalLight: ADirectionalLight*（独立配置 Intensity）	最干净但配置最繁琐
+💭 我的建议
+选 A（跳过模式），理由：
+
+你说"大概率只会用 Rect/Spot/Directional/Point"——Directional 通常是固定的太阳/月亮，不会按区域切换
+真要换 Directional 的"强度/角度"，那是另一套"昼夜系统"的活，不该塞进 Zone 系统
+选 A 实现简单，用户填错了我们 Validate 提示，不强求
+如果你真要让 Directional 跟着 Zone 变，选 B，但我会建议：那个变化让 SkyCreator 中介去做（Directional 强度 = SkyCreator 的事），Zone 配置只通过 SetRainAmount 这种函数去通知 SkyCreator，SkyCreator 内部协调天空+Directional。
+
+❓ 等你拍板
+请回复：
+
+「Directional 选 A（跳过模式）」 + 「中介步骤看明白了」 → 我直接出合并修复 Prompt（Manager 图标 + 灯光类型扩展为 ALight*+跳过 Directional）
+「选 B 或 C」 → 我按你选的出
+「中介那段还有疑问：XXX」 → 你问，我先解答再出 Prompt

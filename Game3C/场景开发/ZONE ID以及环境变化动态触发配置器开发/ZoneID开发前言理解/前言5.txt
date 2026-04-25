@@ -1,0 +1,636 @@
+目前编译失败：
+
+首先是AGENT报告：
+
+[已完成] 步骤 1
+- 文件：`Source\soul\Public\ZoneEnvConfig.h`
+- 改动：新增 `FZoneEnvConfig` USTRUCT(BlueprintType)，含 5 个字段：`FogDensity=0.02f`、`GlobalLightAttenuationRadius=5000.f`、`SkyCreatorRainAmount=0.f`(0~1)、`BlendTime=2.0f`、`CooldownSeconds=0.5f`，全部 EditAnywhere/BlueprintReadWrite，含中文 DisplayName 与 ToolTip
+- 阻塞/疑问：无
+[已完成] 步骤 2
+- 文件：`Source\soul\Public\EnvironmentZoneVolume.h`
+- 改动：新增 `EEnvZoneTriggerShape`（Brush/Box/Sphere/Capsule）枚举与 `AEnvironmentZoneVolume : public AVolume`，含 `ZoneID`、`Priority`、`ShapeType`、3 个形状 Component、`BeginPlay`、`NotifyActorBegin/EndOverlap`、`#if WITH_EDITOR PostEditChangeProperty`、`ApplyShapeSelection`、私有 `TriggerUniqueID`
+- 阻塞/疑问：无
+[已完成] 步骤 3
+- 文件：`Source\soul\Private\EnvironmentZoneVolume.cpp`
+- 改动要点：
+  - 构造函数：3 个形状 Component `SetupAttachment(GetBrushComponent())`，初始全 NoCollision + Hidden，调用 `ApplyShapeSelection()`，`bCanEverTick=false`
+  - `ApplyShapeSelection()`：先把 Brush + 3 形状全置 NoCollision + Hidden，再按 `ShapeType` switch 启用对应形状（QueryOnly + 显示）；所有形状响应通道均为 Overlap，Pawn 通道明确 Overlap
+  - `BeginPlay`：`Super` → `TriggerUniqueID = static_cast<int32>(GetUniqueID())` → `ApplyShapeSelection()`
+  - `NotifyActorBegin/EndOverlap`：玩家过滤后 UE_LOG + TODO(Manager Step)
+  - `PostEditChangeProperty`：`ShapeType` 变化时调用 `ApplyShapeSelection()`
+- 阻塞/疑问：无
+
+---
+
+## 步骤 4 — 汇总报告
+
+### 1. 新增文件清单
+- `H:\soul\Source\soul\Public\ZoneEnvConfig.h`
+- `H:\soul\Source\soul\Public\EnvironmentZoneVolume.h`
+- `H:\soul\Source\soul\Private\EnvironmentZoneVolume.cpp`
+
+### 2. 是否修改了任务范围外文件
+否。未触碰 `AudioZoneTrigger` / `AudioManagerActor` 或任何其他既有源文件。
+
+### 3. 是否修改了 Build.cs / .uproject / ini
+否。`soul.Build.cs` 未修改。所需模块（`Engine`、`CoreUObject`、`Core`）通常默认已启用；`AVolume`、`UBrushComponent`、`UBoxComponent` 等都来自 `Engine` 模块，无需新增依赖。
+
+### 4. 编译前注意事项
+- 头文件 include 顺序遵循 UE 习惯：`CoreMinimal.h` → 父类头 → `*.generated.h`。Cpp 第一行 include 自身头文件（与 `AudioZoneTrigger.cpp` 风格一致）。
+- `AVolume` 头：`#include "GameFramework/Volume.h"` 已包含。
+- `UBrushComponent`：`#include "Components/BrushComponent.h"` 已包含。
+- `Manager` 尚未实现，TODO 仅是注释 + UE_LOG，不会引入未定义符号，能编译通过。
+- 蓝图侧若有派生 BP，重新生成头文件后建议在编辑器中 Refresh Nodes。
+- `GetUniqueID()` 在 UE4.27 是 `UObjectBase` 的方法，返回 `uint32`，`static_cast<int32>` 与音频系统一致。
+
+### 5. 遗留 TODO 清单
+- `EnvironmentZoneVolume.cpp::NotifyActorBeginOverlap`：`// TODO(Manager Step): AEnvironmentZoneManager::EnterZone(ZoneID, Priority, TriggerUniqueID)`
+- `EnvironmentZoneVolume.cpp::NotifyActorEndOverlap`：`// TODO(Manager Step): AEnvironmentZoneManager::ExitZone(ZoneID, Priority, TriggerUniqueID)`
+- `FZoneEnvConfig::CooldownSeconds`：字段已就位，cooldown 实际逻辑留待 Manager 阶段实现。
+
+按约束未执行编译，请用户在编辑器/IDE 中手动 Build 验证。
+
+编译失败的报错：
+
+“Brush”的声明隐藏了类成员
+“Brush”的声明隐藏了类成员
+命令“"C:\Program Files\Epic Games\UE_4.27\Engine\Build\BatchFiles\Build.bat" soulEditor Win64 Development -Project="H:\soul\soul.uproject" -WaitMutex -FromMsBuild”已退出，代码为 6。
+
+这些错误看起来，是不是有相关的实现要在下一个PROMPT才会出来？
+Copilot said: 不是的，这个错误**和 Manager 没关系**，是当前 Volume 代码本身的问题，必须现在修。下面我先给你解释根因，然后给修复 Prompt。 --- ## 🐛
+不是的，这个错误和 Manager 没关系，是当前 Volume 代码本身的问题，必须现在修。下面我先给你解释根因，然后给修复 Prompt。
+
+🐛 根因分析
+错误："Brush"的声明隐藏了类成员（C4458 warning-as-error）
+
+真凶：AVolume 的父类 ABrush 自带一个 public 成员变量：
+
+C++
+// 引擎源码 Brush.h
+UPROPERTY()
+UBrushComponent* Brush;   // ← 就是这个家伙
+Agent 在 EnvironmentZoneVolume.cpp 里大概率写了类似这样的局部变量来缓存指针：
+
+C++
+UBrushComponent* Brush = GetBrushComponent();   // ❌ 局部变量名"Brush"和父类成员"Brush"撞了
+Brush->SetCollisionEnabled(...);
+或者构造函数 / ApplyShapeSelection() 里都各写了一次，所以报了 两次。
+
+UE 项目把这条警告作为错误对待，所以编译挂了。
+
+💡 顺便说：枚举里的 Brush 没事，因为是 enum class（强类型作用域），写 EEnvZoneTriggerShape::Brush 不会撞。
+
+🔧 修复 Prompt
+直接复制粘贴给 Agent：
+
+Text
+任务类型：执行（修复编译错误）
+项目：UE 4.27 项目 soul
+目标：修复 EnvironmentZoneVolume.cpp 编译失败
+
+==================== 编译错误原文 ====================
+"Brush"的声明隐藏了类成员（出现 2 次）
+命令 Build.bat soulEditor Win64 Development 退出代码 6
+
+==================== 根因（已分析） ====================
+ABrush（AVolume 的父类）自带 public 成员：
+    UPROPERTY() UBrushComponent* Brush;
+项目把 C4458 当作错误处理。
+EnvironmentZoneVolume.cpp 中存在局部变量名为 "Brush"（很可能是
+    UBrushComponent* Brush = GetBrushComponent();
+出现在构造函数与 ApplyShapeSelection 中各一次），与父类成员同名导致 C4458。
+
+==================== 强制约束 ====================
+- 🚫 禁止使用 PowerShell
+- ❌ 严禁自行编译验证
+- ❌ 不得改任何范围外文件，不得改 Build.cs / .uproject / ini
+- ❌ 不得改 ZoneEnvConfig.h / EnvironmentZoneVolume.h 的现有声明（仅改 cpp）
+- ❌ 不得改 EEnvZoneTriggerShape::Brush 这个枚举值（它是 enum class 不会冲突）
+- ✅ 改动前先读取 EnvironmentZoneVolume.cpp 全文确认局部变量位置
+- ⚠️ 仅做最小化修复，不重构其他逻辑
+
+==================== 修复步骤 ====================
+
+【步骤 1】读取 Source\soul\Private\EnvironmentZoneVolume.cpp 全文
+- 找出所有名为 "Brush" 的局部变量声明（应该有 2 处，构造函数与 ApplyShapeSelection 各一处）
+- 也检查是否有其他与父类成员同名的局部变量（例如 BrushComponent）
+- 汇报：找到的所有同名局部变量位置（行号 + 上下文 1-2 行）
+
+【步骤 2】将所有名为 "Brush" 的局部变量重命名为 "BrushComp"
+- 仅做重命名，不改其他任何逻辑
+- 同时更新这些局部变量在该作用域内的所有使用处
+- 不得修改任何函数签名 / 类成员 / 枚举
+- 完成后汇报：每处修改的行号 + 改动前后对照
+
+【步骤 3】二次自检
+- 用 VS Find in Files 在 EnvironmentZoneVolume.cpp 内搜索单词边界的 "Brush"（区分大小写）
+- 确认剩余的 "Brush" 仅出现在以下合法位置：
+  - GetBrushComponent() 函数调用
+  - EEnvZoneTriggerShape::Brush 枚举值
+  - 注释中
+- 不得有任何其他同名局部变量
+- 汇报：检查结果
+
+==================== 汇报格式 ====================
+每完成一步立即按以下格式汇报：
+[已完成] 步骤 X
+- 文件：path
+- 改动：（行号 + 改动摘要）
+- 阻塞/疑问：（如有）
+
+全部完成后输出汇总，等待用户重新编译验证。
+不得自行编译，不得做范围外改动。
+预期结果：Agent 把 2 处 UBrushComponent* Brush = ... 改成 UBrushComponent* BrushComp = ...，编译就能通过。
+
+跑完把 Agent 报告 + 你重新编译的结果回传给我：
+
+编译通过 ✅ → 我出 Prompt #2（Manager 类）
+还有别的错 → 贴日志，我继续修
+You said: 编译成功，AGENT报告： [已完成] 步骤 1 - 文件：`Source\soul\Private\EnvironmentZoneVolume.cpp` - 找到 2 处同名局部变量
+编译成功，AGENT报告：
+
+[已完成] 步骤 1
+- 文件：`Source\soul\Private\EnvironmentZoneVolume.cpp`
+- 找到 2 处同名局部变量 `Brush`（均在 `ApplyShapeSelection`，构造函数实际未使用局部 Brush）：
+  - 第 ~64 行：`if (UBrushComponent* Brush = GetBrushComponent())` —— 全部禁用阶段
+  - 第 ~91 行：`case EEnvZoneTriggerShape::Brush: if (UBrushComponent* Brush = GetBrushComponent())` —— Brush 启用分支
+- 未发现其他与父类成员同名的局部变量
+[已完成] 步骤 2
+- 文件：`Source\soul\Private\EnvironmentZoneVolume.cpp`
+- 改动对照（共 2 处声明 + 7 处使用全部更名）：
+  - 第 64 行：`UBrushComponent* Brush` → `UBrushComponent* BrushComp`；其下 5 行 `Brush->...` → `BrushComp->...`
+  - 第 90 行（case Brush 分支）：`UBrushComponent* Brush` → `UBrushComponent* BrushComp`；其下 2 行 `Brush->...` → `BrushComp->...`
+- 阻塞/疑问：无
+
+[已完成] 步骤 3
+- 在 `EnvironmentZoneVolume.cpp` 内剩余 "Brush" 出现位置：
+  - `#include "Components/BrushComponent.h"`（合法，头文件）
+  - `// Brush 由 AVolume 父类自带 ...`（注释）
+  - `GetBrushComponent()` 多处（合法函数调用）
+  - `// 先把所有形状（含 Brush）禁掉`（注释）
+  - `UBrushComponent* BrushComp = GetBrushComponent()` ×2（合法类型名 + 函数调用，新局部变量名 BrushComp 不冲突）
+  - `case EEnvZoneTriggerShape::Brush:`（合法 enum class 值，作用域内不冲突）
+- 无残留同名局部变量
+
+---
+
+## 汇总
+- 修改文件：`Source\soul\Private\EnvironmentZoneVolume.cpp`（仅一个）
+- 范围外文件：未触碰
+- Build.cs / .uproject / ini：未修改
+- 头文件 `EnvironmentZoneVolume.h` / `ZoneEnvConfig.h`：未修改
+- 修复方式：将 `ApplyShapeSelection()` 内 2 处与父类 `ABrush::Brush` 同名的局部变量重命名为 `BrushComp`，并同步更新作用域内全部 7 处使用
+
+请重新编译验证。
+Copilot said: 完美 ✅ 编译通过！步骤 1 收官。 --- ## 📊 当前进度 ``` ✅
+完美 ✅ 编译通过！步骤 1 收官。
+
+📊 当前进度
+Code
+✅ FZoneEnvConfig 结构体（5 字段：Fog/Light/Rain/BlendTime/Cooldown）
+✅ EEnvZoneTriggerShape 枚举（Brush/Box/Sphere/Capsule，默认 Box）
+✅ AEnvironmentZoneVolume 类（4 形状切换 + Overlap 占位）
+⏳ AEnvironmentZoneManager 类（栈机制 + Tick 插值 + Cooldown + 场景引用 + Validate）
+⏳ Volume 接入 Manager（去掉 TODO，正式调用 EnterZone/ExitZone）
+🎯 Prompt #2 范围预告
+下一步要做 Manager 类，内容：
+
+模块	内容
+场景引用	TargetFog / TargetGlobalLight / TargetSkyCreator（Details 下拉选择）
+配置表	TMap<FName, FZoneEnvConfig> ZoneConfigs + DefaultZoneID
+栈机制	TArray<FActiveEnvZoneEntry> + EnterZone / ExitZone（对齐音频系统签名）
+解析	ResolveActiveZoneID（栈空→Default，否则按 Priority 取最高）
+Tick 插值	BlendTime 内对 FogDensity / Attenuation / Rain 做线性插值
+Cooldown	应用配置后记录时间戳，cooldown 内暂缓切换
+SkyCreator 调用	反射 FindFunction("SetRainAmount") + ProcessEvent（蓝图中介方案）
+编辑器按钮	ValidateReferences（CallInEditor，输出未配置项警告）
+Volume 接入	替换 cpp 里 TODO，正式调用 Manager（缓存指针 + 兜底查找）
+这个 Prompt 会比 #1 大一些（Manager 是核心），但我会严格分子任务，让 Agent 一步步汇报，方便中途发现问题就停。
+
+❓ 出 Prompt 前先和你对齐 2 个细节
+细节 1：SkyCreator 蓝图中介函数名
+我们要用反射调用蓝图中介 Actor 的函数，需要约定一个函数名。我提议：
+
+Code
+SetRainAmount(float Amount)
+意思是：你需要在关卡里手动做一个继承自 SkyCreator（或独立空 Actor + 持有 SkyCreator 引用）的蓝图，里面暴露一个 BlueprintImplementableEvent 或普通 BP 函数 SetRainAmount，参数是 float，内部你自己写"调用真正的 SetWeatherSettings/LerpWeatherSettings"。
+
+问题：函数名定 SetRainAmount 可以吗？还是你想叫别的（如 UpdateRain / OnRainChanged）？
+
+💡 我推荐 SetRainAmount，简洁直白；未来加 SnowAmount 时也一致（SetSnowAmount）。
+
+细节 2：Cooldown 的精确语义（再确认一次）
+我之前定的语义是：
+
+进入区域 X 后，至少持续 CooldownSeconds 秒不响应切换到其他配置。
+
+具体到代码：
+
+玩家从 A 区进入 B 区（B 的 Cooldown=1.5s）→ 立刻应用 B 的配置 ✅
+B 应用后 0.5s，玩家回到 A 区 → 不立刻切回 A，等满 1.5s 后再切
+这 1.5s 内栈状态是正确的（A 在栈顶），只是"应用配置"被延迟
+等待方式有两种：
+
+方案 X：定时器（FTimerHandle），cooldown 结束时自动重新解析当前栈顶并应用
+方案 Y：Tick 里每帧检查 cooldown 是否结束
+我推荐 X（定时器），更省性能，逻辑更清晰。
+
+确认这两点后我直接出 Prompt #2。
+
+请回复：
+
+「都按你说的」 → 直接出 Prompt #2
+「函数名改成 XXX」/「Cooldown 用方案 Y」 等具体调整 → 我按调整出
+You said: 就叫SetRainAmount即可，简单直接 关于细节2的确认：可以是定时器，不过COOL DOWN这里需要注意，例如你提到的1.5秒，那么就必须是1.5秒左右就切换，至于你提到的定时器，意思应该就是以TIMER替代TICK，但是在COOL DOWN时间后，TIMER如果触发了检测，而玩家切换了区域，那么这时候就应该切换到对应的新的区域，你大概是这个意思对吗？
+就叫SetRainAmount即可，简单直接
+
+关于细节2的确认：可以是定时器，不过COOL DOWN这里需要注意，例如你提到的1.5秒，那么就必须是1.5秒左右就切换，至于你提到的定时器，意思应该就是以TIMER替代TICK，但是在COOL DOWN时间后，TIMER如果触发了检测，而玩家切换了区域，那么这时候就应该切换到对应的新的区域，你大概是这个意思对吗？
+Copilot said: 对，你理解得**完全正确** ✅，但我帮你把"定时器到期那一刻到底干什么"再说精确一点，避免实现时出歧义。 --- ## ⏱️ Cooldown 定时器精确语义 ### 核心思路一句话 > **Cooldown
+对，你理解得完全正确 ✅，但我帮你把"定时器到期那一刻到底干什么"再说精确一点，避免实现时出歧义。
+
+⏱️ Cooldown 定时器精确语义
+核心思路一句话
+Cooldown 计时器只是一个"延迟解析"的提醒；它到期时，重新看一眼当前栈顶应该是什么，再决定切不切。
+
+完整时序举例
+假设：A 区 Cooldown=0s，B 区 Cooldown=1.5s
+
+场景 1：玩家进 B 后停留
+Code
+t=0.0s  玩家进 B → 应用 B 配置 → 启动 1.5s 定时器
+t=1.5s  定时器到期 → 检查当前栈顶 = B → 还是 B，无需切换 ✅
+场景 2：玩家进 B 后 0.5s 回到 A（你的核心需求）
+Code
+t=0.0s  玩家进 B → 应用 B 配置 → 启动 1.5s 定时器
+t=0.5s  玩家回 A → 栈更新（栈顶=A），但 cooldown 中，不立刻应用 ⏸️
+t=1.5s  定时器到期 → 检查当前栈顶 = A → 切换到 A 配置 ✅
+场景 3：玩家在 cooldown 期间反复横跳
+Code
+t=0.0s  进 B → 应用 B → 启动 1.5s 定时器
+t=0.3s  回 A → 栈顶=A，cooldown 中，不切 ⏸️
+t=0.6s  又进 B → 栈顶=B，cooldown 中，不切 ⏸️
+t=0.9s  又回 A → 栈顶=A，cooldown 中，不切 ⏸️
+t=1.5s  定时器到期 → 检查当前栈顶 = A → 切换到 A 配置 ✅
+结果：玩家边界横跳期间 B 一直显示，1.5s 后才切到 A —— 完美防抖
+
+场景 4：定时器到期那一刻，新目标自己也有 cooldown
+Code
+t=0.0s  进 B（Cooldown=1.5s）→ 应用 B
+t=0.5s  回 A（Cooldown=0s）→ 等待
+t=1.5s  定时器到期 → 切到 A → 因为 A 的 Cooldown=0，立刻可再次响应切换
+场景 5：cooldown 结束后栈空了
+Code
+t=0.0s  进 B → 应用 B → 启动 1.5s 定时器
+t=0.5s  完全离开 B → 栈空，cooldown 中不应用 ⏸️
+t=1.5s  定时器到期 → 栈空 → 应用 DefaultZoneID 配置 ✅
+🔑 关键机制要点（这些会写进 Prompt）
+机制	行为
+进入新区域时	立刻应用配置（如果不在 cooldown 中），并启动该配置的 cooldown 定时器
+Cooldown 期间 EnterZone/ExitZone	照常更新栈（栈是真实状态），但不调用 ApplyConfig，只记录"待解析"
+Cooldown 定时器到期	重新调用 ResolveActiveZoneID() 拿当前栈顶（或 DefaultZoneID），应用对应配置
+新切换的区域如果 Cooldown>0	启动新的 cooldown 定时器，覆盖旧的
+Cooldown=0 的配置	等同于"无防抖"，每次进就立刻切
+BlendTime vs Cooldown	两个独立机制：Cooldown 控制"何时开始切"，BlendTime 控制"切的时候过渡多久"。可以并存，互不冲突。
+一个值得一提的边界 case：定时器到期后的"二次 cooldown"
+t=1.5s 定时器到期，发现要切到 A，A 的 Cooldown=0 → 立刻切，无新定时器
+t=1.5s 定时器到期，发现要切到 A，A 的 Cooldown=2s → 立刻切，启动 A 的 2s 新定时器
+
+也就是说每次"实际应用配置"后都会基于该配置的 Cooldown 重置定时器，这样语义最一致。
+
+❓ 最后确认 1 个边界
+问题：第一次玩家进入关卡时（栈空 → 第一次进入第一个 Volume），需要 cooldown 吗？
+
+我推荐：✅ 不需要——第一次切换是从 Default 到第一个 Zone，玩家肯定希望立刻看到环境变化。具体实现：Manager BeginPlay 时直接应用 DefaultZoneID 配置但不启动 cooldown 定时器（cooldown=0 处理）。
+
+🚦 准备发车
+如果上面的语义你都点头，我现在出 Prompt #2（Manager 完整实现 + Volume 接入）。
+
+请回复：
+
+「OK，出 Prompt」
+或者「等下，XXX 这里再改」
+You said: 可以的，请出PROMPT 2
+可以的，请出PROMPT 2
+Copilot said: 发车 🚗 这是 **Prompt #2**，比 #1 复杂不少（Manager
+发车 🚗 这是 Prompt #2，比 #1 复杂不少（Manager 是核心），所以我把它拆成 6 个原子步骤，每步都让 Agent 强制汇报，方便中途出问题就停。
+
+Text
+任务类型：执行（修改/新建代码）
+项目：UE 4.27 项目 soul
+目标：实现 Zone ID 环境管理系统的【先锋阶段第二步】——创建 AEnvironmentZoneManager
+（栈机制 + Tick 插值 + Cooldown 定时器 + 场景引用 + ValidateReferences 编辑器按钮 +
+SkyCreator 反射调用），并把 AEnvironmentZoneVolume 中的 TODO 替换为正式 Manager 调用。
+
+==================== 强制约束 ====================
+- 🚫 禁止使用 PowerShell（搜索用 VS Find in Files / grep / findstr）
+- ❌ 严禁自行编译（用户手动编译验证）
+- ❌ 不得修改 .uproject / *.Build.cs / *.Target.cs / DefaultEngine.ini / DefaultGame.ini
+- ❌ 不得修改任何 .uasset
+- ❌ 不得修改 AudioZoneTrigger / AudioManagerActor / 其他范围外文件
+- ❌ 不得修改 ZoneEnvConfig.h（已完成）
+- ❌ 不得执行任何 git 写操作
+- ❌ 不得使用同名局部变量遮蔽父类成员（如 Brush / Tags / Owner 等），避免 C4458
+- ✅ 改动前先读取相关文件确认上下文
+- ⚠️ 遇到不确定立即停止并报告，不得猜测
+- 📋 每完成一个子任务必须立即简短汇报（不要全部做完才汇报）
+- 📐 风格对齐 AAudioManagerActor（include 顺序、UE_LOG Category、注释风格）
+
+==================== 设计依据（必读） ====================
+- 类继承：AActor，Blueprintable，关卡里只放一个实例
+- ZoneID 类型：FName（与音频系统统一，便于未来联动）
+- Manager API 与音频系统对齐：EnterZone(FName, int32, int32) / ExitZone(FName, int32, int32)
+- 栈：TArray<FActiveEnvZoneEntry>（含 ZoneID/Priority/TriggerUniqueID），独立声明不复用音频
+- ResolveActiveZoneID：栈空→DefaultZoneID；否则取栈中最高 Priority（同 Priority 取最近 Push）
+- BlendTime：Tick 插值控制
+- Cooldown 语义（重要！）：
+  * 应用配置后启动 FTimerHandle（CooldownSeconds 秒）
+  * Cooldown 期间 EnterZone/ExitZone 照常更新栈，但暂不调用 ApplyConfig
+  * 定时器到期 → 重新 ResolveActiveZoneID → 应用结果配置（这次再启动新 cooldown）
+  * BeginPlay 时初次应用 DefaultZoneID 配置不启动 cooldown
+  * Cooldown=0 视为无防抖，立刻应用且不启动定时器
+- SkyCreator 调用：反射 FindFunction(FName("SetRainAmount")) + ProcessEvent，传一个 float
+- 场景引用类型：
+  * TargetFog: AExponentialHeightFog*
+  * TargetGlobalLight: APointLight*
+  * TargetSkyCreator: AActor*（蓝图中介，不强类型依赖 SkyCreator 插件）
+- 玩家过滤已在 Volume 端做过（Cast<ACharacter>+IsPlayerControlled），Manager 端无需重复
+- ValidateReferences 是 CallInEditor 按钮，输出 UE_LOG Warning 列出未配置项
+- BlendTime 期间应用新配置：从"当前实际值"插到"目标配置值"，避免硬切；
+  若处于上次 Blend 中途又有新切换，则把"当前插值中间值"作为新起点
+
+==================== 步骤清单 ====================
+
+【步骤 1】扩展 Source\soul\Public\EnvironmentZoneVolume.h
+- 仅追加：FActiveEnvZoneEntry USTRUCT 声明（独立于音频系统）
+- 字段：
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) FName ZoneID = NAME_None;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 Priority = 0;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) int32 TriggerUniqueID = 0;
+- 加构造函数（默认 + 带参三参构造）便于 Manager 端使用
+- 不要改任何已有声明
+- 完成后汇报：新增结构体定义片段
+
+【步骤 2】创建 Source\soul\Public\EnvironmentZoneManager.h
+- include：CoreMinimal / GameFramework/Actor / ZoneEnvConfig.h / EnvironmentZoneVolume.h（为了 FActiveEnvZoneEntry）
+- 前置声明：class AExponentialHeightFog; class APointLight;
+
+- 类声明：
+    UCLASS(Blueprintable)
+    class SOUL_API AEnvironmentZoneManager : public AActor
+    {
+        GENERATED_BODY()
+    public:
+        AEnvironmentZoneManager();
+
+        // ====== 场景引用（Details 下拉选）======
+        UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category="Scene References",
+            meta=(DisplayName="高度雾对象"))
+        AExponentialHeightFog* TargetFog;
+
+        UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category="Scene References",
+            meta=(DisplayName="质感灯对象"))
+        APointLight* TargetGlobalLight;
+
+        UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category="Scene References",
+            meta=(DisplayName="天空创建器中介Actor（含SetRainAmount蓝图函数）"))
+        AActor* TargetSkyCreator;
+
+        // ====== 配置 ======
+        UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Zone Configurations",
+            meta=(DisplayName="区域配置表"))
+        TMap<FName, FZoneEnvConfig> ZoneConfigs;
+
+        UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Zone Configurations",
+            meta=(DisplayName="默认区域 ID（栈空时使用）"))
+        FName DefaultZoneID = TEXT("Default");
+
+        // ====== 来自 Volume 的 API（与音频系统签名一致）======
+        UFUNCTION(BlueprintCallable, Category="Zone")
+        void EnterZone(FName InZoneID, int32 InPriority, int32 InTriggerUniqueID);
+
+        UFUNCTION(BlueprintCallable, Category="Zone")
+        void ExitZone(FName InZoneID, int32 InPriority, int32 InTriggerUniqueID);
+
+        // ====== 编辑器辅助 ======
+        UFUNCTION(CallInEditor, Category="Validation",
+            meta=(DisplayName="检查场景引用与配置完整性"))
+        void ValidateReferences();
+
+    protected:
+        virtual void BeginPlay() override;
+        virtual void Tick(float DeltaTime) override;
+
+        // 从栈解析当前应用 ZoneID（栈空→DefaultZoneID；否则取最高 Priority，同优先级取最近 Push）
+        FName ResolveActiveZoneID() const;
+
+        // 应用一个配置（启动 BlendTime 插值；如 Cooldown>0 则启动 cooldown 定时器）
+        void ApplyConfig(FName ZoneID, const FZoneEnvConfig& Config);
+
+        // Cooldown 定时器到期回调：重新解析并应用
+        UFUNCTION()
+        void OnCooldownExpired();
+
+        // 内部：尝试解析并应用（受 cooldown 限制）；若处于 cooldown 仅记录"待解析"
+        void RequestResolve();
+
+        // 实际写入 Fog / Light / SkyCreator 当前配置（每帧 Tick 调用，使用 Blend 中间值）
+        void ApplyCurrentBlendedToScene();
+
+    private:
+        UPROPERTY(Transient)
+        TArray<FActiveEnvZoneEntry> ActiveZoneStack;
+
+        // 当前正在显示的 ZoneID（即"已应用配置"对应的 ID）
+        UPROPERTY(Transient)
+        FName CurrentAppliedZoneID = NAME_None;
+
+        // Blend 起点（上一次实际值的快照）
+        FZoneEnvConfig BlendFromConfig;
+        // Blend 终点
+        FZoneEnvConfig BlendToConfig;
+        // Blend 进度 0~1
+        float BlendAlpha = 1.0f;
+        // 此次 Blend 的总时长（来自目标配置 BlendTime）
+        float CurrentBlendDuration = 0.f;
+
+        // Cooldown
+        FTimerHandle CooldownTimerHandle;
+        bool bInCooldown = false;
+    };
+
+- 完成后汇报：头文件路径 + 关键声明确认
+
+【步骤 3】创建 Source\soul\Private\EnvironmentZoneManager.cpp 框架与构造/BeginPlay
+- 第一行 include 自身头文件
+- 必要 include：
+    "Components/ExponentialHeightFogComponent.h"
+    "Engine/ExponentialHeightFog.h"
+    "Engine/PointLight.h"
+    "Components/PointLightComponent.h"
+    "TimerManager.h"
+    "Engine/World.h"
+- 构造：PrimaryActorTick.bCanEverTick = true
+- BeginPlay：
+    - Super::BeginPlay()
+    - 初始化 BlendFromConfig 和 BlendToConfig 都为 DefaultZoneID 对应配置（如不存在则空 FZoneEnvConfig{}）
+    - BlendAlpha = 1.0f（已应用完成）
+    - CurrentAppliedZoneID = DefaultZoneID
+    - 立刻把目标值"硬同步"一次到场景对象（BlendAlpha=1 时插值结果就是目标）
+    - 不启动 cooldown
+    - 输出 UE_LOG(LogTemp, Log, TEXT("[EnvZoneMgr] BeginPlay: 应用 Default=%s"), ...)
+- 完成后汇报：构造函数 + BeginPlay 实现要点
+
+【步骤 4】实现栈管理 + EnterZone / ExitZone / ResolveActiveZoneID / RequestResolve / OnCooldownExpired
+
+- EnterZone(InZoneID, InPriority, InTriggerUniqueID)：
+    - 栈尾追加 FActiveEnvZoneEntry{InZoneID, InPriority, InTriggerUniqueID}
+    - 调用 RequestResolve()
+    - UE_LOG 区域进入 + 当前栈大小
+
+- ExitZone(InZoneID, InPriority, InTriggerUniqueID)：
+    - 在栈中查找匹配（ZoneID + Priority + TriggerUniqueID 三者全匹配的第一个）→ RemoveAt
+    - 若找不到匹配项：UE_LOG Warning 并返回（防御）
+    - 调用 RequestResolve()
+
+- ResolveActiveZoneID() const：
+    - 若 ActiveZoneStack 为空 → 返回 DefaultZoneID
+    - 否则：遍历找最高 Priority 的；如有同优先级，取索引最大者（最近 Push）
+    - 返回该项的 ZoneID
+
+- RequestResolve()：
+    - FName Target = ResolveActiveZoneID()
+    - 若 Target == CurrentAppliedZoneID → 无需切换，直接返回
+    - 若 bInCooldown == true → UE_LOG Verbose("Cooldown 中，暂缓切换到 %s")，返回
+    - 否则查 ZoneConfigs.Find(Target)：
+        * 找到 → ApplyConfig(Target, *Cfg)
+        * 找不到 → UE_LOG Warning("ZoneID=%s 在 ZoneConfigs 中未配置")，使用空 FZoneEnvConfig{} + 不启动 cooldown
+
+- OnCooldownExpired()：
+    - bInCooldown = false
+    - UE_LOG Verbose("Cooldown 到期")
+    - RequestResolve()  // 重新解析，可能切到新栈顶
+
+- 完成后汇报：四个函数实现要点
+
+【步骤 5】实现 ApplyConfig / Tick 插值 / ApplyCurrentBlendedToScene / SkyCreator 反射调用
+
+- ApplyConfig(ZoneID, Config)：
+    - 若当前正在 Blend（BlendAlpha < 1.0f）：
+        * 把"当前插值中间结果"作为新的 BlendFromConfig（按 BlendAlpha 在 BlendFromConfig 与 BlendToConfig 之间插值出当前快照）
+    - 否则 BlendFromConfig = BlendToConfig（保持上次终点为新起点）
+    - BlendToConfig = Config
+    - CurrentBlendDuration = FMath::Max(Config.BlendTime, 0.0001f)
+    - BlendAlpha = 0.0f
+    - CurrentAppliedZoneID = ZoneID
+    - 启动 cooldown：
+        * 若 Config.CooldownSeconds > 0：
+            bInCooldown = true
+            GetWorld()->GetTimerManager().SetTimer(CooldownTimerHandle, this,
+                &AEnvironmentZoneManager::OnCooldownExpired, Config.CooldownSeconds, false);
+        * 否则 bInCooldown = false（保险起见 ClearTimer）
+    - UE_LOG Log("应用配置: %s, BlendTime=%.2f, Cooldown=%.2f")
+
+- Tick(DeltaTime)：
+    - Super::Tick(DeltaTime)
+    - 若 BlendAlpha < 1.0f：
+        BlendAlpha = FMath::Clamp(BlendAlpha + DeltaTime / CurrentBlendDuration, 0.f, 1.f);
+    - 始终调用 ApplyCurrentBlendedToScene()（即使 BlendAlpha=1 也应用一次终值，保证场景同步）
+      * 性能优化：可加一个 bDirty 标记，仅在 BlendAlpha 变化时调用；先锋阶段直接每帧调用即可
+
+- ApplyCurrentBlendedToScene()：
+    - 用 FMath::Lerp 计算三个标量当前值：
+        FogDensityNow = Lerp(BlendFromConfig.FogDensity, BlendToConfig.FogDensity, BlendAlpha)
+        AttenuationNow = Lerp(BlendFromConfig.GlobalLightAttenuationRadius, BlendToConfig.GlobalLightAttenuationRadius, BlendAlpha)
+        RainNow = Lerp(BlendFromConfig.SkyCreatorRainAmount, BlendToConfig.SkyCreatorRainAmount, BlendAlpha)
+    - 应用到场景：
+        * if (TargetFog && TargetFog->GetComponent()) TargetFog->GetComponent()->FogDensity = FogDensityNow;
+          ⚠️ 4.27 中 GetComponent() 返回类型注意，必要时用 TargetFog->FindComponentByClass<UExponentialHeightFogComponent>()，
+          或直接 TargetFog->GetComponent()（UExponentialHeightFogComponent*，AExponentialHeightFog 自带 GetComponent）。
+          请 Agent 先打开 Engine/ExponentialHeightFog.h 确认正确访问方式后再写。
+        * if (TargetGlobalLight && TargetGlobalLight->PointLightComponent)
+              TargetGlobalLight->PointLightComponent->SetAttenuationRadius(AttenuationNow);
+          （PointLightComponent 是 APointLight 的公开成员）
+        * if (TargetSkyCreator) 反射调用 SetRainAmount(float)：
+            UFunction* Fn = TargetSkyCreator->FindFunction(FName(TEXT("SetRainAmount")));
+            if (Fn)
+            {
+                struct FParam { float Amount; };
+                FParam P{ RainNow };
+                TargetSkyCreator->ProcessEvent(Fn, &P);
+            }
+            else 一次性 Warning（可用 static bool bWarned 防刷屏）
+              UE_LOG(LogTemp, Warning, TEXT("[EnvZoneMgr] TargetSkyCreator 未实现 SetRainAmount(float) 蓝图函数"));
+
+- 完成后汇报：三个函数实现要点 + 是否确认了 Fog 组件访问方式
+
+【步骤 6】实现 ValidateReferences + 替换 Volume 中的 TODO + 接入 Manager
+
+- ValidateReferences()：
+    - 若 TargetFog == nullptr → UE_LOG Warning("[EnvZoneMgr][校验] 高度雾对象未配置")
+    - 若 TargetGlobalLight == nullptr → 同上"质感灯对象未配置"
+    - 若 TargetSkyCreator == nullptr → 同上"天空创建器未配置"
+    - 若 ZoneConfigs.Num() == 0 → 警告"区域配置表为空"
+    - 若 !ZoneConfigs.Contains(DefaultZoneID) → 警告"DefaultZoneID=%s 未在配置表中"
+    - 若 TargetSkyCreator != nullptr 且 !TargetSkyCreator->FindFunction(FName(TEXT("SetRainAmount")))
+        → 警告"TargetSkyCreator 缺少 SetRainAmount(float) 蓝图函数"
+    - 全部通过 → UE_LOG Log("[EnvZoneMgr][校验] 通过 ✓")
+
+- 修改 Source\soul\Private\EnvironmentZoneVolume.cpp：
+    - 在文件顶部 include "EnvironmentZoneManager.h"、"Kismet/GameplayStatics.h"
+    - 在类中添加私有缓存指针成员（仅 cpp 内静态局部，或类成员均可）：
+        * 推荐做法：在 EnvironmentZoneVolume.h 中添加私有 UPROPERTY(Transient) AEnvironmentZoneManager* CachedManager = nullptr;
+        * 这一项允许修改 EnvironmentZoneVolume.h（这是本步唯一允许的 .h 改动）
+    - 实现内联辅助函数 GetManager()：
+        if (!CachedManager) CachedManager = Cast<AEnvironmentZoneManager>(
+            UGameplayStatics::GetActorOfClass(GetWorld(), AEnvironmentZoneManager::StaticClass()));
+        return CachedManager;
+    - 替换 NotifyActorBeginOverlap 中的 TODO：
+        if (auto* Mgr = GetManager()) Mgr->EnterZone(ZoneID, Priority, TriggerUniqueID);
+        else UE_LOG(LogTemp, Warning, TEXT("[EnvZone] 未找到 AEnvironmentZoneManager 实例"));
+        保留原有 UE_LOG（可保留或转为 Verbose 级别均可）
+    - 替换 NotifyActorEndOverlap 中的 TODO 同理调用 ExitZone
+
+- 完成后汇报：
+    * Manager 三新增文件清单
+    * Volume.h 与 Volume.cpp 的精确改动行号摘要
+    * 是否引入任何新的 Build.cs 依赖（应为否；TimerManager / GameplayStatics / ExponentialHeightFog / PointLight 都在 Engine 模块）
+
+==================== 自检清单（必须执行） ====================
+- 用 VS Find in Files 搜确认：
+    * 没有任何同名局部变量遮蔽父类成员（避免 C4458 重演，重点关注 Brush/Tags/Owner/Role 等）
+    * 没有重复声明 FActiveEnvZoneEntry
+    * 所有新文件 include 路径正确
+    * #include "ZoneEnvConfig.h" 出现在需要的位置
+- 不修改任何 .uasset / Build.cs / .uproject / ini
+
+==================== 汇报格式 ====================
+每完成一步立即按以下格式汇报：
+
+[已完成] 步骤 X
+- 文件：path
+- 改动：（简短描述 + 关键代码要点）
+- 阻塞/疑问：（如有）
+
+全部完成后输出汇总报告：
+1. 新增/修改文件清单
+2. 是否修改了范围外文件（应为否，Volume.h 与 Volume.cpp 在允许范围内）
+3. 是否修改 Build.cs（应为否）
+4. 编译前用户应注意的事项
+5. 遗留 TODO/FIXME 清单
+6. 关卡侧使用步骤简述（用户测试时怎么放 Manager / Volume / 创建 SkyCreator 中介 BP / 配置 TMap）
+
+执行完所有步骤后等待用户编译验证，不要自行编译。
+📌 执行说明
+复制整段给 Agent
+它会一步一步汇报（应该有 6 条「已完成」+ 1 条「汇总报告」）
+中途如果某步有阻塞/疑问 → 把那条贴给我，我们对齐后再让它继续
+全部完成后你手动编译：
+✅ 通过 → 我出 Prompt #3（关卡侧测试 + 验收清单 + 旧 ABCD 盒子并行测试方案）
+❌ 失败 → 把日志贴给我，我出修复 Prompt
+⚠️ 我预判可能踩坑的地方（提前预警）
+风险	说明
+AExponentialHeightFog::GetComponent() 在 4.27 的访问	我让 Agent 先打开头文件确认；如果它写错了我们再修
+APointLight::PointLightComponent 直接访问可能要 Cast	4.27 里这是公开成员，应该直接能用
+FActiveEnvZoneEntry 加在 Volume.h 的合理性	Manager 也要 include Volume.h，这是有意为之（避免新建第三个文件）
+反射调用 SetRainAmount 时 SkyCreator 中介 BP 不存在	编译没事；运行时如果策划没建 BP，会刷一次 Warning，不影响其他功能
+发车，等你回报 🛠️
